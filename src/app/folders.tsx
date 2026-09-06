@@ -15,6 +15,7 @@ import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
 import { canBrowseFolders, displayPath, pickFolder } from '@/lib/sources';
+import { chromeScroll } from '@/lib/chrome-scroll';
 
 type Open = { path: string; name: string; tracks: Track[] };
 
@@ -39,6 +40,7 @@ export default function FoldersScreen() {
     return (
       <View style={{ flex: 1 }}>
         <FlatList
+          {...chromeScroll}
           data={open.tracks}
           keyExtractor={(t) => t.id}
           ListHeaderComponent={
@@ -91,6 +93,7 @@ export default function FoldersScreen() {
   return (
     <View style={{ flex: 1 }}>
       <FlatList
+        {...chromeScroll}
         data={folders}
         keyExtractor={(f) => f.path}
         ListHeaderComponent={

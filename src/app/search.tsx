@@ -17,6 +17,7 @@ import { usePrefs } from '@/lib/prefs';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
 import { isEmpty, search } from '@/lib/search';
+import { chromeScroll } from '@/lib/chrome-scroll';
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -83,6 +84,7 @@ export default function SearchScreen() {
       </View>
 
       <ScrollView
+        {...chromeScroll}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{

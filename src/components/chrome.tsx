@@ -1,6 +1,14 @@
 /**
- * Mini player + navegação em pílula. É um overlay sobre o <Stack>, não uma tab bar do
- * router — o design desenha os dois como uma peça só, flutuando sobre a tela.
+ * Mini player + navegação, numa peça só. É um overlay sobre o <Stack>, não uma tab bar
+ * do router.
+ *
+ * Dois estados. Parado, a barra inteira: o player em cima, os quatro destinos embaixo.
+ * Rolando a página para baixo, ela colapsa — a fileira de destinos recolhe para altura
+ * zero e o item ativo reaparece como um disco à esquerda do player, ao lado dele. Sobra
+ * tela para o conteúdo, e continua dando para voltar: tocar no disco reabre a barra.
+ *
+ * Sem faixa tocando não há colapso. A fileira de destinos é a única navegação que existe
+ * na tela; recolhê-la sem ter o disco do player ao lado deixaria o usuário sem saída.
  */
 
 import { usePathname, useRouter } from 'expo-router';
@@ -11,15 +19,18 @@ import Animated, {
   cancelAnimation,
   runOnJS,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSpring,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, R, T } from '@/constants/theme';
+import { C, T } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
+import { chromeCollapsed, chromeExpand } from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -43,10 +54,18 @@ const NAV = [
   { key: 'Settings', label: 'Ajustes', Icon: SettingsNav, href: '/settings' },
 ] as const;
 
+/** Altura da fileira de destinos. É o que a barra economiza ao colapsar. */
+const NAV_HEIGHT = 42;
+
 export function Chrome() {
   const pathname = usePathname();
   const { track } = usePlayer();
   const insets = useSafeAreaInsets();
+
+  // Tela nova começa no topo, e a barra com ela.
+  useEffect(() => {
+    chromeExpand();
+  }, [pathname]);
 
   const visible =
     pathname.startsWith('/library') ||
@@ -79,13 +98,50 @@ export function Chrome() {
         paddingTop: 40,
         experimental_backgroundImage: `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
       }}>
-      {track && <MiniPlayer />}
-      <Nav active={active} />
+      <Bar active={active} hasTrack={!!track} />
     </View>
   );
 }
 
-function MiniPlayer() {
+/** O cartão: player em cima, destinos embaixo, um recolhendo sobre o outro. */
+function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
+  // Sem faixa, o colapso é desligado na origem em vez de espalhar `if` pelos estilos.
+  const collapse = useDerivedValue(() => (hasTrack ? chromeCollapsed.value : 0));
+
+  const nav = useAnimatedStyle(() => ({
+    height: (1 - collapse.value) * NAV_HEIGHT,
+    marginTop: (1 - collapse.value) * 6,
+    opacity: 1 - collapse.value,
+  }));
+
+  return (
+    <View
+      style={{
+        borderRadius: 24,
+        padding: 5,
+        backgroundColor: 'rgba(26,22,20,.94)',
+        borderWidth: 1,
+        borderColor: T.t1,
+      }}>
+      {hasTrack && <MiniPlayer active={active} collapse={collapse} />}
+      <Animated.View style={[{ overflow: 'hidden' }, nav]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+          {NAV.map((item) => (
+            <NavItem key={item.key} item={item} active={item.key === active} />
+          ))}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+function MiniPlayer({
+  active,
+  collapse,
+}: {
+  active: string;
+  collapse: SharedValue<number>;
+}) {
   const router = useRouter();
   const { track, playing, toggle, duration } = usePlayer();
   const { accent } = usePrefs();
@@ -109,6 +165,21 @@ function MiniPlayer() {
     }
   }, [playing, breathe]);
   const breathing = useAnimatedStyle(() => ({ transform: [{ scale: breathe.value }] }));
+
+  // As larguras animam em vez de um `gap` no container: um filho de largura zero ainda
+  // custaria o gap, e sobraria um buraco na fileira.
+  const chip = useAnimatedStyle(() => ({
+    width: collapse.value * 40,
+    opacity: collapse.value,
+    marginRight: collapse.value * 12,
+  }));
+  const eq = useAnimatedStyle(() => ({
+    width: (1 - collapse.value) * 20,
+    opacity: 1 - collapse.value,
+    marginRight: (1 - collapse.value) * 12,
+  }));
+
+  const ActiveIcon = NAV.find((item) => item.key === active)!.Icon;
 
   const openPlayer = () => launch(() => router.push('/player'));
 
@@ -134,7 +205,6 @@ function MiniPlayer() {
         padding: 10,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
       }}>
       <View
         style={{
@@ -144,11 +214,30 @@ function MiniPlayer() {
           experimental_backgroundImage: `radial-gradient(70% 200% at 0% 50%, ${art.a} 0%, transparent 70%)`,
         }}
       />
-      <Animated.View ref={ref} collapsable={false} style={breathing}>
+      {/* O destino ativo, colapsado num disco. Tocar nele reabre a barra inteira. */}
+      <Animated.View style={[{ height: 40, borderRadius: 20, overflow: 'hidden' }, chip]}>
+        <Pressable
+          onPress={chromeExpand}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: accent,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          <ActiveIcon size={21} color={C.onAccent} />
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View
+        ref={ref}
+        collapsable={false}
+        style={[{ marginRight: 12 }, breathing]}>
         <AlbumArt art={art} size={46} radius={12} detail="ring" cover={cover} />
       </Animated.View>
 
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
         <Body size={13.5} weight={600} tracking={-0.01} numberOfLines={1}>
           {track!.title}
         </Body>
@@ -157,7 +246,9 @@ function MiniPlayer() {
         </Body>
       </View>
 
-      <EqBars color={accent} playing={playing} height={20} />
+      <Animated.View style={[{ overflow: 'hidden' }, eq]}>
+        <EqBars color={accent} playing={playing} height={20} />
+      </Animated.View>
 
       <Pressable
         onPress={toggle}
@@ -186,28 +277,6 @@ function MiniPlayer() {
       </View>
     </Pressable>
     </GestureDetector>
-  );
-}
-
-function Nav({ active }: { active: string }) {
-  return (
-    <View style={{ alignItems: 'center', marginTop: 13 }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 3,
-          padding: 5,
-          borderRadius: R.r26,
-          backgroundColor: 'rgba(26,22,20,.94)',
-          borderWidth: 1,
-          borderColor: T.t1,
-        }}>
-        {NAV.map((item) => (
-          <NavItem key={item.key} item={item} active={item.key === active} />
-        ))}
-      </View>
-    </View>
   );
 }
 

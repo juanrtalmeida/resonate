@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  findTopAtom,
   fromPath,
   parseDuration,
   parseTags,
@@ -339,4 +340,52 @@ test('gênero em MP4', () => {
     atom('moov', atom('udta', atom('meta', cat([0, 0, 0, 0], ilst))))
   );
   assert.equal(parseTags(bytes, 'file:///m/a.m4a').genre, 'Ambient');
+});
+
+// ------------------------------------------------------- átomos de topo do MP4
+
+/** Como `atom`, mas com o largesize de 64 bits que alguns muxers sempre escrevem. */
+function bigAtom(name: string, body: Uint8Array): Uint8Array {
+  const out = new Uint8Array(16 + body.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 1);
+  view.setUint32(12, out.length);
+  for (let i = 0; i < 4; i++) out[4 + i] = name.charCodeAt(i);
+  out.set(body, 16);
+  return out;
+}
+
+const readerOver = (bytes: Uint8Array) => (at: number, len: number) =>
+  bytes.subarray(at, at + len);
+
+test('acha o moov mesmo depois de um mdat gigante', () => {
+  const file = cat(
+    atom('ftyp', new Uint8Array(16)),
+    atom('mdat', new Uint8Array(4096)),
+    atom('moov', Uint8Array.from([1, 2, 3, 4]))
+  );
+  const found = findTopAtom(readerOver(file), file.length, 'moov');
+  assert.ok(found);
+  assert.deepEqual([...file.subarray(found.body, found.end)], [1, 2, 3, 4]);
+});
+
+test('atravessa um mdat com largesize de 64 bits', () => {
+  const file = cat(
+    atom('ftyp', new Uint8Array(16)),
+    bigAtom('mdat', new Uint8Array(2048)),
+    atom('moov', Uint8Array.from([9]))
+  );
+  const found = findTopAtom(readerOver(file), file.length, 'moov');
+  assert.ok(found);
+  assert.deepEqual([...file.subarray(found.body, found.end)], [9]);
+});
+
+test('átomo de tamanho 0 vai até o fim do arquivo', () => {
+  const open = new Uint8Array(8 + 32);
+  for (let i = 0; i < 4; i++) open[4 + i] = 'mdat'.charCodeAt(i);
+  const file = cat(atom('ftyp', new Uint8Array(16)), open);
+  assert.equal(findTopAtom(readerOver(file), file.length, 'moov'), null);
+  const mdat = findTopAtom(readerOver(file), file.length, 'mdat');
+  assert.ok(mdat);
+  assert.equal(mdat.end, file.length);
 });

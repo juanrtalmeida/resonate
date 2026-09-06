@@ -19,6 +19,7 @@ import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { artGradient, artworkFor } from '@/lib/artwork';
+import { chromeScrollTo } from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -95,6 +96,7 @@ function Artist({
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y;
+    chromeScrollTo(e.contentOffset.y);
   });
 
   /**

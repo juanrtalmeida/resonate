@@ -8,6 +8,7 @@ import { ACCENTS, C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/the
 import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePrefs, type Treatment } from '@/lib/prefs';
+import { chromeScroll } from '@/lib/chrome-scroll';
 
 const TREATMENTS: { key: Treatment; title: string; blurb: string }[] = [
   { key: 'ember', title: 'Brasa', blurb: 'Capa grande com brilho pulsante' },
@@ -25,6 +26,7 @@ export default function Settings() {
 
   return (
     <ScrollView
+      {...chromeScroll}
       contentContainerStyle={{
         paddingTop: insets.top + 24,
         paddingHorizontal: PADDING,

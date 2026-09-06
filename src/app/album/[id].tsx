@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
+import { Backdrop } from '@/components/backdrop';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { ChevronLeft, Heart, Play, Queue, Shuffle } from '@/components/icons';
 import { Body, Display, Mono } from '@/components/text';
@@ -11,6 +12,7 @@ import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
+import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
@@ -110,19 +112,9 @@ function AlbumDetail({ album }: { album: Album }) {
 
   return (
     <ZoomScreen background={C.bg}>
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 420,
-          opacity: 0.4,
-          experimental_backgroundImage: `radial-gradient(100% 80% at 50% 0%, ${art.a} 0%, transparent 68%)`,
-        }}
-      />
+      <Backdrop cover={album.cover} color={art.a} />
       <FlatList
+        {...chromeScroll}
         data={tracks}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}

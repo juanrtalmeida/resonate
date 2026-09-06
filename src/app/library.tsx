@@ -1,6 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import Animated, {
+  FadeInLeft,
+  FadeInRight,
+  FadeOutLeft,
+  FadeOutRight,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
@@ -12,6 +20,7 @@ import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
+import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePlaylists } from '@/lib/playlists';
@@ -45,6 +54,16 @@ export default function LibraryScreen() {
   const { tab: raw } = useLocalSearchParams<{ tab?: string }>();
 
   const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'albums';
+
+  // A lista nova entra do lado para onde a aba andou; a velha sai para o outro.
+  // Decidido no toque, não no render: a direção é da interação, e a aba chega pela URL
+  // sem dizer de onde veio.
+  const index = TABS.findIndex((t) => t.key === tab);
+  const [forward, setForward] = useState(true);
+  const pickTab = (key: TabKey) => {
+    setForward(TABS.findIndex((t) => t.key === key) >= index);
+    router.setParams({ tab: key });
+  };
   const width = Dimensions.get('window').width;
   const cell = (width - PADDING * 2 - GAP) / 2;
 
@@ -91,7 +110,7 @@ export default function LibraryScreen() {
         </Pressable>
       </View>
 
-      <Tabs current={tab} onPick={(key) => router.setParams({ tab: key })} />
+      <Tabs current={tab} onPick={pickTab} />
 
       {tab === 'albums' && albums.length > 0 && <Fresh albums={albums.slice(0, 8)} />}
 
@@ -137,6 +156,7 @@ export default function LibraryScreen() {
   if (tab === 'albums') {
     content = (
       <FlatList
+        {...chromeScroll}
         key="albums"
         data={albums}
         keyExtractor={(a) => a.id}
@@ -164,6 +184,7 @@ export default function LibraryScreen() {
   if (tab === 'playlists') {
     content = (
       <FlatList
+        {...chromeScroll}
         key="playlists"
         data={playlists}
         keyExtractor={(p) => p.id}
@@ -194,6 +215,7 @@ export default function LibraryScreen() {
   if (tab === 'artists') {
     content = (
       <FlatList
+        {...chromeScroll}
         key="artists"
         data={artists}
         keyExtractor={(a) => a.name}
@@ -216,6 +238,7 @@ export default function LibraryScreen() {
   if (!content) {
     content = (
       <FlatList
+        {...chromeScroll}
         key="tracks"
         data={tracks}
         keyExtractor={(t) => t.id}
@@ -247,7 +270,13 @@ export default function LibraryScreen() {
 
   return (
     <>
-      {content}
+      <Animated.View
+        key={tab}
+        entering={(forward ? FadeInRight : FadeInLeft).duration(240)}
+        exiting={(forward ? FadeOutLeft : FadeOutRight).duration(140)}
+        style={{ flex: 1 }}>
+        {content}
+      </Animated.View>
       {sheet}
       <NewPlaylist visible={naming} onClose={() => setNaming(false)} />
     </>
@@ -326,6 +355,15 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
 
 function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => void }) {
   const { accent } = usePrefs();
+
+  // A largura do traço só se sabe depois do layout: são quatro fatias iguais da linha.
+  const [width, setWidth] = useState(0);
+  const slot = width / TABS.length;
+  const at = TABS.findIndex((t) => t.key === current);
+  const slide = useAnimatedStyle(() => ({
+    transform: [{ translateX: withSpring(at * slot, { damping: 20, stiffness: 190 }) }],
+  }));
+
   return (
     <View style={{ marginTop: 22, marginBottom: 4 }}>
       <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: R.r13, padding: 4 }}>
@@ -350,20 +388,16 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
           );
         })}
       </View>
-      {/* Um traço fino no acento marca a aba, como a pílula do design. */}
-      <View style={{ height: 2, marginTop: 6, flexDirection: 'row' }}>
-        {TABS.map((t) => (
-          <View
-            key={t.key}
-            style={{
-              flex: 1,
-              height: 2,
-              marginHorizontal: 6,
-              borderRadius: 1,
-              backgroundColor: t.key === current ? accent : 'transparent',
-            }}
-          />
-        ))}
+      {/* Um traço fino no acento marca a aba, como a pílula do design. Ele corre até a
+          aba nova: quatro traços acendendo e apagando não diziam de onde para onde. */}
+      <View
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        style={{ height: 2, marginTop: 6 }}>
+        {width > 0 && (
+          <Animated.View style={[{ width: slot, height: 2, paddingHorizontal: 6 }, slide]}>
+            <View style={{ flex: 1, borderRadius: 1, backgroundColor: accent }} />
+          </Animated.View>
+        )}
       </View>
     </View>
   );

@@ -298,6 +298,46 @@ export function findAtom(
   return null;
 }
 
+/** Lê `len` bytes a partir de `at`. Abstrai o handle de arquivo para dar testabilidade. */
+export type Reader = (at: number, len: number) => Uint8Array;
+
+/**
+ * Acha um átomo de topo (`ftyp`, `moov`, `mdat`) sem carregar o arquivo.
+ *
+ * Existe porque o `moov` — onde vivem as tags e a duração — pode estar no fim do
+ * arquivo: quem grava M4A sem faststart escreve `ftyp`, todo o áudio em `mdat`, e só
+ * então o `moov`. Ler um prefixo fixo não alcança isso.
+ */
+export function findTopAtom(
+  read: Reader,
+  fileSize: number,
+  want: string
+): { start: number; body: number; end: number } | null {
+  let at = 0;
+  while (at + 8 <= fileSize) {
+    const header = read(at, Math.min(16, fileSize - at));
+    if (header.length < 8) return null;
+
+    let size = be32(header, 0);
+    let body = at + 8;
+    if (size === 1) {
+      // largesize de 64 bits. Só aparece em arquivo grande, mas alguns muxers usam sempre.
+      if (header.length < 16) return null;
+      size = be32(header, 8) * 2 ** 32 + be32(header, 12);
+      body = at + 16;
+    } else if (size === 0) {
+      // Último átomo do arquivo: vai até o fim.
+      size = fileSize - at;
+    }
+    if (size < body - at) return null;
+
+    const end = Math.min(at + size, fileSize);
+    if (latin1(header, 4, 8) === want) return { start: at, body, end };
+    at += size;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- fallback por caminho
 
 const GENERIC = new Set([

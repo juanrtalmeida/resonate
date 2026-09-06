@@ -4,6 +4,7 @@ import { FlatList, Pressable, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
+import { Backdrop } from '@/components/backdrop';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, Play, Plus, Shuffle } from '@/components/icons';
 import { Body, Display, Mono } from '@/components/text';
@@ -15,6 +16,7 @@ import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
+import { chromeScroll } from '@/lib/chrome-scroll';
 
 export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -194,19 +196,9 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
 
   return (
     <View style={{ flex: 1 }}>
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 420,
-          opacity: 0.4,
-          experimental_backgroundImage: `radial-gradient(100% 80% at 50% 0%, ${art.a} 0%, transparent 68%)`,
-        }}
-      />
+      <Backdrop cover={playlist.cover ?? null} color={art.a} />
       <FlatList
+        {...chromeScroll}
         data={tracks}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}

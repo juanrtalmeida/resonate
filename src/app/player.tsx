@@ -1,3 +1,4 @@
+import { Accelerometer } from 'expo-sensors';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -36,6 +37,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
+import { TILT_INTERVAL, createTilt } from '@/lib/tilt';
 import { LyricsView, NoLyrics } from '@/components/lyrics';
 import { parseLrc, type Lyrics } from '@/lib/lrc';
 import { CONTINUATIONS, continuationFor } from '@/lib/queue';
@@ -60,10 +62,24 @@ export default function PlayerScreen() {
   }, [showQueue, q]);
 
   const dragX = useSharedValue(0);
+  const tilt = useTilt();
   const dragStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: dragX.value }, { rotate: `${dragX.value * 0.02}deg` }],
+    transform: [
+      { perspective: 900 },
+      { translateX: dragX.value },
+      { rotate: `${dragX.value * 0.02}deg` },
+      { rotateX: `${tilt.rx.value}deg` },
+      { rotateY: `${tilt.ry.value}deg` },
+    ],
   }));
-  const slideOnly = useAnimatedStyle(() => ({ transform: [{ translateX: dragX.value }] }));
+  const slideOnly = useAnimatedStyle(() => ({
+    transform: [
+      { perspective: 900 },
+      { translateX: dragX.value },
+      { rotateX: `${tilt.rx.value}deg` },
+      { rotateY: `${tilt.ry.value}deg` },
+    ],
+  }));
 
   /**
    * O tamanho da capa muda de verdade; nada de `scale`.
@@ -364,6 +380,42 @@ const EMPTY_LYRICS: Lyrics = { synced: false, lines: [] };
 
 /** Altura da capa quando a fila está aberta. */
 const ART_MINI = 92;
+
+/**
+ * Assina o acelerômetro e devolve os ângulos do tilt em shared values. Sem sensor — web,
+ * emulador sem acelerômetro — fica em zero e nada se move.
+ *
+ * O `withTiming` entre leituras é o que separa o efeito do serrilhado: a 80 ms o sinal
+ * chega em degraus, e a animação preenche o intervalo.
+ */
+function useTilt() {
+  const rx = useSharedValue(0);
+  const ry = useSharedValue(0);
+
+  useEffect(() => {
+    let sub: { remove: () => void } | undefined;
+    let cancelled = false;
+    const step = createTilt();
+    Accelerometer.isAvailableAsync()
+      .then((ok) => {
+        if (!ok || cancelled) return;
+        Accelerometer.setUpdateInterval(TILT_INTERVAL);
+        sub = Accelerometer.addListener(({ x, y }) => {
+          const angle = step(x, y);
+          const ease = { duration: TILT_INTERVAL * 1.6 };
+          rx.value = withTiming(angle.rx, ease);
+          ry.value = withTiming(angle.ry, ease);
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [rx, ry]);
+
+  return { rx, ry };
+}
 
 /**
  * A fila dentro do próprio Now Playing: modos em ícones no topo e o que vem a seguir
