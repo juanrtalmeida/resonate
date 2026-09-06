@@ -126,16 +126,24 @@ function AlbumDetail({ album }: { album: Album }) {
           paddingHorizontal: PADDING,
         }}
         renderItem={({ item, index }) => (
-          <TrackRow
-            track={item}
-            position={item.trackNumber ?? index + 1}
-            accent={accent}
-            onPress={() => play(tracks, index)}
-            onLongPress={() => open([item.id])}
-            onQueue={() => enqueueLast([item])}
-            onPlaylist={() => open([item.id])}
-            subtitle={item.artist}
-          />
+          /*
+            O fade vai por linha, e não num invólucro em volta da lista: o cabeçalho da
+            lista carrega o ZoomTarget, e a capa em voo é justamente o que tem de
+            continuar sólido. Só as linhas visíveis estão montadas, então são ~15 estilos
+            animados, não um por faixa.
+          */
+          <ZoomFade>
+            <TrackRow
+              track={item}
+              position={item.trackNumber ?? index + 1}
+              accent={accent}
+              onPress={() => play(tracks, index)}
+              onLongPress={() => open([item.id])}
+              onQueue={() => enqueueLast([item])}
+              onPlaylist={() => open([item.id])}
+              subtitle={item.artist}
+            />
+          </ZoomFade>
         )}
       />
       {sheet}

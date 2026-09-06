@@ -237,6 +237,12 @@ export function ZoomScreen({
 /**
  * Esmaece o que não é a capa: aparece depois dela começar a viajar e some antes dela
  * chegar de volta, o que dá a impressão de que a capa carrega a tela consigo.
+ *
+ * A curva vai a zero na metade do percurso, não perto do fim. Saindo, isso descobre a
+ * tela de trás enquanto a capa ainda está voando — a última metade da animação é só a
+ * capa voltando para o lugar dela, sobre a tela anterior já visível. Com o fundo
+ * segurando opacidade até os 85%, a tela de baixo aparecia de uma vez no fim e a
+ * animação parecia ter travado antes de terminar.
  */
 export function ZoomFade({
   children,
@@ -255,7 +261,7 @@ export function ZoomFade({
   const fade = useAnimatedStyle(() => {
     if (!progress) return { opacity: 1 };
     return {
-      opacity: from ? interpolate(progress.value, [0, 0.35, 1], [0, 0.15, 1]) : progress.value,
+      opacity: from ? interpolate(progress.value, [0, 0.5, 1], [0, 0, 1]) : progress.value,
     };
   });
 

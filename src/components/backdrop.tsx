@@ -15,6 +15,7 @@
 import { Image, View } from 'react-native';
 
 import { C, alpha } from '@/constants/theme';
+import { ZoomFade } from '@/lib/zoom';
 
 export function Backdrop({
   cover,
@@ -26,8 +27,13 @@ export function Backdrop({
   color: string;
   height?: number;
 }) {
+  // ZoomFade, e não View: fora de uma tela com zoom ele devolve opacidade 1 e nada muda
+  // (é o caso da lista); dentro de uma, o fundo sai de cena junto com o resto em vez de
+  // ficar opaco até a tela desmontar.
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height }}>
+    <ZoomFade
+      pointerEvents="none"
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, height }}>
       {cover ? (
         <Image
           source={{ uri: cover }}
@@ -48,6 +54,6 @@ export function Backdrop({
             `${alpha(C.bg, 0.82)} 58%, ${C.bg} 100%)`,
         }}
       />
-    </View>
+    </ZoomFade>
   );
 }
