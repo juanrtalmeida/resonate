@@ -9,12 +9,19 @@
       "@/assets/*": [
         "./assets/*"
       ]
-    }
+    },
+    "noEmit": true
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "android",
+    "ios",
+    "**/*.test.ts"
   ]
 }

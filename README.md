@@ -1,56 +1,43 @@
-# Welcome to your Expo app 👋
+# Resonate
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Player de música **offline** para Android e iOS. Lê os arquivos de áudio que já estão no
+aparelho, monta a biblioteca a partir das tags e toca com controles nativos de tela de
+bloqueio. Sem streaming, sem login, sem rede.
 
-## Get started
+Expo SDK 57 · React Native 0.86 · TypeScript strict.
 
-1. Install dependencies
+## Rodar
 
-   ```bash
-   npm install
-   ```
+O app usa módulos nativos de áudio e de biblioteca de mídia — **não roda no Expo Go**.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+npm install
+npx expo run:android   # ou: npx expo run:ios
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Verificar
 
-### Other setup steps
+```sh
+npm run typecheck   # tsc --noEmit
+npm run lint        # inclui as regras do React Compiler
+npm test            # parser de tags e de duração, em Node
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Estrutura
 
-## Learn more
+```
+src/app/         rotas (expo-router, file-based)
+src/components/  peças de interface
+src/lib/         tags, varredura, reprodução, estado, transições
+src/constants/   tokens do design
+docs/            contexto, arquitetura, decisões
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Documentação
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+A pasta [`docs/`](docs/README.md) traz o contexto do produto, a arquitetura, o registro de
+decisões técnicas com o porquê de cada uma, a referência do leitor de tags, o design
+system e as diferenças entre Android e iOS.
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+O design é dark fixo. A fonte da verdade visual é o protótipo em
+`Offline Music Player App-handoff/offline-music-player-app/project/Resonate - Offline Player.dc.html`.

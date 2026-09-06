@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&family=Familjen+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0A09;color:#F6F1EA;font-family:'Familjen Grotesk',system-ui,sans-serif}
+a{color:#F2653A;text-decoration:none}a:hover{color:#FF8A5C}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:0;height:0}
+@keyframes eq{0%{transform:scaleY(.18)}100%{transform:scaleY(1)}}
+@keyframes breathe{0%{transform:scale(1)}100%{transform:scale(1.045)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes slideL{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+@keyframes hero{from{opacity:0;transform:translateY(160px) scale(.42)}to{opacity:1;transform:none}}
+@keyframes glow{0%{opacity:.35;transform:scale(.92)}100%{opacity:.8;transform:scale(1.08)}}
+@keyframes drift{0%{transform:rotate(0deg) scale(1)}100%{transform:rotate(360deg) scale(1.15)}}
+@keyframes ring{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.9);opacity:0}}
+@keyframes marq{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes pop{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:none}}
+@keyframes sheen{0%{background-position:-140% 0}100%{background-position:240% 0}}
+@keyframes bob{0%{transform:translateY(0)}100%{transform:translateY(-6px)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+</style></helmet>
+
+<div style="min-height:100vh;padding:26px 30px 60px;background:radial-gradient(120% 80% at 15% -10%,#1C1512 0%,transparent 55%),radial-gradient(90% 70% at 95% 10%,#141A1C 0%,transparent 50%),#0B0A09">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;margin-bottom:26px;max-width:1180px">
+    <div>
+      <div style="display:flex;align-items:baseline;gap:9px">
+        <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.03em">resonate</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:#F2653A;animation:blink 1.9s ease-in-out infinite"></span>
+      </div>
+      <div style="font-size:13.5px;color:rgba(246,241,234,.5);margin-top:4px;max-width:420px">An offline player that finds the music already on your phone. Prototype — tap through it.</div>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div>
+        <div style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.34);text-transform:uppercase;margin-bottom:7px">Flow</div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ railFlow }}" as="r" hint-placeholder-count="4">
+            <div onClick="{{ r.act }}" style="cursor:pointer;padding:7px 11px;border-radius:9px;font-size:12px;font-weight:500;border:1px solid rgba(246,241,234,.1);transition:all .22s" style-hover="border-color:rgba(246,241,234,.3)">{{ r.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.34);text-transform:uppercase;margin-bottom:7px">Player look</div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ railLook }}" as="r" hint-placeholder-count="3">
+            <div onClick="{{ r.act }}" style="cursor:pointer;padding:7px 11px;border-radius:9px;font-size:12px;font-weight:500;border:1px solid rgba(246,241,234,.1);transition:all .22s" style-hover="border-color:rgba(246,241,234,.3)">{{ r.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+  <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+    <div style="position:relative;height:874px;overflow:hidden;background:#0E0C0B;font-family:'Familjen Grotesk',system-ui,sans-serif;color:#F6F1EA">
+
+      <!-- ONBOARD -->
+      <sc-if value="{{ isOnboard }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;inset:0;overflow:hidden">
+        <div style="position:absolute;top:-160px;left:-120px;width:520px;height:520px;border-radius:50%;background:conic-gradient(from 0deg,#F2653A,#7A2E1E,#E8B44A,#F2653A);filter:blur(90px);opacity:.32;animation:drift 26s linear infinite"></div>
+        <div style="position:absolute;inset:0;padding:74px 26px 30px;display:flex;flex-direction:column">
+          <div style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.2em;color:#F2653A;text-transform:uppercase;animation:fadeUp .5s both">First run</div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:38px;line-height:1.02;letter-spacing:-.035em;margin-top:14px;text-wrap:pretty;animation:fadeUp .6s .06s both">Let's find what's already here.</div>
+          <div style="font-size:14.5px;line-height:1.5;color:rgba(246,241,234,.58);margin-top:14px;text-wrap:pretty;animation:fadeUp .6s .14s both">No sign-in, no streaming. resonate reads the files sitting on your phone and leaves every one of them exactly where it is.</div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin:30px 0 12px;animation:fadeUp .6s .2s both">
+            <div style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;color:rgba(246,241,234,.4);text-transform:uppercase">Where should I look?</div>
+            <div style="font-size:12px;color:rgba(246,241,234,.4)">{{ folderSummary }}</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ folders }}" as="f" hint-placeholder-count="4">
+              <div onClick="{{ f.toggle }}" style="cursor:pointer;display:flex;align-items:center;gap:13px;padding:14px 14px;border-radius:16px;background:#171412;border:1px solid rgba(246,241,234,.07);animation:rise .55s cubic-bezier(.2,.9,.2,1) both;animation-delay:{{ f.d }}ms;transition:transform .2s,background .2s" style-hover="transform:translateX(3px);background:#1D1815">
+                <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;background:{{ f.iconBg }}">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.6 4.4c0-.9.7-1.6 1.6-1.6h3.3l1.6 1.9h6.7c.9 0 1.6.7 1.6 1.6v7c0 .9-.7 1.6-1.6 1.6H3.2c-.9 0-1.6-.7-1.6-1.6V4.4z" stroke="{{ f.iconFg }}" stroke-width="1.4"></path></svg>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14.5px;font-weight:600;letter-spacing:-.01em">{{ f.n }}</div>
+                  <div style="font:400 10.5px/1.4 'DM Mono',monospace;color:rgba(246,241,234,.38);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{ f.p }}</div>
+                </div>
+                <div style="font-size:11.5px;color:rgba(246,241,234,.42);flex:none;font-variant-numeric:tabular-nums">{{ f.cs }}</div>
+                <div style="width:44px;height:27px;border-radius:14px;flex:none;padding:3px;transition:background .3s;background:{{ f.swBg }}">
+                  <div style="width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .32s cubic-bezier(.2,1.3,.3,1);transform:translateX({{ f.swX }}px)"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <div onClick="{{ goBrowse }}" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 15px;border-radius:15px;border:1px dashed rgba(246,241,234,.18);margin-bottom:11px;transition:all .22s" style-hover="border-color:rgba(246,241,234,.4);background:rgba(246,241,234,.04)">
+            <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M1.6 4.4c0-.9.7-1.6 1.6-1.6h3.3l1.6 1.9h6.7c.9 0 1.6.7 1.6 1.6v7c0 .9-.7 1.6-1.6 1.6H3.2c-.9 0-1.6-.7-1.6-1.6V4.4z" stroke="rgba(246,241,234,.6)" stroke-width="1.4"></path><path d="M9 8.4v4.2M6.9 10.5h4.2" stroke="rgba(246,241,234,.6)" stroke-width="1.4" stroke-linecap="round"></path></svg>
+            <span style="flex:1;font-size:13.5px;font-weight:500;color:rgba(246,241,234,.72)">Browse device storage…</span>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="rgba(246,241,234,.4)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+
+          <div onClick="{{ startScan }}" style="position:relative;overflow:hidden;cursor:pointer;border-radius:21px;padding:13px;display:flex;align-items:center;gap:14px;background:#191512;border:1px solid rgba(246,241,234,.11);box-shadow:0 18px 44px rgba(0,0,0,.55);transition:transform .2s,border-color .25s" style-hover="transform:translateY(-3px);border-color:rgba(242,101,58,.55)">
+            <div style="position:absolute;inset:0;background:radial-gradient(66% 170% at 5% 50%,{{ accent }} 0%,transparent 60%);opacity:.22"></div>
+            <div style="position:relative;width:54px;height:54px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0E0C0B">
+              <div style="position:absolute;inset:0;background:conic-gradient(from 0deg,transparent 0deg,{{ accent }} 66deg,transparent 128deg);animation:spin 2.4s linear infinite"></div>
+              <div style="position:absolute;inset:3px;border-radius:50%;background:#12100E"></div>
+              <div style="position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(242,101,58,.45);animation:ring 2.2s ease-out infinite"></div>
+              <div style="position:relative;display:flex;align-items:flex-end;gap:2.5px;height:19px;color:{{ accent }}">
+                <sc-for list="{{ eqMini }}" as="b" hint-placeholder-count="5">
+                  <div style="width:2.5px;height:19px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .8s ease-in-out infinite alternate;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s"></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="position:relative;flex:1;min-width:0">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:18px;letter-spacing:-.025em">{{ scanCta }}</div>
+              <div style="font-size:12px;color:rgba(246,241,234,.52);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ scanSub }}</div>
+            </div>
+            <div style="position:relative;width:34px;height:34px;border-radius:50%;flex:none;background:{{ accent }};display:flex;align-items:center;justify-content:center">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h9M8.4 4l4 4-4 4" stroke="#12100E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:11.5px;color:rgba(246,241,234,.33);margin-top:13px">Nothing is uploaded. Files stay exactly where they are.</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- FOLDER BROWSER -->
+      <sc-if value="{{ isBrowse }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;overflow:hidden;background:#0E0C0B">
+        <div style="position:absolute;top:-120px;right:-100px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,{{ accent }} 0%,transparent 62%);filter:blur(70px);opacity:.18"></div>
+        <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:66px 0 26px">
+          <div style="display:flex;align-items:center;gap:12px;padding:0 20px">
+            <div onClick="{{ browseUp }}" style="cursor:pointer;width:38px;height:38px;border-radius:50%;background:rgba(246,241,234,.07);display:flex;align-items:center;justify-content:center;flex:none;transition:transform .2s" style-hover="transform:translateX(-3px)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="#F6F1EA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:22px;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ crumbTitle }}</div>
+              <div style="font:400 11px/1.4 'DM Mono',monospace;color:rgba(246,241,234,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{ crumbPath }}</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:7px;overflow-x:auto;padding:16px 20px 4px;flex:none">
+            <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
+              <div onClick="{{ c.go }}" style="cursor:pointer;flex:none;display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:9px;font-size:12px;font-weight:500;transition:all .2s;background:{{ c.bg }};color:{{ c.col }}">{{ c.name }}</div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:10px 20px 8px;display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ browseRows }}" as="r" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:15px;background:{{ r.bg }};border:1px solid {{ r.bd }};animation:rise .45s cubic-bezier(.2,.9,.2,1) both;animation-delay:{{ r.d }}ms;transition:background .22s">
+                <div onClick="{{ r.toggle }}" style="cursor:pointer;width:26px;height:26px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;transition:all .28s cubic-bezier(.2,1.3,.3,1);background:{{ r.ckBg }};border:1.5px solid {{ r.ckBd }};transform:scale({{ r.ckS }})">
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style="opacity:{{ r.ckO }}"><path d="M2.4 7.4l3 3 6.2-7" stroke="#12100E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </div>
+                <div onClick="{{ r.enter }}" style="cursor:pointer;flex:1;min-width:0;display:flex;align-items:center;gap:11px">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex:none"><path d="M1.6 4.4c0-.9.7-1.6 1.6-1.6h3.3l1.6 1.9h6.7c.9 0 1.6.7 1.6 1.6v7c0 .9-.7 1.6-1.6 1.6H3.2c-.9 0-1.6-.7-1.6-1.6V4.4z" stroke="{{ r.icon }}" stroke-width="1.4"></path></svg>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:14.5px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                    <div style="font-size:11px;color:rgba(246,241,234,.4);margin-top:1px">{{ r.sub }}</div>
+                  </div>
+                  <sc-if value="{{ r.hasKids }}" hint-placeholder-val="{{ true }}">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex:none"><path d="M6 3l5 5-5 5" stroke="rgba(246,241,234,.36)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:12px 20px 0;flex:none">
+            <div onClick="{{ confirmBrowse }}" style="cursor:pointer;position:relative;overflow:hidden;height:56px;border-radius:18px;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .18s,opacity .25s;background:{{ accent }};opacity:{{ confirmO }};box-shadow:0 14px 34px rgba(242,101,58,.28)" style-hover="transform:translateY(-2px)">
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:16.5px;color:#12100E;letter-spacing:-.015em">{{ confirmLabel }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- SCANNING -->
+      <sc-if value="{{ isScan }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;overflow:hidden">
+        <div style="position:absolute;top:110px;left:50%;margin-left:-190px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,#F2653A 0%,transparent 62%);filter:blur(50px);opacity:.34;animation:glow 3.2s ease-in-out infinite alternate"></div>
+        <div style="position:absolute;inset:0;padding:78px 26px 34px;display:flex;flex-direction:column;align-items:center">
+          <div style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.2em;color:#F2653A;text-transform:uppercase">Scanning</div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:27px;letter-spacing:-.03em;margin-top:11px;text-align:center">{{ scanHeadline }}</div>
+
+          <div style="position:relative;width:236px;height:236px;margin-top:34px;display:flex;align-items:center;justify-content:center">
+            <div style="position:absolute;inset:0;border-radius:50%;border:1px solid rgba(242,101,58,.35);animation:ring 2.4s ease-out infinite"></div>
+            <div style="position:absolute;inset:14px;border-radius:50%;border:1px dashed rgba(246,241,234,.14);animation:spin 22s linear infinite"></div>
+            <svg width="236" height="236" viewBox="0 0 236 236" style="position:absolute;inset:0;transform:rotate(-90deg)">
+              <circle cx="118" cy="118" r="98" fill="none" stroke="rgba(246,241,234,.09)" stroke-width="7"></circle>
+              <circle cx="118" cy="118" r="98" fill="none" stroke="#F2653A" stroke-width="7" stroke-linecap="round" stroke-dasharray="615.75" stroke-dashoffset="{{ ringOffset }}" style="transition:stroke-dashoffset .18s linear"></circle>
+            </svg>
+            <div style="text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:56px;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums">{{ scanPct }}</div>
+              <div style="font:500 10.5px/1 'DM Mono',monospace;color:rgba(246,241,234,.42);letter-spacing:.1em;margin-top:6px">{{ scanFound }} FILES</div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:flex-end;gap:3px;height:34px;margin-top:26px;color:#F2653A">
+            <sc-for list="{{ eqBig }}" as="b" hint-placeholder-count="26">
+              <div style="width:4px;border-radius:2px;background:currentColor;transform-origin:bottom;height:34px;animation:eq 1s ease-in-out infinite alternate;opacity:.75;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s"></div>
+            </sc-for>
+          </div>
+
+          <div style="width:100%;margin-top:22px;padding:13px 14px;border-radius:14px;background:#141110;border:1px solid rgba(246,241,234,.06);overflow:hidden">
+            <div style="font:400 11px/1.5 'DM Mono',monospace;color:rgba(246,241,234,.46);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ scanFile }}</div>
+          </div>
+
+          <div style="display:flex;gap:9px;width:100%;margin-top:14px">
+            <div style="flex:1;padding:12px 0;border-radius:14px;background:#141110;text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums">{{ scanAlbums }}</div>
+              <div style="font-size:10.5px;color:rgba(246,241,234,.4);margin-top:2px">albums</div>
+            </div>
+            <div style="flex:1;padding:12px 0;border-radius:14px;background:#141110;text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums">{{ scanArtists }}</div>
+              <div style="font-size:10.5px;color:rgba(246,241,234,.4);margin-top:2px">artists</div>
+            </div>
+            <div style="flex:1;padding:12px 0;border-radius:14px;background:#141110;text-align:center">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums">{{ scanMin }}</div>
+              <div style="font-size:10.5px;color:rgba(246,241,234,.4);margin-top:2px">hours</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- LIBRARY -->
+      <sc-if value="{{ isLib }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0">
+        <div onScroll="{{ onLibScroll }}" style="position:absolute;inset:0;overflow-y:auto;padding:58px 0 168px">
+          <div style="padding:0 22px;transform:translateY({{ parY }}px);opacity:{{ parO }}">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+              <div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:33px;letter-spacing:-.035em;line-height:1">Your library</div>
+                <div style="font-size:12.5px;color:rgba(246,241,234,.45);margin-top:7px;display:flex;align-items:center;gap:7px">
+                  <span style="width:6px;height:6px;border-radius:50%;background:#5FBF7E"></span>{{ libSub }}
+                </div>
+              </div>
+              <div style="width:40px;height:40px;border-radius:50%;border:1px solid rgba(246,241,234,.12);display:flex;align-items:center;justify-content:center;flex:none">
+                <svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="7.2" cy="7.2" r="5.4" stroke="rgba(246,241,234,.65)" stroke-width="1.5"></circle><path d="M11.3 11.3l3.6 3.6" stroke="rgba(246,241,234,.65)" stroke-width="1.5" stroke-linecap="round"></path></svg>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:relative;margin:22px 0 4px;padding:0 22px">
+            <div style="position:relative;display:flex;gap:0;background:#141110;border-radius:13px;padding:4px">
+              <div style="position:absolute;top:4px;left:4px;height:34px;border-radius:10px;background:#252019;transition:transform .42s cubic-bezier(.2,1.2,.3,1),width .42s cubic-bezier(.2,1.2,.3,1);width:{{ tabW }}px;transform:translateX({{ tabX }}px)"></div>
+              <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+                <div onClick="{{ t.act }}" style="position:relative;flex:1;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12.5px;font-weight:600;transition:color .3s;color:{{ t.col }}">{{ t.k }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="margin-top:24px">
+            <div style="display:flex;align-items:center;gap:8px;padding:0 22px;margin-bottom:12px">
+              <span style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;color:rgba(246,241,234,.4);text-transform:uppercase">Fresh from the scan</span>
+              <span style="height:1px;flex:1;background:linear-gradient(90deg,rgba(246,241,234,.14),transparent)"></span>
+            </div>
+            <div style="display:flex;gap:12px;overflow-x:auto;padding:0 22px 4px">
+              <sc-for list="{{ freshList }}" as="al" hint-placeholder-count="4">
+                <div onClick="{{ al.open }}" style="flex:none;width:112px;cursor:pointer;animation:slideL .6s cubic-bezier(.2,.9,.2,1) both;animation-delay:{{ al.d }}ms">
+                  <div style="position:relative;width:112px;height:112px;border-radius:15px;overflow:hidden;background:#241E1A;box-shadow:0 10px 24px rgba(0,0,0,.4)">
+                    <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                    <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(112deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px)"></div>
+                    <div style="position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px;border-radius:50%;border:1.5px solid rgba(255,255,255,.32);transform:rotate({{ al.rot }}deg) scale(1)"></div>
+                    <div style="position:absolute;left:12px;right:12px;top:50%;height:1.5px;background:rgba(255,255,255,.22)"></div>
+                    <div style="position:absolute;top:7px;right:7px;padding:3px 6px;border-radius:6px;background:rgba(10,9,8,.62);font:500 8.5px/1 'DM Mono',monospace;letter-spacing:.08em;color:#F6F1EA">NEW</div>
+                  </div>
+                  <div style="font-size:12.5px;font-weight:600;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.title }}</div>
+                  <div style="font-size:11px;color:rgba(246,241,234,.42);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.artist }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;padding:0 22px;margin:26px 0 12px">
+            <span style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;color:rgba(246,241,234,.4);text-transform:uppercase">All albums</span>
+            <span style="height:1px;flex:1;background:linear-gradient(90deg,rgba(246,241,234,.14),transparent)"></span>
+            <span style="font-size:11px;color:rgba(246,241,234,.34)">{{ albumCount }}</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 14px;padding:0 22px">
+            <sc-for list="{{ albumList }}" as="al" hint-placeholder-count="8">
+              <div onClick="{{ al.open }}" style="cursor:pointer;animation:rise .6s cubic-bezier(.2,.9,.2,1) both;animation-delay:{{ al.d }}ms">
+                <div style="position:relative;width:100%;aspect-ratio:1;border-radius:17px;overflow:hidden;background:#241E1A;box-shadow:0 12px 26px rgba(0,0,0,.42);transition:transform .35s cubic-bezier(.2,1.2,.3,1)" style-hover="transform:translateY(-5px) scale(1.02)">
+                  <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                  <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(112deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px)"></div>
+                  <div style="position:absolute;left:50%;top:50%;width:86px;height:86px;margin:-43px;border-radius:50%;border:1.5px solid rgba(255,255,255,.3);transform:rotate({{ al.rot }}deg)"></div>
+                  <div style="position:absolute;left:16px;right:16px;top:50%;height:1.5px;background:rgba(255,255,255,.2)"></div>
+                  <div style="position:absolute;left:14px;bottom:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:11px;letter-spacing:.02em;color:rgba(255,255,255,.85);text-transform:uppercase">{{ al.initials }}</div>
+                  <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(8,7,6,.5))"></div>
+                </div>
+                <div style="font-size:13.5px;font-weight:600;margin-top:9px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.title }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+                  <span style="font-size:11.5px;color:rgba(246,241,234,.44);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.artist }}</span>
+                  <span style="font-size:11.5px;color:rgba(246,241,234,.22)">·</span>
+                  <span style="font-size:11.5px;color:rgba(246,241,234,.3);flex:none">{{ al.n }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ALBUM DETAIL -->
+      <sc-if value="{{ isAlbum }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;overflow-y:auto">
+        <div style="position:absolute;top:0;left:0;right:0;height:420px;background:radial-gradient(100% 80% at 50% 0%,{{ al.a }} 0%,transparent 68%);opacity:.4"></div>
+        <div style="position:relative;padding:62px 22px 170px">
+          <div onClick="{{ goLib }}" style="cursor:pointer;width:38px;height:38px;border-radius:50%;background:rgba(20,17,16,.7);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;transition:transform .2s" style-hover="transform:translateX(-3px)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="#F6F1EA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+
+          <div style="display:flex;justify-content:center;margin-top:18px">
+            <div style="position:relative;width:218px;height:218px;border-radius:24px;overflow:hidden;background:#241E1A;box-shadow:0 26px 60px rgba(0,0,0,.55);animation:hero .62s cubic-bezier(.18,.9,.2,1) both">
+              <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+              <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(112deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px)"></div>
+              <div style="position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px;border-radius:50%;border:2px solid rgba(255,255,255,.3);transform:rotate({{ al.rot }}deg)"></div>
+              <div style="position:absolute;left:26px;right:26px;top:50%;height:2px;background:rgba(255,255,255,.2)"></div>
+              <div style="position:absolute;left:20px;bottom:18px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:16px;color:rgba(255,255,255,.88);text-transform:uppercase;letter-spacing:.02em">{{ al.initials }}</div>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin-top:22px;animation:fadeUp .5s .12s both">
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:29px;letter-spacing:-.035em;line-height:1.06;text-wrap:pretty">{{ al.title }}</div>
+            <div style="font-size:14px;color:rgba(246,241,234,.62);margin-top:6px">{{ al.artist }}</div>
+            <div style="font:400 11px/1 'DM Mono',monospace;color:rgba(246,241,234,.6);margin-top:9px;letter-spacing:.06em">{{ al.meta }}</div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:22px;animation:fadeUp .5s .18s both">
+            <div onClick="{{ playAlbum }}" style="cursor:pointer;flex:1;height:52px;border-radius:16px;background:#F2653A;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 12px 28px rgba(242,101,58,.28);transition:transform .18s" style-hover="transform:translateY(-2px)">
+              <svg width="14" height="16" viewBox="0 0 14 16"><path d="M1 1.6c0-.9 1-1.4 1.7-.9l9.6 6.4c.7.5.7 1.5 0 1.9l-9.6 6.4c-.8.5-1.7-.1-1.7-.9V1.6z" fill="#12100E"></path></svg>
+              <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:15.5px;color:#12100E">Play album</span>
+            </div>
+            <div onClick="{{ shuffleAlbum }}" style="cursor:pointer;width:52px;height:52px;border-radius:16px;border:1px solid rgba(246,241,234,.14);display:flex;align-items:center;justify-content:center;transition:all .2s" style-hover="background:rgba(246,241,234,.07)">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h3.2l7.6 10H16M2 14h3.2l2.4-3.2M12 4h4v0M13.6 2.2L16 4l-2.4 1.8M13.6 12.2L16 14l-2.4 1.8" stroke="#F6F1EA" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <div onClick="{{ like }}" style="cursor:pointer;width:52px;height:52px;border-radius:16px;border:1px solid rgba(246,241,234,.14);display:flex;align-items:center;justify-content:center;transition:all .2s" style-hover="background:rgba(246,241,234,.07)">
+              <svg width="18" height="17" viewBox="0 0 18 17" fill="{{ likeFill }}"><path d="M9 15.2S1.6 10.9 1.6 6.1A3.9 3.9 0 019 4.3a3.9 3.9 0 017.4 1.8c0 4.8-7.4 9.1-7.4 9.1z" stroke="#F2653A" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+            </div>
+          </div>
+
+          <div style="margin-top:26px;display:flex;flex-direction:column">
+            <sc-for list="{{ trackList }}" as="t" hint-placeholder-count="6">
+              <div onClick="{{ t.play }}" style="cursor:pointer;display:flex;align-items:center;gap:14px;padding:13px 12px;border-radius:13px;animation:rise .5s cubic-bezier(.2,.9,.2,1) both;transition:background .2s;animation-delay:{{ t.d }}ms;background:{{ t.bg }}" style-hover="background:rgba(246,241,234,.05)">
+                <div style="width:20px;display:flex;align-items:flex-end;justify-content:center;height:16px;flex:none">
+                  <sc-if value="{{ t.active }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:flex-end;gap:2px;height:14px;color:#F2653A">
+                      <div style="width:2.5px;height:14px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .62s ease-in-out infinite alternate;animation-play-state:{{ playState }}"></div>
+                      <div style="width:2.5px;height:14px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .48s ease-in-out infinite alternate;animation-delay:-.2s;animation-play-state:{{ playState }}"></div>
+                      <div style="width:2.5px;height:14px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .78s ease-in-out infinite alternate;animation-delay:-.36s;animation-play-state:{{ playState }}"></div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ t.idle }}" hint-placeholder-val="{{ true }}">
+                    <div style="font:400 12px/1 'DM Mono',monospace;color:rgba(246,241,234,.3);font-variant-numeric:tabular-nums">{{ t.n }}</div>
+                  </sc-if>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14.5px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ t.col }}">{{ t.t }}</div>
+                  <div style="font:400 11px/1.4 'DM Mono',monospace;color:rgba(246,241,234,.55);margin-top:2px">{{ t.file }}</div>
+                </div>
+                <sc-if value="{{ t.hasLrc }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:none;font:500 8.5px/1 'DM Mono',monospace;letter-spacing:.1em;padding:4px 6px;border-radius:6px;border:1px solid rgba(246,241,234,.16);color:rgba(246,241,234,.6)">LRC</div>
+                </sc-if>
+                <div style="font:400 12px/1 'DM Mono',monospace;color:rgba(246,241,234,.38);flex:none;font-variant-numeric:tabular-nums">{{ t.ds }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- MINI PLAYER + TAB BAR -->
+      <sc-if value="{{ showChrome }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;bottom:0;left:0;right:0;z-index:40;padding:0 14px 30px;background:linear-gradient(180deg,transparent,rgba(14,12,11,.9) 32%,#0E0C0B 60%)">
+        <div onClick="{{ openPlayer }}" style="cursor:pointer;position:relative;overflow:hidden;border-radius:19px;background:rgba(30,25,22,.92);backdrop-filter:blur(20px);border:1px solid rgba(246,241,234,.09);padding:10px;display:flex;align-items:center;gap:12px;animation:pop .45s cubic-bezier(.2,1.2,.3,1) both;box-shadow:0 12px 30px rgba(0,0,0,.45)">
+          <div style="position:absolute;inset:0;background:radial-gradient(70% 200% at 0% 50%,{{ al.a }} 0%,transparent 70%);opacity:.28"></div>
+          <div style="position:relative;width:46px;height:46px;border-radius:12px;overflow:hidden;flex:none;background:#241E1A;animation:breathe 2.6s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+            <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+            <div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px;border-radius:50%;border:1px solid rgba(255,255,255,.35)"></div>
+          </div>
+          <div style="position:relative;flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tr.t }}</div>
+            <div style="font-size:11.5px;color:rgba(246,241,234,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.artist }}</div>
+          </div>
+          <div style="position:relative;display:flex;align-items:flex-end;gap:2.5px;height:20px;color:{{ accent }};flex:none;margin-right:2px">
+            <sc-for list="{{ eqMini }}" as="b" hint-placeholder-count="5">
+              <div style="width:2.5px;height:20px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .8s ease-in-out infinite alternate;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s;animation-play-state:{{ playState }}"></div>
+            </sc-for>
+          </div>
+          <div onClick="{{ toggleStop }}" style="position:relative;cursor:pointer;width:40px;height:40px;border-radius:50%;background:rgba(246,241,234,.1);display:flex;align-items:center;justify-content:center;flex:none;transition:background .2s" style-hover="background:rgba(246,241,234,.18)">
+            <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}">
+              <svg width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="1" width="3.4" height="12" rx="1.2" fill="#F6F1EA"></rect><rect x="7.6" y="1" width="3.4" height="12" rx="1.2" fill="#F6F1EA"></rect></svg>
+            </sc-if>
+            <sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+              <svg width="12" height="14" viewBox="0 0 12 14"><path d="M1.4 1.5c0-.8.9-1.3 1.5-.8l7.6 5.5c.6.4.6 1.2 0 1.6l-7.6 5.5c-.7.5-1.5 0-1.5-.8V1.5z" fill="#F6F1EA"></path></svg>
+            </sc-if>
+          </div>
+          <div style="position:absolute;left:0;right:0;bottom:0;height:2px;background:rgba(246,241,234,.08)">
+            <div style="height:100%;background:{{ accent }};transition:width .2s linear;width:{{ pw }}"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:center;margin-top:13px">
+          <div style="display:flex;align-items:center;gap:3px;padding:5px;border-radius:26px;background:rgba(26,22,20,.94);backdrop-filter:blur(22px);border:1px solid rgba(246,241,234,.1);box-shadow:0 14px 34px rgba(0,0,0,.55)">
+            <div onClick="{{ nav0act }}" style="cursor:pointer;display:flex;align-items:center;gap:7px;height:42px;border-radius:21px;overflow:hidden;transition:padding .4s cubic-bezier(.2,1.2,.3,1),background .35s;padding:0 {{ nav0p }}px;background:{{ nav0bg }};color:{{ nav0col }}">
+              <svg width="21" height="21" viewBox="0 0 22 22" fill="none" style="flex:none"><rect x="3" y="5.5" width="7" height="11" rx="1.6" stroke="currentColor" stroke-width="1.7"></rect><rect x="12" y="5.5" width="7" height="11" rx="1.6" stroke="currentColor" stroke-width="1.7"></rect></svg>
+              <div style="white-space:nowrap;overflow:hidden;font-size:13px;font-weight:700;letter-spacing:-.01em;transition:max-width .4s cubic-bezier(.2,1.2,.3,1),opacity .3s;max-width:{{ nav0w }}px;opacity:{{ nav0o }}">Library</div>
+            </div>
+            <div onClick="{{ nav1act }}" style="cursor:pointer;display:flex;align-items:center;gap:7px;height:42px;border-radius:21px;overflow:hidden;transition:padding .4s cubic-bezier(.2,1.2,.3,1),background .35s;padding:0 {{ nav1p }}px;background:{{ nav1bg }};color:{{ nav1col }}">
+              <svg width="21" height="21" viewBox="0 0 22 22" fill="none" style="flex:none"><circle cx="10" cy="9.5" r="6" stroke="currentColor" stroke-width="1.7"></circle><path d="M14.6 14.6l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+              <div style="white-space:nowrap;overflow:hidden;font-size:13px;font-weight:700;letter-spacing:-.01em;transition:max-width .4s cubic-bezier(.2,1.2,.3,1),opacity .3s;max-width:{{ nav1w }}px;opacity:{{ nav1o }}">Search</div>
+            </div>
+            <div onClick="{{ nav2act }}" style="cursor:pointer;display:flex;align-items:center;gap:7px;height:42px;border-radius:21px;overflow:hidden;transition:padding .4s cubic-bezier(.2,1.2,.3,1),background .35s;padding:0 {{ nav2p }}px;background:{{ nav2bg }};color:{{ nav2col }}">
+              <svg width="21" height="21" viewBox="0 0 22 22" fill="none" style="flex:none"><path d="M2.6 6c0-1 .8-1.8 1.8-1.8h3.4L9.6 6h7.8c1 0 1.8.8 1.8 1.8v8c0 1-.8 1.8-1.8 1.8H4.4c-1 0-1.8-.8-1.8-1.8V6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+              <div style="white-space:nowrap;overflow:hidden;font-size:13px;font-weight:700;letter-spacing:-.01em;transition:max-width .4s cubic-bezier(.2,1.2,.3,1),opacity .3s;max-width:{{ nav2w }}px;opacity:{{ nav2o }}">Folders</div>
+            </div>
+            <div onClick="{{ nav3act }}" style="cursor:pointer;display:flex;align-items:center;gap:7px;height:42px;border-radius:21px;overflow:hidden;transition:padding .4s cubic-bezier(.2,1.2,.3,1),background .35s;padding:0 {{ nav3p }}px;background:{{ nav3bg }};color:{{ nav3col }}">
+              <svg width="21" height="21" viewBox="0 0 22 22" fill="none" style="flex:none"><circle cx="11" cy="11" r="2.4" stroke="currentColor" stroke-width="1.7"></circle><path d="M11 3.4v2.4M11 16.2V18.6M3.4 11h2.4M16.2 11h2.4M5.6 5.6l1.7 1.7M14.7 14.7l1.7 1.7M16.4 5.6l-1.7 1.7M7.3 14.7l-1.7 1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+              <div style="white-space:nowrap;overflow:hidden;font-size:13px;font-weight:700;letter-spacing:-.01em;transition:max-width .4s cubic-bezier(.2,1.2,.3,1),opacity .3s;max-width:{{ nav3w }}px;opacity:{{ nav3o }}">Settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- NOW PLAYING -->
+      <sc-if value="{{ isPlayer }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:45;background:#0E0C0B;animation:fadeUp .42s cubic-bezier(.2,.9,.2,1) both;overflow:hidden">
+        <div style="position:absolute;inset:0;background:radial-gradient(110% 60% at 50% 0%,{{ al.a }} 0%,transparent 62%),radial-gradient(90% 50% at 20% 100%,{{ al.b }} 0%,transparent 60%);opacity:.5"></div>
+        <div style="position:absolute;top:-80px;left:50%;margin-left:-200px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,{{ al.a }} 0%,transparent 65%);filter:blur(70px);opacity:.35;animation:glow 4s ease-in-out infinite alternate;animation-play-state:{{ playState }}"></div>
+
+        <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:60px 24px 34px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div onClick="{{ closePlayer }}" style="cursor:pointer;width:38px;height:38px;border-radius:50%;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center;transition:transform .2s" style-hover="transform:translateY(2px)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 6l5 5 5-5" stroke="#F6F1EA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <div style="text-align:center">
+              <div style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.16em;color:rgba(246,241,234,.4);text-transform:uppercase">Playing from</div>
+              <div style="font-size:12.5px;font-weight:600;margin-top:4px">{{ al.title }}</div>
+            </div>
+            <div style="display:flex;gap:2px;padding:3px;border-radius:17px;background:rgba(246,241,234,.08)">
+              <div onClick="{{ showArt }}" style="cursor:pointer;width:34px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;transition:background .3s;background:{{ artTabBg }}">
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style="color:{{ artTabCol }}"><circle cx="9" cy="9" r="6.6" stroke="currentColor" stroke-width="1.6"></circle><circle cx="9" cy="9" r="1.6" stroke="currentColor" stroke-width="1.6"></circle></svg>
+              </div>
+              <div onClick="{{ showLyrics }}" style="cursor:pointer;width:34px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;transition:background .3s;background:{{ lyrTabBg }}">
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style="color:{{ lyrTabCol }}"><path d="M3 4.6h12M3 9h8.5M3 13.4h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+              </div>
+            </div>
+          </div>
+
+          <div onPointerDown="{{ onDown }}" onPointerMove="{{ onMove }}" onPointerUp="{{ onUp }}" onPointerCancel="{{ onUp }}" style="flex:1;display:flex;flex-direction:column;justify-content:center;touch-action:none;cursor:grab">
+
+            <sc-if value="{{ tEmber }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="position:relative;width:286px;height:286px;transform:translateX({{ dragX }}px) rotate({{ dragRot }}deg);transition:{{ artTrans }}">
+                <div style="position:absolute;inset:-24px;border-radius:44px;background:radial-gradient(circle,{{ al.a }} 0%,transparent 68%);filter:blur(28px);opacity:.6;animation:breathe 3s ease-in-out infinite alternate;animation-play-state:{{ playState }}"></div>
+                <div style="position:relative;width:286px;height:286px;border-radius:30px;overflow:hidden;background:#241E1A;box-shadow:0 30px 70px rgba(0,0,0,.6);animation:breathe 2.6s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+                  <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                  <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(112deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px)"></div>
+                  <div style="position:absolute;left:50%;top:50%;width:194px;height:194px;margin:-97px;border-radius:50%;border:2px solid rgba(255,255,255,.3);transform:rotate({{ al.rot }}deg)"></div>
+                  <div style="position:absolute;left:34px;right:34px;top:50%;height:2px;background:rgba(255,255,255,.2)"></div>
+                  <div style="position:absolute;left:24px;bottom:22px;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:19px;color:rgba(255,255,255,.9);text-transform:uppercase">{{ al.initials }}</div>
+                </div>
+              </div>
+
+            </div>
+            </sc-if>
+
+            <sc-if value="{{ tVinyl }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <div style="position:relative;width:310px;height:310px;transform:translateX({{ dragX }}px);transition:{{ artTrans }}">
+                <div style="position:absolute;inset:0;border-radius:50%;background:#0A0908;box-shadow:0 26px 60px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.07);animation:spin 7s linear infinite;animation-play-state:{{ playState }};overflow:hidden">
+                  <div style="position:absolute;inset:0;border-radius:50%;background:repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.045) 0 1px,transparent 1px 4px)"></div>
+                  <div style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 0deg,rgba(255,255,255,.1) 30deg,transparent 70deg,transparent 180deg,rgba(255,255,255,.07) 210deg,transparent 250deg)"></div>
+                  <div style="position:absolute;left:50%;top:50%;width:124px;height:124px;margin:-62px;border-radius:50%;overflow:hidden">
+                    <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                    <div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px;border-radius:50%;background:#0A0908"></div>
+                  </div>
+                </div>
+                <div style="position:absolute;top:-6px;right:6px;width:150px;height:150px;transform-origin:88% 12%;transform:rotate({{ armRot }}deg);transition:transform .8s cubic-bezier(.2,1.1,.3,1)">
+                  <div style="position:absolute;top:14px;right:14px;width:22px;height:22px;border-radius:50%;background:#2A2521;box-shadow:0 2px 8px rgba(0,0,0,.6)"></div>
+                  <div style="position:absolute;top:24px;right:24px;width:112px;height:4px;border-radius:3px;background:linear-gradient(90deg,#8C8579,#3A352F);transform:rotate(38deg);transform-origin:right center"></div>
+                </div>
+              </div>
+              <div style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.18em;color:rgba(246,241,234,.34);margin-top:26px;text-transform:uppercase">{{ vinylNote }}</div>
+            </div>
+            </sc-if>
+
+            <sc-if value="{{ tWave }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;gap:16px;transform:translateX({{ dragX }}px);transition:{{ artTrans }}">
+                <div style="position:relative;width:96px;height:96px;border-radius:20px;overflow:hidden;flex:none;background:#241E1A;box-shadow:0 16px 36px rgba(0,0,0,.5);animation:bob 2.8s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+                  <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                  <div style="position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.32)"></div>
+                </div>
+                <div style="min-width:0">
+                  <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:34px;line-height:.98;letter-spacing:-.045em;text-wrap:balance">{{ tr.t }}</div>
+                  <div style="font-size:13.5px;color:rgba(246,241,234,.58);margin-top:7px">{{ al.artist }}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:30px">
+                <span style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.16em;color:rgba(246,241,234,.6);text-transform:uppercase">Whole track</span>
+                <span style="height:1px;flex:1;background:linear-gradient(90deg,rgba(246,241,234,.12),transparent)"></span>
+              </div>
+              <div onClick="{{ seek }}" style="position:relative;cursor:pointer;height:84px;margin-top:10px">
+                <div style="position:absolute;inset:0;display:flex;align-items:center;gap:2px">
+                  <sc-for list="{{ wave }}" as="w" hint-placeholder-count="52">
+                    <div style="flex:1;border-radius:2px;transition:height .25s ease,background .3s;height:{{ w.h }}px;background:{{ w.c }}"></div>
+                  </sc-for>
+                </div>
+                <div style="position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;border-radius:2px;background:#F6F1EA;box-shadow:0 0 12px rgba(246,241,234,.8);transition:left .2s linear;left:{{ pw }}">
+                  <div style="position:absolute;left:50%;top:-5px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#F6F1EA"></div>
+                </div>
+              </div>
+            </div>
+            </sc-if>
+
+            <sc-if value="{{ lyricsOn }}" hint-placeholder-val="{{ false }}">
+            <div style="position:relative;height:100%;display:flex;flex-direction:column;justify-content:center">
+              <sc-if value="{{ hasLyrics }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:20px;padding:0 4px">
+                <sc-for list="{{ lyricWindow }}" as="l" hint-placeholder-count="5">
+                  <div onClick="{{ l.act }}" style="cursor:pointer;position:relative;padding-left:16px;transition:all .5s cubic-bezier(.2,.9,.2,1);font-family:'Bricolage Grotesque',sans-serif;text-wrap:pretty;font-size:{{ l.size }}px;font-weight:{{ l.weight }};line-height:1.18;letter-spacing:-.03em;color:{{ l.col }}">
+                    <div style="position:absolute;left:0;top:5px;bottom:5px;width:3px;border-radius:2px;transition:opacity .4s;background:{{ accent }};opacity:{{ l.barO }}"></div>
+                    {{ l.l }}
+                  </div>
+                </sc-for>
+              </div>
+              <div style="position:absolute;left:4px;right:4px;bottom:0;height:3px;border-radius:2px;background:rgba(246,241,234,.1)">
+                <div style="height:100%;border-radius:2px;transition:width .3s linear;background:{{ accent }};width:{{ lineFill }}"></div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ noLyrics }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding:0 20px">
+                <div style="width:64px;height:64px;border-radius:22px;background:rgba(246,241,234,.06);border:1px solid rgba(246,241,234,.09);display:flex;align-items:center;justify-content:center">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h11M4 18h7" stroke="rgba(246,241,234,.4)" stroke-width="1.8" stroke-linecap="round"></path><path d="M17 15l5 5M22 15l-5 5" stroke="rgba(246,241,234,.4)" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                </div>
+                <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:21px;letter-spacing:-.03em">No synced lyrics</div>
+                <div style="font-size:13.5px;line-height:1.5;color:rgba(246,241,234,.55);max-width:270px">resonate looks for an <span style="font-family:'DM Mono',monospace;font-size:12.5px">.lrc</span> file sitting next to the audio. This track doesn't have one yet.</div>
+                <div style="cursor:pointer;margin-top:4px;padding:12px 18px;border-radius:14px;border:1px dashed rgba(246,241,234,.22);font-size:13px;font-weight:600;color:rgba(246,241,234,.75);transition:all .22s" style-hover="border-color:rgba(246,241,234,.45);background:rgba(246,241,234,.05)">Pick an .lrc file…</div>
+              </div>
+              </sc-if>
+            </div>
+            </sc-if>
+          </div>
+
+          <div style="margin-top:14px">
+            <sc-if value="{{ showBigTitle }}" hint-placeholder-val="{{ true }}">
+            <div style="text-align:center;margin-bottom:20px">
+              <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:26px;letter-spacing:-.035em;line-height:1.1;text-wrap:balance">{{ tr.t }}</div>
+              <div style="font-size:14px;color:rgba(246,241,234,.6);margin-top:5px">{{ al.artist }}</div>
+            </div>
+            </sc-if>
+
+            <sc-if value="{{ showRibbon }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;height:58px">
+              <div onClick="{{ seekRibbon }}" style="position:absolute;inset:0;cursor:pointer;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 15%,#000 85%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0%,#000 15%,#000 85%,transparent 100%)">
+                <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(246,241,234,.16)"></div>
+                <div style="position:absolute;top:0;bottom:0;left:50%;display:flex;align-items:center;gap:3.5px;will-change:transform;transition:transform .13s linear;transform:translateX({{ ribbonX }}px)">
+                  <sc-for list="{{ ribbon }}" as="r" hint-placeholder-count="96">
+                    <div style="width:2.5px;border-radius:2px;flex:none;transform-origin:center;height:{{ r.h }}px;background:{{ r.c }};animation:{{ r.an }};animation-play-state:{{ playState }}"></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;border-radius:2px;pointer-events:none;background:{{ accent }};box-shadow:0 0 18px {{ accent }}"></div>
+              <div style="position:absolute;left:50%;top:-4px;width:8px;height:8px;margin-left:-4px;border-radius:2px;pointer-events:none;background:{{ accent }};transform:rotate(45deg)"></div>
+              <div style="position:absolute;left:50%;bottom:-4px;width:8px;height:8px;margin-left:-4px;border-radius:2px;pointer-events:none;background:{{ accent }};transform:rotate(45deg)"></div>
+            </div>
+            </sc-if>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px">
+              <span style="font:500 13px/1 'DM Mono',monospace;color:#F6F1EA;font-variant-numeric:tabular-nums;min-width:56px">{{ tPrecise }}</span>
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="width:5px;height:5px;border-radius:50%;background:{{ accent }};animation:blink 1.4s ease-in-out infinite;animation-play-state:{{ playState }}"></span>
+                <span style="font:500 10px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.62);text-transform:uppercase;white-space:nowrap">{{ liveLabel }}</span>
+              </div>
+              <span style="font:500 13px/1 'DM Mono',monospace;color:rgba(246,241,234,.5);font-variant-numeric:tabular-nums;min-width:56px;text-align:right">{{ tLeft }}</span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+              <div onClick="{{ like }}" style="cursor:pointer;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .2s" style-hover="transform:scale(1.12)">
+                <svg width="20" height="19" viewBox="0 0 18 17" fill="{{ likeFill }}"><path d="M9 15.2S1.6 10.9 1.6 6.1A3.9 3.9 0 019 4.3a3.9 3.9 0 017.4 1.8c0 4.8-7.4 9.1-7.4 9.1z" stroke="#F2653A" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+              </div>
+              <div onClick="{{ prev }}" style="cursor:pointer;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .18s" style-hover="transform:scale(1.1) translateX(-2px)">
+                <svg width="22" height="18" viewBox="0 0 22 18"><path d="M20.4 2.1c0-.9-1-1.4-1.7-.9L9 8c-.6.5-.6 1.4 0 1.8l9.7 6.9c.7.5 1.7 0 1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="2" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+              </div>
+              <div onClick="{{ toggle }}" style="cursor:pointer;position:relative;width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .2s;background:{{ accent }};box-shadow:0 16px 40px rgba(242,101,58,.36)" style-hover="transform:scale(1.06)">
+                <div style="position:absolute;inset:0;border-radius:50%;border:2px solid {{ accent }};animation:ring 2.2s ease-out infinite;animation-play-state:{{ playState }}"></div>
+                <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}">
+                  <svg width="20" height="24" viewBox="0 0 20 24"><rect x="2" y="1" width="5.6" height="22" rx="2" fill="#12100E"></rect><rect x="12.4" y="1" width="5.6" height="22" rx="2" fill="#12100E"></rect></svg>
+                </sc-if>
+                <sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+                  <svg width="22" height="24" viewBox="0 0 22 24"><path d="M3 2.2c0-1.1 1.2-1.7 2.1-1.1l13.2 9.7c.8.6.8 1.8 0 2.4L5.1 22.9c-.9.7-2.1 0-2.1-1.1V2.2z" fill="#12100E"></path></svg>
+                </sc-if>
+              </div>
+              <div onClick="{{ next }}" style="cursor:pointer;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .18s" style-hover="transform:scale(1.1) translateX(2px)">
+                <svg width="22" height="18" viewBox="0 0 22 18"><path d="M1.6 2.1c0-.9 1-1.4 1.7-.9L13 8c.6.5.6 1.4 0 1.8l-9.7 6.9c-.7.5-1.7 0-1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="17" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+              </div>
+              <div onClick="{{ goLock }}" style="cursor:pointer;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .2s" style-hover="transform:scale(1.12)">
+                <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><rect x="3.4" y="8" width="12.2" height="9.2" rx="2.4" stroke="rgba(246,241,234,.7)" stroke-width="1.5"></rect><path d="M6.4 8V5.8a3.1 3.1 0 016.2 0V8" stroke="rgba(246,241,234,.7)" stroke-width="1.5"></path></svg>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:rgba(246,241,234,.28);margin-top:14px">{{ swipeHint }}</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- LOCK SCREEN -->
+      <sc-if value="{{ isLock }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:44;overflow:hidden;background:#080706;animation:fadeUp .4s both">
+        <div style="position:absolute;inset:-60px;background:radial-gradient(80% 60% at 30% 20%,{{ al.a }} 0%,transparent 60%),radial-gradient(70% 60% at 80% 80%,{{ al.b }} 0%,transparent 60%),#0B0A09;filter:blur(48px);opacity:.75;animation:drift 40s linear infinite"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,7,6,.35),rgba(8,7,6,.72))"></div>
+
+        <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:118px 20px 40px">
+          <div style="text-align:center">
+            <div style="font-size:15px;color:rgba(246,241,234,.72);letter-spacing:.01em">Friday, 5 September</div>
+            <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:82px;line-height:.94;letter-spacing:-.05em;margin-top:2px;font-variant-numeric:tabular-nums">9:41</div>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <div style="position:relative;overflow:hidden;border-radius:26px;padding:16px;background:rgba(22,19,17,.62);backdrop-filter:blur(26px);border:1px solid rgba(246,241,234,.1);box-shadow:0 20px 50px rgba(0,0,0,.5);animation:pop .5s cubic-bezier(.2,1.2,.3,1) both">
+            <div style="position:absolute;inset:0;background:radial-gradient(80% 140% at 8% 50%,{{ al.a }} 0%,transparent 62%);opacity:.3"></div>
+            <div style="position:relative;display:flex;align-items:center;gap:14px">
+              <div style="position:relative;width:62px;height:62px;border-radius:16px;overflow:hidden;flex:none;background:#241E1A;animation:breathe 2.8s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+                <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                <div style="position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-18px;border-radius:50%;border:1.2px solid rgba(255,255,255,.34)"></div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:16px;font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tr.t }}</div>
+                <div style="font-size:12.5px;color:rgba(246,241,234,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">{{ al.artist }} — {{ al.title }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
+                  <span style="font:500 9px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.4);text-transform:uppercase">Offline</span>
+                  <span style="display:flex;align-items:flex-end;gap:2px;height:11px;color:{{ accent }}">
+                    <sc-for list="{{ eqMini }}" as="b" hint-placeholder-count="5">
+                      <div style="width:2px;height:11px;background:currentColor;border-radius:1px;transform-origin:bottom;animation:eq .7s ease-in-out infinite alternate;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s;animation-play-state:{{ playState }}"></div>
+                    </sc-for>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style="position:relative;display:flex;align-items:center;gap:2px;height:40px;margin-top:14px">
+              <sc-for list="{{ wave }}" as="w" hint-placeholder-count="52">
+                <div style="flex:1;border-radius:2px;transition:height .25s ease,background .3s;height:{{ w.hs }}px;background:{{ w.c }}"></div>
+              </sc-for>
+            </div>
+            <div style="position:relative;display:flex;justify-content:space-between;margin-top:6px;font:400 10.5px/1 'DM Mono',monospace;color:rgba(246,241,234,.4)">
+              <span>{{ tNow }}</span><span>{{ tLeft }}</span>
+            </div>
+            <div style="position:relative;display:flex;align-items:center;justify-content:center;gap:26px;margin-top:12px">
+              <div onClick="{{ prev }}" style="cursor:pointer;padding:6px;transition:transform .18s" style-hover="transform:scale(1.15)">
+                <svg width="22" height="18" viewBox="0 0 22 18"><path d="M20.4 2.1c0-.9-1-1.4-1.7-.9L9 8c-.6.5-.6 1.4 0 1.8l9.7 6.9c.7.5 1.7 0 1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="2" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+              </div>
+              <div onClick="{{ toggle }}" style="cursor:pointer;width:56px;height:56px;border-radius:50%;background:rgba(246,241,234,.14);display:flex;align-items:center;justify-content:center;transition:transform .2s" style-hover="transform:scale(1.07)">
+                <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}">
+                  <svg width="16" height="20" viewBox="0 0 16 20"><rect x="1.4" y="1" width="4.6" height="18" rx="1.8" fill="#F6F1EA"></rect><rect x="9.8" y="1" width="4.6" height="18" rx="1.8" fill="#F6F1EA"></rect></svg>
+                </sc-if>
+                <sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+                  <svg width="18" height="20" viewBox="0 0 18 20"><path d="M2.6 1.9c0-.9 1-1.4 1.7-.9l10.8 8c.7.5.7 1.5 0 2l-10.8 8c-.7.5-1.7 0-1.7-.9V1.9z" fill="#F6F1EA"></path></svg>
+                </sc-if>
+              </div>
+              <div onClick="{{ next }}" style="cursor:pointer;padding:6px;transition:transform .18s" style-hover="transform:scale(1.15)">
+                <svg width="22" height="18" viewBox="0 0 22 18"><path d="M1.6 2.1c0-.9 1-1.4 1.7-.9L13 8c.6.5.6 1.4 0 1.8l-9.7 6.9c-.7.5-1.7 0-1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="17" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+              </div>
+            </div>
+          </div>
+
+          <div onClick="{{ goLib }}" style="cursor:pointer;text-align:center;font-size:11.5px;color:rgba(246,241,234,.34);margin-top:20px">Tap to return to the library</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- DYNAMIC ISLAND -->
+      <sc-if value="{{ islandLive }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ toggleIsland }}" style="position:absolute;top:11px;left:50%;z-index:80;cursor:pointer;background:#000;overflow:hidden;transform:translateX(-50%);box-shadow:0 8px 26px rgba(0,0,0,.6);transition:width .52s cubic-bezier(.2,1.22,.28,1),height .52s cubic-bezier(.2,1.22,.28,1),border-radius .4s ease;width:{{ islW }}px;height:{{ islH }}px;border-radius:{{ islR }}px">
+        <sc-if value="{{ islandOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;padding:13px 15px;animation:pop .34s .1s cubic-bezier(.2,1.2,.3,1) both">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="position:relative;width:48px;height:48px;border-radius:13px;overflow:hidden;flex:none;background:#241E1A;animation:breathe 2.6s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+              <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+              <div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px;border-radius:50%;border:1px solid rgba(255,255,255,.34)"></div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13.5px;font-weight:600;color:#F6F1EA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tr.t }}</div>
+              <div style="font-size:11px;color:rgba(246,241,234,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ al.artist }}</div>
+              <div style="height:2.5px;border-radius:2px;background:rgba(246,241,234,.16);margin-top:7px">
+                <div style="height:100%;border-radius:2px;transition:width .2s linear;background:{{ accent }};width:{{ pw }}"></div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:2.5px;height:22px;color:{{ accent }};flex:none">
+              <sc-for list="{{ eqMini }}" as="b" hint-placeholder-count="5">
+                <div style="width:2.5px;height:22px;background:currentColor;border-radius:2px;transform-origin:bottom;animation:eq .8s ease-in-out infinite alternate;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s;animation-play-state:{{ playState }}"></div>
+              </sc-for>
+            </div>
+            <div onClick="{{ toggleStop }}" style="cursor:pointer;width:36px;height:36px;border-radius:50%;background:rgba(246,241,234,.12);display:flex;align-items:center;justify-content:center;flex:none">
+              <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}">
+                <svg width="10" height="12" viewBox="0 0 10 12"><rect x="0.6" y="0" width="3.2" height="12" rx="1.2" fill="#F6F1EA"></rect><rect x="6.2" y="0" width="3.2" height="12" rx="1.2" fill="#F6F1EA"></rect></svg>
+              </sc-if>
+              <sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+                <svg width="11" height="12" viewBox="0 0 11 12"><path d="M.8 1c0-.8.9-1.2 1.5-.8l7 4.8c.6.4.6 1.2 0 1.6l-7 4.8c-.6.4-1.5 0-1.5-.8V1z" fill="#F6F1EA"></path></svg>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+        <sc-if value="{{ islandShut }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 11px">
+          <div style="display:flex;align-items:flex-end;gap:2px;height:13px;color:{{ accent }}">
+            <sc-for list="{{ eqMini }}" as="b" hint-placeholder-count="5">
+              <div style="width:2px;height:13px;background:currentColor;border-radius:1px;transform-origin:bottom;animation:eq .8s ease-in-out infinite alternate;animation-duration:{{ b.dur }}s;animation-delay:{{ b.delay }}s;animation-play-state:{{ playState }}"></div>
+            </sc-for>
+          </div>
+          <div style="position:relative;width:17px;height:17px;border-radius:5px;overflow:hidden;background:#241E1A">
+            <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+    </div>
+  </x-import>
+  <div style="display:flex;align-items:center;gap:9px;padding-left:4px">
+    <span style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.32);text-transform:uppercase">iOS · 402×874</span>
+    <span style="font-size:12px;color:rgba(246,241,234,.4)">Tap the island to expand the live activity.</span>
+  </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+  <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+    <div style="position:relative;height:100%;overflow:hidden;background:#0C0B0A;font-family:'Familjen Grotesk',system-ui,sans-serif;color:#F6F1EA">
+      <div style="position:absolute;inset:-50px;background:radial-gradient(70% 50% at 30% 15%,{{ al.a }} 0%,transparent 60%),radial-gradient(70% 60% at 80% 85%,{{ al.b }} 0%,transparent 60%),#0B0A09;filter:blur(46px);opacity:.7;animation:drift 44s linear infinite"></div>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,7,6,.3),rgba(8,7,6,.7))"></div>
+
+      <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:56px 16px 24px">
+        <div style="text-align:center">
+          <div style="font-size:14px;color:rgba(246,241,234,.7)">Fri, Sep 5</div>
+          <div style="font-family:'Bricolage Grotesque',sans-serif;font-weight:500;font-size:74px;line-height:.92;letter-spacing:-.045em;font-variant-numeric:tabular-nums">9:41</div>
+        </div>
+
+        <div style="margin-top:30px;border-radius:28px;overflow:hidden;background:rgba(28,24,21,.72);backdrop-filter:blur(24px);border:1px solid rgba(246,241,234,.08);animation:pop .5s cubic-bezier(.2,1.2,.3,1) both">
+          <div style="position:relative;padding:14px 16px 16px">
+            <div style="position:absolute;inset:0;background:radial-gradient(70% 130% at 92% 40%,{{ al.a }} 0%,transparent 60%);opacity:.3"></div>
+            <div style="position:relative;display:flex;align-items:center;gap:9px">
+              <div style="width:16px;height:16px;border-radius:4px;background:{{ accent }};display:flex;align-items:center;justify-content:center">
+                <div style="width:6px;height:6px;border-radius:50%;background:#12100E"></div>
+              </div>
+              <span style="font-size:12px;font-weight:600;color:rgba(246,241,234,.72)">resonate</span>
+              <span style="font-size:12px;color:rgba(246,241,234,.34)">· now</span>
+              <span style="flex:1"></span>
+              <span style="font:500 9px/1 'DM Mono',monospace;letter-spacing:.12em;color:rgba(246,241,234,.4);padding:4px 7px;border-radius:6px;border:1px solid rgba(246,241,234,.14)">OFFLINE</span>
+            </div>
+            <div style="position:relative;display:flex;align-items:center;gap:14px;margin-top:14px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:19px;font-weight:600;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tr.t }}</div>
+                <div style="font-size:13px;color:rgba(246,241,234,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{ al.artist }} — {{ al.title }}</div>
+              </div>
+              <div style="position:relative;width:74px;height:74px;border-radius:18px;overflow:hidden;flex:none;background:#241E1A;box-shadow:0 12px 28px rgba(0,0,0,.45);animation:breathe 2.8s ease-in-out infinite alternate;animation-play-state:{{ playState }}">
+                <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 18% 12%,{{ al.a }} 0%,transparent 62%),radial-gradient(100% 100% at 84% 86%,{{ al.b }} 0%,transparent 58%),{{ al.c }}"></div>
+                <div style="position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px;border-radius:50%;border:1.4px solid rgba(255,255,255,.34)"></div>
+              </div>
+            </div>
+            <div style="position:relative;display:flex;align-items:center;gap:2px;height:34px;margin-top:14px">
+              <sc-for list="{{ wave }}" as="w" hint-placeholder-count="52">
+                <div style="flex:1;border-radius:2px;transition:height .25s ease,background .3s;height:{{ w.ha }}px;background:{{ w.c }}"></div>
+              </sc-for>
+            </div>
+            <div style="position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font:400 10.5px/1 'DM Mono',monospace;color:rgba(246,241,234,.42)">{{ tNow }}</span>
+                <span style="font-size:11px;color:rgba(246,241,234,.24)">/</span>
+                <span style="font:400 10.5px/1 'DM Mono',monospace;color:rgba(246,241,234,.28)">{{ tTotal }}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div onClick="{{ prev }}" style="cursor:pointer;width:38px;height:38px;border-radius:50%;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center;transition:transform .18s" style-hover="transform:scale(1.1)">
+                  <svg width="17" height="14" viewBox="0 0 22 18"><path d="M20.4 2.1c0-.9-1-1.4-1.7-.9L9 8c-.6.5-.6 1.4 0 1.8l9.7 6.9c.7.5 1.7 0 1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="2" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+                </div>
+                <div onClick="{{ toggle }}" style="cursor:pointer;width:50px;height:50px;border-radius:16px;display:flex;align-items:center;justify-content:center;transition:transform .2s,border-radius .3s;background:{{ accent }}" style-hover="transform:scale(1.06);border-radius:25px">
+                  <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}">
+                    <svg width="14" height="17" viewBox="0 0 14 17"><rect x="1" y="0" width="4.4" height="17" rx="1.8" fill="#12100E"></rect><rect x="8.6" y="0" width="4.4" height="17" rx="1.8" fill="#12100E"></rect></svg>
+                  </sc-if>
+                  <sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}">
+                    <svg width="16" height="17" viewBox="0 0 16 17"><path d="M2 1.6c0-.8.9-1.3 1.6-.8l9.6 6.7c.6.4.6 1.3 0 1.7l-9.6 6.7c-.7.5-1.6 0-1.6-.8V1.6z" fill="#12100E"></path></svg>
+                  </sc-if>
+                </div>
+                <div onClick="{{ next }}" style="cursor:pointer;width:38px;height:38px;border-radius:50%;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center;transition:transform .18s" style-hover="transform:scale(1.1)">
+                  <svg width="17" height="14" viewBox="0 0 22 18"><path d="M1.6 2.1c0-.9 1-1.4 1.7-.9L13 8c.6.5.6 1.4 0 1.8l-9.7 6.9c-.7.5-1.7 0-1.7-.9V2.1z" fill="#F6F1EA"></path><rect x="17" y="1" width="3" height="16" rx="1.4" fill="#F6F1EA"></rect></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;border-radius:24px;background:rgba(24,21,19,.6);backdrop-filter:blur(20px);border:1px solid rgba(246,241,234,.07);padding:14px 16px;display:flex;align-items:center;gap:12px;animation:pop .5s .08s cubic-bezier(.2,1.2,.3,1) both">
+          <div style="width:34px;height:34px;border-radius:50%;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center;flex:none">
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M1.6 4.4c0-.9.7-1.6 1.6-1.6h3.3l1.6 1.9h6.7c.9 0 1.6.7 1.6 1.6v7c0 .9-.7 1.6-1.6 1.6H3.2c-.9 0-1.6-.7-1.6-1.6V4.4z" stroke="rgba(246,241,234,.6)" stroke-width="1.4"></path></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">Scan finished</div>
+            <div style="font-size:12px;color:rgba(246,241,234,.48);margin-top:1px">{{ libSub }} — 14 new since Tuesday</div>
+          </div>
+        </div>
+
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px">
+          <div style="width:44px;height:44px;border-radius:14px;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 9.5v-5a2 2 0 012-2h1.4v8.2M5 9.5a2 2 0 102 2v-2H5z" stroke="rgba(246,241,234,.7)" stroke-width="1.4" stroke-linejoin="round"></path><path d="M11 3.4c1.4.3 2.4 1.4 2.6 2.8" stroke="rgba(246,241,234,.7)" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          </div>
+          <div style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.3);text-transform:uppercase">Swipe up to open</div>
+          <div style="width:44px;height:44px;border-radius:14px;background:rgba(246,241,234,.08);display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="3.4" stroke="rgba(246,241,234,.7)" stroke-width="1.4"></circle><rect x="2.4" y="4.4" width="13.2" height="9.2" rx="2.2" stroke="rgba(246,241,234,.7)" stroke-width="1.4"></rect></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </x-import>
+  <div style="display:flex;align-items:center;gap:9px;padding-left:4px">
+    <span style="font:500 9.5px/1 'DM Mono',monospace;letter-spacing:.14em;color:rgba(246,241,234,.32);text-transform:uppercase">Android · 412×892</span>
+    <span style="font-size:12px;color:rgba(246,241,234,.4)">Same engine, Material notification. Controls are live.</span>
+  </div>
+  </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;treatment&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ember&quot;,&quot;vinyl&quot;,&quot;wave&quot;],&quot;default&quot;:&quot;ember&quot;,&quot;tsType&quot;:&quot;'ember'|'vinyl'|'wave'&quot;,&quot;section&quot;:&quot;Now Playing&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#F2653A&quot;,&quot;options&quot;:[&quot;#F2653A&quot;,&quot;#E8B44A&quot;,&quot;#5FBFA8&quot;,&quot;#8A6BD1&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+class Component extends DCLogic {
+  albums = [
+    {id:'a1',title:'Paper Lanterns',artist:'Wildwood Choir',year:2019,a:'#F2653A',b:'#7A2E1E',c:'#2A1512',rot:-12,ini:'WC / 01',
+      tk:[['Slow Parade',214],['Paper Lanterns',257],['Held Note',188],['Backyard Fireworks',301],['Two Streets Over',232],['Lantern (Reprise)',126]]},
+    {id:'a2',title:'Blue Hour Tapes',artist:'Kō',year:2021,a:'#3E7CA8',b:'#1D3B52',c:'#101B24',rot:34,ini:'KO / 02',
+      tk:[['First Light',276],['Tape Hiss',198],['Blue Hour',322],['Bus Window',241],['Nothing Happens',205]]},
+    {id:'a3',title:'Static Garden',artist:'Marisol Vane',year:2018,a:'#B7C24A',b:'#4E5A20',c:'#191C10',rot:-48,ini:'MV / 03',
+      tk:[['Greenhouse',231],['Static Garden',264],['Aphid',176],['Long Rain',298],['Cut Flowers',213]]},
+    {id:'a4',title:'Room With No Clock',artist:'The Long Sundays',year:2016,a:'#D89A6A',b:'#7A4B2C',c:'#241811',rot:16,ini:'TLS / 04',
+      tk:[['Ten to Six',245],['Room With No Clock',288],['Sunday Dust',192],['Everyone Left',311],['Kettle',148]]},
+    {id:'a5',title:'Deep Field',artist:'Anhelo',year:2022,a:'#8A6BD1',b:'#3D2A63',c:'#15102A',rot:-27,ini:'AN / 05',
+      tk:[['Parallax',334],['Deep Field',402],['Redshift',286],['Signal Loss',221]]},
+    {id:'a6',title:'Kitchen Radio',artist:'Ottoline',year:2020,a:'#E8B44A',b:'#8A5A1C',c:'#241A0E',rot:52,ini:'OT / 06',
+      tk:[['Breakfast Show',186],['Kitchen Radio',224],['Tin Foil',167],['Hold Music',253],['Late Bulletin',198]]},
+    {id:'a7',title:'Salt & Signal',artist:'Fennwick',year:2017,a:'#5FBFA8',b:'#22574C',c:'#0F1E1B',rot:-8,ini:'FW / 07',
+      tk:[['Harbour Wall',259],['Salt & Signal',307],['Low Tide',214],['Foghorn',178],['Return Trip',236]]},
+    {id:'a8',title:'Nightbus',artist:'Juno Pale',year:2023,a:'#D65A8E',b:'#5C2340',c:'#1D0F17',rot:41,ini:'JP / 08',
+      tk:[['Terminus',203],['Nightbus',281],['Last One Home',248],['Streetlight Sync',192],['Depot',225]]}
+  ].map(a => ({...a, tracks: a.tk.map((x,i) => ({n: String(i+1).padStart(2,'0'), t:x[0], d:x[1]}))}));
+
+  files = ['/Music/Wildwood Choir/01 Slow Parade.mp3','/Music/Kō/Blue Hour Tapes/03 Blue Hour.flac','/Downloads/marisol_vane-aphid.m4a','/Music/Ottoline/Kitchen Radio/02 Kitchen Radio.mp3','/Downloads/nightbus_terminus_master.wav','/Music/Anhelo/Deep Field/02 Deep Field.flac','/Music/The Long Sundays/04 Everyone Left.mp3','/Downloads/fennwick - foghorn (demo).ogg','/Music/Juno Pale/Nightbus/05 Depot.mp3','/Music/Various/mixtape_side_b_track7.mp3'];
+
+  state = {
+    screen: 'onboard', tab: 'Albums', nav: 'Library',
+    folders: [
+      {n:'Music', p:'/storage/emulated/0/Music', c:1204, on:true},
+      {n:'Downloads', p:'/storage/emulated/0/Download', c:412, on:true},
+      {n:'Voice memos', p:'/storage/emulated/0/Recordings', c:37, on:false},
+      {n:'SD card', p:'/storage/9C33-6BBD/Albums', c:815, on:true}
+    ],
+    pct: 0, file: '', found: 0,
+    albumId: 'a1', trackIdx: 0, playing: false, elapsed: 0,
+    treat: null, island: false, dragX: 0, drag: false, scrollY: 0, liked: {}, lyr: false,
+    bpath: ['Internal storage'], sel: {}, bfrom: 'onboard'
+  };
+
+  nodeAt(names) {
+    let n = this.fs;
+    for (const name of names) { const k = (n.kids||[]).find(x => x.name === name); if (!k) break; n = k; }
+    return n;
+  }
+
+  eqMini = [0,1,2,3,4].map(i => ({dur:(0.52+((i*37)%5)*0.14).toFixed(2), delay:(-0.13*i).toFixed(2)}));
+  eqBig = Array.from({length:26}, (_,i) => {
+    const r = ((i*2654435761) % 1000) / 1000;
+    return {dur:(0.46+r*0.72).toFixed(2), delay:(-r*1.1).toFixed(2)};
+  });
+  fs = {name:'Device', path:'', kids:[
+    {name:'Internal storage', path:'/storage/emulated/0', c:2168, kids:[
+      {name:'Music', path:'/storage/emulated/0/Music', c:1204, kids:[
+        {name:'Wildwood Choir', path:'/storage/emulated/0/Music/Wildwood Choir', c:42, kids:[]},
+        {name:'Kō', path:'/storage/emulated/0/Music/Ko', c:18, kids:[]},
+        {name:'Ottoline', path:'/storage/emulated/0/Music/Ottoline', c:31, kids:[]},
+        {name:'Various Artists', path:'/storage/emulated/0/Music/Various Artists', c:210, kids:[]}
+      ]},
+      {name:'Download', path:'/storage/emulated/0/Download', c:412, kids:[
+        {name:'mixtapes', path:'/storage/emulated/0/Download/mixtapes', c:64, kids:[]},
+        {name:'live sets', path:'/storage/emulated/0/Download/live sets', c:22, kids:[]}
+      ]},
+      {name:'Recordings', path:'/storage/emulated/0/Recordings', c:37, kids:[]},
+      {name:'Podcasts', path:'/storage/emulated/0/Podcasts', c:96, kids:[]},
+      {name:'WhatsApp/Media/Audio', path:'/storage/emulated/0/WhatsApp/Media/Audio', c:419, kids:[]}
+    ]},
+    {name:'SD card', path:'/storage/9C33-6BBD', c:815, kids:[
+      {name:'Albums', path:'/storage/9C33-6BBD/Albums', c:815, kids:[]},
+      {name:'Backup', path:'/storage/9C33-6BBD/Backup', c:0, kids:[]}
+    ]}
+  ]};
+
+  lyrics = {
+    'a1:0': ["We take the long way home","nobody's counting steps","the streetlights come on","one by one, in order","you hum the part I forget","and I follow it badly","nothing is urgent tonight","nothing is urgent"],
+    'a1:1': ["Cut the wire, fold the paper","hold a flame in your hands","we let them go from the roof","they climb like they mean it","someone below points up","someone below makes a wish","we stay until the last one","burns out over the river"],
+    'a2:0': ["Blue on the ceiling","the tape still turning","you sleep through the hiss","I keep the volume low","first light on the wall","a slow, careful morning","nothing needs saying yet"],
+    'a6:1': ["Static and orange juice","the kettle joins in","a song from before us","my mother's exact station","you dance like the floor is cold","because the floor is cold","and breakfast can wait"]
+  };
+
+  ribbonRaw = Array.from({length:96}, (_,i) => {
+    const v = 0.3 + 0.3*Math.sin(i*0.42) + 0.24*Math.sin(i*1.31+0.7) + 0.16*Math.sin(i*2.9+2.1);
+    return Math.max(0.16, Math.min(1, Math.abs(v)));
+  });
+
+  waveRaw = Array.from({length:52}, (_,i) => {
+    const v = 0.32 + 0.34*Math.sin(i*0.55) + 0.22*Math.sin(i*1.7+1.2) + 0.14*Math.sin(i*3.1);
+    return Math.max(0.14, Math.min(1, Math.abs(v)));
+  });
+
+  componentDidMount() {
+    this._t = setInterval(() => {
+      const s = this.state;
+      if (s.screen === 'scan') {
+        const pct = Math.min(1, s.pct + (s.pct > 0.86 ? 0.006 : 0.018 + Math.random()*0.014));
+        this.setState({pct, found: Math.round(pct*this.total()), file: this.files[Math.floor(Math.random()*this.files.length)]});
+        if (pct >= 1 && !this._done) { this._done = true; setTimeout(() => this.setState({screen:'library', playing:true, elapsed:12}), 900); }
+      } else if (s.playing) {
+        const d = this.cur().tr.d;
+        if (s.elapsed + 0.12 >= d) this.step(1); else this.setState({elapsed: s.elapsed + 0.12});
+      }
+    }, 120);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+
+  total() { return this.state.folders.reduce((n,f) => n + (f.on ? f.c : 0), 0); }
+  cur() {
+    const al = this.albums.find(a => a.id === this.state.albumId) || this.albums[0];
+    return {al, tr: al.tracks[Math.min(this.state.trackIdx, al.tracks.length-1)]};
+  }
+  fmt(s) { s = Math.max(0, Math.round(s)); return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+  step(d) {
+    const {al} = this.cur();
+    const i = (this.state.trackIdx + d + al.tracks.length) % al.tracks.length;
+    this.setState({trackIdx: i, elapsed: 0, playing: true});
+  }
+
+  renderVals() {
+    const s = this.state, {al, tr} = this.cur();
+    const accent = this.props.accent || '#F2653A';
+    const treat = s.treat || this.props.treatment || 'ember';
+    const prog = Math.min(1, s.elapsed / tr.d);
+    const tabs = ['Albums','Artists','Folders','Tracks'];
+    const tabI = Math.max(0, tabs.indexOf(s.tab));
+    const navKeys = ['Library','Search','Folders','Settings'];
+    const navI = Math.max(0, navKeys.indexOf(s.nav));
+    const navCol = (k) => k === s.nav ? '#12100E' : 'rgba(246,241,234,.5)';
+    const navBg = (k) => k === s.nav ? accent : 'transparent';
+    const navP = (k) => k === s.nav ? 15 : 13;
+    const navW = (k) => k === s.nav ? 78 : 0;
+    const navO = (k) => k === s.nav ? 1 : 0;
+    const navAct = (k) => () => this.setState({nav:k, screen: k === 'Folders' ? 'browse' : 'library',
+      bfrom: k === 'Folders' ? 'library' : s.bfrom});
+
+    const lyricLines = this.lyrics[al.id + ':' + s.trackIdx] || null;
+    const lyricTimes = lyricLines ? lyricLines.map((_,i) => 9 + i*((tr.d - 26)/lyricLines.length)) : [];
+    let lyricAt = 0;
+    for (let i = 0; i < lyricTimes.length; i++) if (s.elapsed >= lyricTimes[i]) lyricAt = i;
+
+    const chrome = s.screen === 'library' || s.screen === 'album';
+    const total = this.total();
+    const scanned = s.screen === 'scan' ? s.found : 2431;
+
+    return {
+      accent,
+      isOnboard: s.screen === 'onboard', isScan: s.screen === 'scan', isLib: s.screen === 'library',
+      isAlbum: s.screen === 'album', isPlayer: s.screen === 'player', isLock: s.screen === 'lock',
+      isBrowse: s.screen === 'browse',
+      showChrome: chrome,
+      playing: s.playing, paused: !s.playing, playState: s.playing ? 'running' : 'paused',
+
+      folders: s.folders.map((f,i) => ({...f, d: 120 + i*70, cs: f.c.toLocaleString() + ' files',
+        iconBg: f.on ? 'rgba(242,101,58,.16)' : 'rgba(246,241,234,.06)',
+        iconFg: f.on ? accent : 'rgba(246,241,234,.45)',
+        swBg: f.on ? accent : 'rgba(246,241,234,.13)', swX: f.on ? 17 : 0,
+        toggle: () => this.setState(st => ({folders: st.folders.map((g,j) => j===i ? {...g, on:!g.on} : g)}))})),
+      folderSummary: s.folders.filter(f => f.on).length + ' of ' + s.folders.length + ' selected',
+      scanCta: total ? 'Start scanning' : 'Pick a folder first',
+      scanSub: total ? total.toLocaleString() + ' files · ' + s.folders.filter(f => f.on).length + ' folders · about ' + Math.max(4, Math.round(total/210)) + 's'
+        : 'Turn on a folder above, or browse storage',
+      startScan: () => { if (this.total()) { this._done = false; this.setState({screen:'scan', pct:0, found:0, file:this.files[0]}); } },
+
+      goBrowse: () => this.setState({screen:'browse', bfrom:'onboard'}),
+      crumbTitle: s.bpath[s.bpath.length-1] || 'Device',
+      crumbPath: this.nodeAt(s.bpath).path || '/',
+      crumbs: ['Device'].concat(s.bpath).map((name,i) => ({name,
+        bg: i === s.bpath.length ? 'rgba(246,241,234,.12)' : 'rgba(246,241,234,.05)',
+        col: i === s.bpath.length ? '#F6F1EA' : 'rgba(246,241,234,.5)',
+        go: () => this.setState({bpath: s.bpath.slice(0, i)})})),
+      browseUp: () => s.bpath.length ? this.setState({bpath: s.bpath.slice(0,-1)}) : this.setState({screen: s.bfrom || 'onboard', nav:'Library'}),
+      browseRows: (this.nodeAt(s.bpath).kids || []).map((k,i) => {
+        const on = !!s.sel[k.path];
+        return {name: k.name, d: 30 + i*45, hasKids: (k.kids||[]).length > 0,
+          sub: k.c ? k.c.toLocaleString() + ' audio files' : 'no audio found',
+          bg: on ? 'rgba(242,101,58,.08)' : 'rgba(246,241,234,.035)',
+          bd: on ? 'rgba(242,101,58,.35)' : 'rgba(246,241,234,.07)',
+          icon: on ? accent : 'rgba(246,241,234,.5)',
+          ckBg: on ? accent : 'transparent', ckBd: on ? accent : 'rgba(246,241,234,.24)',
+          ckO: on ? 1 : 0, ckS: on ? 1 : 0.9,
+          enter: () => { if ((k.kids||[]).length) this.setState({bpath: s.bpath.concat(k.name)}); else this.setState({sel: {...s.sel, [k.path]: !on}}); },
+          toggle: () => this.setState({sel: {...s.sel, [k.path]: !on}})};
+      }),
+      confirmLabel: (() => { const n = Object.values(s.sel).filter(Boolean).length; return n ? 'Include ' + n + (n === 1 ? ' folder' : ' folders') : 'Select a folder to include'; })(),
+      confirmO: Object.values(s.sel).filter(Boolean).length ? 1 : 0.4,
+      confirmBrowse: () => {
+        const picked = [];
+        const walk = (n) => { (n.kids||[]).forEach(k => { if (s.sel[k.path]) picked.push({n:k.name, p:k.path, c:k.c, on:true}); walk(k); }); };
+        walk(this.fs);
+        if (!picked.length) return;
+        const paths = new Set(s.folders.map(f => f.p));
+        this.setState({folders: s.folders.concat(picked.filter(p => !paths.has(p.p))), sel: {},
+          screen: s.bfrom === 'library' ? 'scan' : 'onboard', pct:0, found:0, nav:'Library'});
+        if (s.bfrom === 'library') this._done = false;
+      },
+
+      scanPct: Math.round(s.pct*100) + '%',
+      ringOffset: 615.75 * (1 - s.pct),
+      scanFound: s.found.toLocaleString(),
+      scanFile: s.file || '…',
+      scanAlbums: Math.round(s.pct*74),
+      scanArtists: Math.round(s.pct*39),
+      scanMin: Math.round(s.pct*162),
+      scanHeadline: s.pct >= 1 ? 'All yours.' : 'Reading your storage…',
+
+      libSub: scanned.toLocaleString() + ' tracks · 74 albums · offline',
+      albumCount: this.albums.length + ' albums',
+      albumList: this.albums.map((a,i) => ({...a, initials: a.ini, n: a.tracks.length + ' tracks', d: 60 + i*55,
+        open: () => this.setState({screen:'album', albumId:a.id, scrollY:0})})),
+      freshList: this.albums.slice(4).concat(this.albums.slice(0,1)).map((a,i) => ({...a, d: 90 + i*80,
+        open: () => this.setState({screen:'album', albumId:a.id, scrollY:0})})),
+
+      tabs: tabs.map(k => ({k, col: k === s.tab ? '#F6F1EA' : 'rgba(246,241,234,.44)', act: () => this.setState({tab:k})})),
+      tabW: 87.5, tabX: tabI * 87.5,
+      nav0col: navCol('Library'), nav0bg: navBg('Library'), nav0p: navP('Library'), nav0w: navW('Library'), nav0o: navO('Library'), nav0act: navAct('Library'),
+      nav1col: navCol('Search'), nav1bg: navBg('Search'), nav1p: navP('Search'), nav1w: navW('Search'), nav1o: navO('Search'), nav1act: navAct('Search'),
+      nav2col: navCol('Folders'), nav2bg: navBg('Folders'), nav2p: navP('Folders'), nav2w: navW('Folders'), nav2o: navO('Folders'), nav2act: navAct('Folders'),
+      nav3col: navCol('Settings'), nav3bg: navBg('Settings'), nav3p: navP('Settings'), nav3w: navW('Settings'), nav3o: navO('Settings'), nav3act: navAct('Settings'),
+      onLibScroll: (e) => { const y = e.currentTarget.scrollTop; if (!this._raf) { this._raf = requestAnimationFrame(() => { this._raf = 0; this.setState({scrollY: y}); }); } },
+      parY: -Math.min(40, s.scrollY*0.34), parO: Math.max(0.15, 1 - s.scrollY/170),
+
+      al: {...al, initials: al.ini, meta: al.year + ' · ' + al.tracks.length + ' TRACKS · ' + this.fmt(al.tracks.reduce((n,t)=>n+t.d,0)).replace(':','M ') + 'S'},
+      tr,
+      trackList: al.tracks.map((t,i) => {
+        const active = i === s.trackIdx && (s.playing || s.screen === 'player');
+        return {...t, d: 40 + i*45, ds: this.fmt(t.d), active, idle: !active, hasLrc: !!this.lyrics[al.id + ':' + i],
+          col: active ? accent : '#F6F1EA', bg: active ? 'rgba(242,101,58,.08)' : 'transparent',
+          file: (al.artist + ' — ' + t.t).toLowerCase().replace(/[^a-z0-9]+/g,'_') + '.mp3',
+          play: () => this.setState({trackIdx:i, elapsed:0, playing:true, screen:'player'})};
+      }),
+      playAlbum: () => this.setState({trackIdx:0, elapsed:0, playing:true, screen:'player'}),
+      shuffleAlbum: () => this.setState({trackIdx: Math.floor(Math.random()*al.tracks.length), elapsed:0, playing:true, screen:'player'}),
+
+      pw: (prog*100).toFixed(2) + '%',
+      tNow: this.fmt(s.elapsed), tLeft: '-' + this.fmt(tr.d - s.elapsed), tTotal: this.fmt(tr.d),
+      wave: this.waveRaw.map((h,i) => {
+        const on = i/this.waveRaw.length <= prog;
+        return {h: Math.round(10 + h*82), hs: Math.round(6 + h*34), ha: Math.round(5 + h*29),
+          c: on ? accent : 'rgba(246,241,234,.18)'};
+      }),
+      eqMini: this.eqMini, eqBig: this.eqBig,
+
+      ribbonX: -(prog * 573).toFixed(1),
+      ribbon: this.ribbonRaw.map((h,i) => {
+        const pos = i*6, head = prog*573, dist = Math.abs(pos - head), past = pos <= head;
+        const live = dist < 34 && s.playing;
+        return {h: Math.round(9 + h*52),
+          c: past ? accent : 'rgba(246,241,234,.2)',
+          an: live ? 'eq ' + (0.34 + (i%5)*0.09).toFixed(2) + 's ease-in-out infinite alternate' : 'none'};
+      }),
+      tPrecise: this.fmt(Math.floor(s.elapsed)) + '.' + Math.floor((s.elapsed % 1) * 10),
+      liveLabel: s.playing ? 'flac · 44.1 kHz' : 'paused',
+      seekRibbon: (e) => { const r = e.currentTarget.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width/2);
+        this.setState({elapsed: Math.max(0, Math.min(tr.d, s.elapsed + (dx/573)*tr.d))}); },
+
+      tEmber: treat === 'ember' && !s.lyr, tVinyl: treat === 'vinyl' && !s.lyr, tWave: treat === 'wave' && !s.lyr,
+      showBigTitle: treat !== 'wave' || s.lyr,
+      showRibbon: treat !== 'wave' || s.lyr,
+
+      lyricsOn: s.lyr, hasLyrics: s.lyr && !!lyricLines, noLyrics: s.lyr && !lyricLines,
+      showArt: () => this.setState({lyr:false}), showLyrics: () => this.setState({lyr:true}),
+      artTabBg: s.lyr ? 'transparent' : 'rgba(246,241,234,.14)',
+      artTabCol: s.lyr ? 'rgba(246,241,234,.45)' : '#F6F1EA',
+      lyrTabBg: s.lyr ? 'rgba(246,241,234,.14)' : 'transparent',
+      lyrTabCol: s.lyr ? '#F6F1EA' : 'rgba(246,241,234,.45)',
+      lyricWindow: (lyricLines || []).length ? [-2,-1,0,1,2].map(o => {
+        const i = lyricAt + o, has = i >= 0 && i < lyricLines.length;
+        const size = o === 0 ? 27 : (Math.abs(o) === 1 ? 19 : 15.5);
+        return {l: has ? lyricLines[i] : '', size, weight: o === 0 ? 700 : 500,
+          col: o === 0 ? '#F6F1EA' : (Math.abs(o) === 1 ? 'rgba(246,241,234,.46)' : 'rgba(246,241,234,.24)'),
+          barO: o === 0 ? 1 : 0,
+          act: () => { if (has) this.setState({elapsed: lyricTimes[i], playing:true}); }};
+      }) : [],
+      lineFill: (() => {
+        if (!lyricLines) return '0%';
+        const a = lyricTimes[lyricAt] || 0, b = lyricTimes[lyricAt+1] || tr.d;
+        return (Math.max(0, Math.min(1, (s.elapsed - a)/(b - a)))*100).toFixed(1) + '%';
+      })(),
+      vinylNote: s.playing ? 'side a · 33⅓ rpm' : 'needle up',
+      armRot: s.playing ? 0 : -22,
+      dragX: s.dragX, dragRot: (s.dragX*0.02).toFixed(2),
+      artTrans: s.drag ? 'none' : 'transform .55s cubic-bezier(.2,1.25,.3,1)',
+      swipeHint: 'Swipe the artwork · ' + (treat === 'wave' ? 'tap the waveform to seek' : 'tap the bar to seek'),
+
+      toggle: () => this.setState(st => ({playing: !st.playing})),
+      toggleStop: (e) => { e.stopPropagation(); this.setState(st => ({playing: !st.playing})); },
+      next: () => this.step(1), prev: () => this.step(-1),
+      seek: (e) => { const r = e.currentTarget.getBoundingClientRect(); this.setState({elapsed: Math.max(0, Math.min(1,(e.clientX-r.left)/r.width))*tr.d}); },
+      onDown: (e) => { this._sx = e.clientX; this.setState({drag:true, dragX:0}); },
+      onMove: (e) => { if (s.drag) this.setState({dragX: e.clientX - this._sx}); },
+      onUp: () => { const dx = s.dragX; this.setState({drag:false, dragX:0}); if (dx < -56) this.step(1); else if (dx > 56) this.step(-1); },
+
+      like: () => this.setState(st => ({liked: {...st.liked, [al.id + st.trackIdx]: !st.liked[al.id + st.trackIdx]}})),
+      likeFill: s.liked[al.id + s.trackIdx] ? '#F2653A' : 'none',
+
+      openPlayer: () => this.setState({screen:'player'}),
+      closePlayer: () => this.setState({screen:'library'}),
+      goLib: () => this.setState({screen:'library'}),
+      goLock: () => this.setState({screen:'lock'}),
+
+      islandLive: s.screen !== 'onboard' && s.screen !== 'scan',
+      islandOpen: s.island, islandShut: !s.island,
+      islW: s.island ? 352 : 126, islH: s.island ? 78 : 37, islR: s.island ? 26 : 24,
+      toggleIsland: () => this.setState(st => ({island: !st.island})),
+
+      railFlow: [
+        {label:'First run', act: () => this.setState({screen:'onboard', pct:0, playing:false})},
+        {label:'Scanning', act: () => { this._done = false; this.setState({screen:'scan', pct:0.34, found:Math.round(0.34*this.total()), file:this.files[2]}); }},
+        {label:'Folders', act: () => this.setState({screen:'browse', nav:'Folders', bfrom: s.screen === 'onboard' ? 'onboard' : 'library'})},
+        {label:'Library', act: () => this.setState({screen:'library', nav:'Library', playing:true})},
+        {label:'Now playing', act: () => this.setState({screen:'player', playing:true})},
+        {label:'Lock screen', act: () => this.setState({screen:'lock', playing:true})},
+        {label: s.island ? 'Close island' : 'Open island', act: () => this.setState(st => ({island: !st.island}))}
+      ],
+      railLook: [
+        {label:'Ember', act: () => this.setState({treat:'ember', screen:'player', playing:true})},
+        {label:'Vinyl', act: () => this.setState({treat:'vinyl', screen:'player', playing:true})},
+        {label:'Waveform', act: () => this.setState({treat:'wave', screen:'player', playing:true})}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

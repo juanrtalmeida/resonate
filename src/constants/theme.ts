@@ -1,65 +1,69 @@
+/** Tokens do Resonate. Extraídos dos inline styles do .dc.html — ele é a fonte da verdade. */
+
+export const C = {
+  bg: '#0B0A09',
+  surface: '#0E0C0B',
+  card: '#141110',
+  raised: '#171412',
+  art: '#241E1A',
+  onAccent: '#12100E',
+  ok: '#5FBF7E',
+} as const;
+
+/** Texto #F6F1EA nas opacidades usadas pelo design. */
+export const T = {
+  full: '#F6F1EA',
+  t72: 'rgba(246,241,234,.72)',
+  t62: 'rgba(246,241,234,.62)',
+  t55: 'rgba(246,241,234,.55)',
+  t5: 'rgba(246,241,234,.5)',
+  t46: 'rgba(246,241,234,.46)',
+  t42: 'rgba(246,241,234,.42)',
+  t4: 'rgba(246,241,234,.4)',
+  t34: 'rgba(246,241,234,.34)',
+  t3: 'rgba(246,241,234,.3)',
+  t24: 'rgba(246,241,234,.24)',
+  t18: 'rgba(246,241,234,.18)',
+  t14: 'rgba(246,241,234,.14)',
+  t12: 'rgba(246,241,234,.12)',
+  t1: 'rgba(246,241,234,.1)',
+  t08: 'rgba(246,241,234,.08)',
+  t07: 'rgba(246,241,234,.07)',
+  t06: 'rgba(246,241,234,.06)',
+} as const;
+
+export const ACCENTS = ['#F2653A', '#E8B44A', '#5FBFA8', '#8A6BD1'] as const;
+export type Accent = (typeof ACCENTS)[number];
+
+export const R = { r9: 9, r13: 13, r15: 15, r17: 17, r21: 21, r26: 26 } as const;
+
+export const F = {
+  display: 'BricolageGrotesque_700Bold',
+  displayHeavy: 'BricolageGrotesque_800ExtraBold',
+  body: 'FamiljenGrotesk_400Regular',
+  bodyMedium: 'FamiljenGrotesk_500Medium',
+  bodySemi: 'FamiljenGrotesk_600SemiBold',
+  mono: 'DMMono_400Regular',
+  monoMedium: 'DMMono_500Medium',
+} as const;
+
+/** Espaço reservado embaixo pelo mini player + pílula de navegação. */
+export const CHROME_HEIGHT = 168;
+
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Recuo lateral de todo conteúdo de tela. Fica no container da lista, nunca nos filhos:
+ * quando cada aba aplicava o seu, o cabeçalho saltava de posição ao trocar de aba.
  */
+export const PADDING = 22;
 
-import '@/global.css';
+/** rgba a partir de um hex #RRGGBB. */
+export function alpha(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 
-import { Platform } from 'react-native';
-
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
-} as const;
-
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
-} as const;
-
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+/** m:ss */
+export function fmt(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
