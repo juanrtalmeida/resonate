@@ -66,8 +66,13 @@ export function tiltStep(s: TiltState, x: number, y: number): TiltState {
 /**
  * Ângulos em graus. Inclinar o topo para longe empurra a capa para trás: `rotateX` segue
  * o eixo y invertido.
+ *
+ * `TILT_MAX` é lido no corpo, e não de um parâmetro com valor padrão. O plugin do
+ * Reanimated monta o closure do worklet a partir dos identificadores que encontra no
+ * corpo da função; um nome que só aparece na posição do default não entra, e na thread
+ * de UI ele não existe.
  */
-export function tiltAngles(s: TiltState, max = TILT_MAX): { rx: number; ry: number } {
+export function tiltAngles(s: TiltState): { rx: number; ry: number } {
   'worklet';
-  return { rx: -s.sy * max, ry: s.sx * max };
+  return { rx: -s.sy * TILT_MAX, ry: s.sx * TILT_MAX };
 }
