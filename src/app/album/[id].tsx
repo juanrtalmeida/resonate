@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
+import { Chrome } from '@/components/chrome';
 import { Backdrop } from '@/components/backdrop';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { ChevronLeft, Heart, Play, Queue, Shuffle } from '@/components/icons';
@@ -111,7 +112,8 @@ function AlbumDetail({ album }: { album: Album }) {
   );
 
   return (
-    <ZoomScreen background={C.bg}>
+    <>
+    <ZoomScreen background={C.bg} edgeBack>
       <Backdrop cover={album.cover} color={art.a} />
       <FlatList
         {...chromeScroll}
@@ -138,6 +140,13 @@ function AlbumDetail({ album }: { album: Album }) {
       />
       {sheet}
     </ZoomScreen>
+    {/*
+      A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no
+      Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
+      do root se cala nestas rotas — ver `overModal` em chrome.tsx.
+    */}
+    <Chrome overModal />
+    </>
   );
 }
 

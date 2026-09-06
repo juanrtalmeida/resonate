@@ -11,14 +11,16 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedProps,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
   Easing,
+  type SharedValue,
 } from 'react-native-reanimated';
 
-import Svg, { Defs, G, LinearGradient, Mask, Rect, Stop } from 'react-native-svg';
+import Svg, { ClipPath, Defs, G, LinearGradient, Mask, Rect, Stop } from 'react-native-svg';
 
 import { T } from '@/constants/theme';
 import { artGradient, waveform, type Artwork } from '@/lib/artwork';
@@ -39,21 +41,23 @@ export function Ribbon({
   onSeek,
 }: {
   seed: string;
-  /** 0..1 */
-  progress: number;
+  /** 0..1, como shared value: o tempo não passa mais pelo React. */
+  progress: SharedValue<number>;
   accent: string;
   /** Recebe o deslocamento pedido, em fração da duração. */
   onSeek: (delta: number) => void;
 }) {
-  // O tempo decorrido re-renderiza isto 5x por segundo; as alturas não mudam com ele.
   const heights = useMemo(() => waveform(seed, BARS), [seed]);
   const [width, setWidth] = useState(0);
 
-  const x = useSharedValue(-progress * SPAN);
-  useEffect(() => {
-    // O tempo chega a cada 200 ms; a interpolação tira o serrilhado.
-    x.value = withTiming(-progress * SPAN, { duration: 220, easing: Easing.linear });
-  }, [progress, x]);
+  const x = useSharedValue(0);
+  useAnimatedReaction(
+    () => progress.value,
+    (p) => {
+      // O tempo chega a cada 200 ms; a interpolação tira o serrilhado.
+      x.value = withTiming(-p * SPAN, { duration: 220, easing: Easing.linear });
+    }
+  );
   /**
    * Anima a `matrix`, não `translateX`.
    *
@@ -64,11 +68,11 @@ export function Ribbon({
    *
    * Matriz 2D do SVG: [a, b, c, d, tx, ty].
    */
-  const slide = useAnimatedProps(
-    () => ({ matrix: [1, 0, 0, 1, x.value, 0] }) as unknown as Record<string, unknown>
-  );
-
-  const head = progress * SPAN;
+  const matrix = () => ({ matrix: [1, 0, 0, 1, x.value, 0] }) as unknown as Record<string, unknown>;
+  const slide = useAnimatedProps(matrix);
+  // A cópia no acento desliza junto: dois `animatedProps` do mesmo `x`, porque um só não
+  // pode alimentar dois componentes.
+  const slidePlayed = useAnimatedProps(matrix);
 
   /**
    * Toque pelo gesture-handler, não por Pressable.
@@ -106,26 +110,26 @@ export function Ribbon({
                 <Mask id="ribbonMask">
                   <Rect x={0} y={0} width={width} height={RIBBON_H} fill="url(#ribbonFade)" />
                 </Mask>
+                <ClipPath id="ribbonPlayed">
+                  <Rect x={0} y={0} width={width / 2} height={RIBBON_H} />
+                </ClipPath>
               </Defs>
 
               <G mask="url(#ribbonMask)">
                 <Rect x={0} y={RIBBON_H / 2} width={width} height={1} fill={T.t14} />
-                <AnimatedG animatedProps={slide}>
-                  {heights.map((h, i) => {
-                    const barHeight = Math.round(9 + h * 52);
-                    return (
-                      <Rect
-                        key={i}
-                        x={width / 2 + i * STEP}
-                        y={(RIBBON_H - barHeight) / 2}
-                        width={2.5}
-                        height={barHeight}
-                        rx={1.25}
-                        fill={i * STEP <= head ? accent : 'rgba(246,241,234,.2)'}
-                      />
-                    );
-                  })}
-                </AnimatedG>
+                <AnimatedG animatedProps={slide}>{bars(heights, width, 'rgba(246,241,234,.2)')}</AnimatedG>
+                {/*
+                  O trecho já tocado é a mesma fita no acento, recortada à esquerda da
+                  agulha. Antes a cor saía de uma comparação por barra, recalculada em
+                  JavaScript a cada tique do tempo — 96 barras, cinco vezes por segundo.
+                  A agulha mora no centro, então o recorte é fixo e a cor acompanha o
+                  deslizar de graça.
+                */}
+                <G clipPath="url(#ribbonPlayed)">
+                  <AnimatedG animatedProps={slidePlayed}>
+                    {bars(heights, width, accent)}
+                  </AnimatedG>
+                </G>
               </G>
             </Svg>
           )}
@@ -151,6 +155,24 @@ export function Ribbon({
   );
 }
 
+/** As 96 barras da fita, numa cor só. Renderizadas duas vezes: apagadas e no acento. */
+function bars(heights: number[], width: number, fill: string) {
+  return heights.map((h, i) => {
+    const barHeight = Math.round(9 + h * 52);
+    return (
+      <Rect
+        key={i}
+        x={width / 2 + i * STEP}
+        y={(RIBBON_H - barHeight) / 2}
+        width={2.5}
+        height={barHeight}
+        rx={1.25}
+        fill={fill}
+      />
+    );
+  });
+}
+
 function Diamond({ accent, top = false }: { accent: string; top?: boolean }) {
   return (
     <View
@@ -172,6 +194,8 @@ function Diamond({ accent, top = false }: { accent: string; top?: boolean }) {
 
 // --------------------------------------------------------------- forma de onda
 
+const WAVE_H = 84;
+
 export function Waveform({
   seed,
   progress,
@@ -179,7 +203,8 @@ export function Waveform({
   onSeek,
 }: {
   seed: string;
-  progress: number;
+  /** 0..1, como shared value. */
+  progress: SharedValue<number>;
   accent: string;
   /** Recebe a posição absoluta pedida, 0..1. */
   onSeek: (fraction: number) => void;
@@ -192,22 +217,52 @@ export function Waveform({
     runOnJS(onSeek)(e.x / Math.max(1, width));
   });
 
+  /**
+   * A parte tocada é a mesma onda no acento, dentro de uma janela que cresce.
+   *
+   * Colorir barra a barra custava um `backgroundColor` recalculado em JavaScript para 52
+   * views a cada tique do tempo. Uma janela com `overflow: hidden` é um estilo animado
+   * só, e o React não é acordado.
+   */
+  const played = useAnimatedStyle(() => ({ width: progress.value * width }));
+
+  const row = (color: string) =>
+    heights.map((h, i) => (
+      <View
+        key={i}
+        style={{
+          flex: 1,
+          borderRadius: 2,
+          height: Math.round(10 + h * 82),
+          backgroundColor: color,
+        }}
+      />
+    ));
+
   return (
     <GestureDetector gesture={tap}>
       <View
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
-        style={{ height: 84, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-        {heights.map((h, i) => (
+        style={{ height: WAVE_H, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+        {row(T.t18)}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            { position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden' },
+            played,
+          ]}>
+          {/* Largura fixa por dentro: é a janela que corta, não as barras que encolhem. */}
           <View
-            key={i}
             style={{
-              flex: 1,
-              borderRadius: 2,
-              height: Math.round(10 + h * 82),
-              backgroundColor: i / heights.length <= progress ? accent : T.t18,
-            }}
-          />
-        ))}
+              width,
+              height: WAVE_H,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 2,
+            }}>
+            {row(accent)}
+          </View>
+        </Animated.View>
       </View>
     </GestureDetector>
   );

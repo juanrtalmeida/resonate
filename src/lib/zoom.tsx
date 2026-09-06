@@ -27,12 +27,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { BackHandler, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   interpolate,
+  measure,
   runOnJS,
+  useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -99,6 +101,7 @@ export function ZoomScreen({
   style,
   onClosed,
   dismissable = false,
+  edgeBack = false,
 }: {
   children: ReactNode;
   /**
@@ -112,9 +115,17 @@ export function ZoomScreen({
   onClosed?: () => void;
   /** Permite arrastar para baixo para minimizar, como no Music. */
   dismissable?: boolean;
+  /**
+   * Arrastar da borda esquerda para a direita volta.
+   *
+   * Nas telas de lista o arrasto para baixo não serve: ele disputa com a rolagem, e
+   * decidir entre um e outro exige saber a posição do scroll. A borda esquerda não
+   * disputa com nada e é o gesto que o usuário já espera.
+   */
+  edgeBack?: boolean;
 }) {
   const router = useRouter();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const [from] = useState(takeOrigin);
   const progress = useSharedValue(0);
 
@@ -136,6 +147,38 @@ export function ZoomScreen({
       if (done) runOnJS(finish)();
     });
   }, [progress, closing, finish]);
+
+  /**
+   * O botão de voltar do Android fecha pela mesma animação. Sem isto ele desmontava a
+   * tela de uma vez, e a capa sumia em vez de voltar para o lugar de onde saiu.
+   */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      close();
+      return true;
+    });
+    return () => sub.remove();
+  }, [close]);
+
+  /** Arrasto da borda esquerda. Mesmo `progress`, dirigido pela distância horizontal. */
+  const edge = Gesture.Pan()
+    .activeOffsetX([-9999, 12])
+    .onUpdate((e) => {
+      if (closing.value || e.translationX <= 0) return;
+      progress.value = Math.max(0, 1 - e.translationX / (width * 0.6));
+    })
+    .onEnd((e) => {
+      if (closing.value) return;
+      const leave = e.translationX > width * 0.25 || e.velocityX > 800;
+      if (!leave) {
+        progress.value = withTiming(1, OPEN);
+        return;
+      }
+      closing.value = true;
+      progress.value = withTiming(0, CLOSE, (done) => {
+        if (done) runOnJS(finish)();
+      });
+    });
 
   /**
    * Arrastar para baixo controla a animação com o dedo: o mesmo `progress` que a abertura
@@ -173,6 +216,14 @@ export function ZoomScreen({
         <ZoomFade style={{ position: 'absolute', inset: 0, backgroundColor: background }} />
       ) : null}
       {children}
+      {edgeBack ? (
+        <GestureDetector gesture={edge}>
+          {/* Acima da capa em voo, que usa zIndex 10. */}
+          <View
+            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 24, zIndex: 20 }}
+          />
+        </GestureDetector>
+      ) : null}
     </View>
   );
 
@@ -228,27 +279,44 @@ export function ZoomTarget({
   style?: ViewStyle;
 }) {
   const zoom = use(Ctx);
-  const ref = useRef<View>(null);
-  const [to, setTo] = useState<{ x: number; y: number; width: number; height: number } | null>(
+  const ref = useAnimatedRef<View>();
+
+  /**
+   * Retângulo de destino, medido na thread de UI no primeiro frame em que a view já tem
+   * layout — e guardado depois disso.
+   *
+   * Antes era `measureInWindow` mais `useState`: um pulo até o nativo e outro de volta,
+   * seguidos de um re-render da tela inteira, tudo no meio da animação de entrada. Até a
+   * medida chegar, este estilo não devolvia transformação nenhuma e a capa ficava parada
+   * no lugar final; com a thread de JS ocupada montando a lista da tela nova, a medida
+   * chegava tarde e a capa entrava de supetão perto do fim. Na thread de UI a medida sai
+   * no frame seguinte e não acorda o React.
+   */
+  const to = useSharedValue<{ x: number; y: number; width: number; height: number } | null>(
     null
   );
-
-  const measure = useCallback(() => {
-    ref.current?.measureInWindow((x, y, width, height) => {
-      if (width > 0 && height > 0) setTo({ x, y, width, height });
-    });
-  }, []);
 
   const from = zoom?.from ?? null;
   const progress = zoom?.progress;
 
   const flight = useAnimatedStyle(() => {
-    if (!from || !to || !progress) return { opacity: 1 };
+    if (!from || !progress) return { opacity: 1 };
+
+    if (!to.value) {
+      const m = measure(ref);
+      // Null enquanto a view ainda não foi posicionada: tenta de novo no próximo frame.
+      if (m && m.width > 0 && m.height > 0) {
+        to.value = { x: m.pageX, y: m.pageY, width: m.width, height: m.height };
+      }
+    }
+    const dest = to.value;
+    if (!dest) return { opacity: 1 };
+
     const p = progress.value;
-    const scale = from.width / to.width;
+    const scale = from.width / dest.width;
     // Alinha os centros: a capa não muda de forma, só de tamanho e de lugar.
-    const dx = from.x + from.width / 2 - (to.x + to.width / 2);
-    const dy = from.y + from.height / 2 - (to.y + to.height / 2);
+    const dx = from.x + from.width / 2 - (dest.x + dest.width / 2);
+    const dy = from.y + from.height / 2 - (dest.y + dest.height / 2);
     return {
       opacity: 1,
       transform: [
@@ -263,7 +331,6 @@ export function ZoomTarget({
     <Animated.View
       ref={ref}
       collapsable={false}
-      onLayout={measure}
       // Acima do resto: enquanto viaja, a capa passa por cima do conteúdo da tela nova.
       style={[{ zIndex: 10 }, style, flight]}>
       {children}

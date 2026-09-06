@@ -10,6 +10,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
+import { Chrome } from '@/components/chrome';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, LibraryIcon, Play, Queue as QueueIcon, Shuffle } from '@/components/icons';
@@ -193,7 +194,8 @@ function Artist({
   );
 
   return (
-    <ZoomScreen background={C.bg}>
+    <>
+    <ZoomScreen background={C.bg} edgeBack>
       {/* Hero: alvo do zoom vindo da lista e, depois, o pano de fundo do parallax.
           zIndex 0 porque aqui ele precisa ficar *atrás* da lista, que o cobre ao rolar. */}
       <ZoomTarget
@@ -338,6 +340,13 @@ function Artist({
 
       {sheet}
     </ZoomScreen>
+    {/*
+      A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no
+      Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
+      do root se cala nestas rotas — ver `overModal` em chrome.tsx.
+    */}
+    <Chrome overModal />
+    </>
   );
 }
 

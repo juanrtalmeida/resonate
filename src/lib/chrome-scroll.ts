@@ -44,7 +44,8 @@ export function chromeExpand() {
 
 /** Props de qualquer lista vertical: `<FlatList {...chromeScroll} />`. */
 export const chromeScroll = {
-  scrollEventThrottle: 16,
+  // 30 Hz basta para decidir mostrar ou esconder; 60 acordava a thread de JS o dobro.
+  scrollEventThrottle: 32,
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
     chromeScrollTo(e.nativeEvent.contentOffset.y),
 };

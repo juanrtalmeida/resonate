@@ -2,13 +2,15 @@
  * Mini player + navegação, numa peça só. É um overlay sobre o <Stack>, não uma tab bar
  * do router.
  *
- * Dois estados. Parado, a barra inteira: o player em cima, os quatro destinos embaixo.
- * Rolando a página para baixo, ela colapsa — a fileira de destinos recolhe para altura
- * zero e o item ativo reaparece como um disco à esquerda do player, ao lado dele. Sobra
- * tela para o conteúdo, e continua dando para voltar: tocar no disco reabre a barra.
+ * Duas peças que se movem como uma: o cartão do player, de largura cheia, e a pílula de
+ * navegação centrada embaixo dele.
  *
- * Sem faixa tocando não há colapso. A fileira de destinos é a única navegação que existe
- * na tela; recolhê-la sem ter o disco do player ao lado deixaria o usuário sem saída.
+ * Rolando a página para baixo a pílula recolhe para altura zero e o destino ativo
+ * reaparece como um disco à esquerda do player. Sobra tela para o conteúdo, e continua
+ * dando para voltar: tocar no disco reabre a barra.
+ *
+ * Sem faixa tocando não há colapso. A pílula é a única navegação que existe na tela;
+ * recolhê-la sem ter o disco do player ao lado deixaria o usuário sem saída.
  */
 
 import { usePathname, useRouter } from 'expo-router';
@@ -28,11 +30,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { C, T } from '@/constants/theme';
+import { C, R, T } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { chromeCollapsed, chromeExpand } from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
-import { useElapsed, usePlayer } from '@/lib/player';
+import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import { useZoomLaunch } from '@/lib/zoom';
 import { AlbumArt } from './album-art';
@@ -54,10 +56,21 @@ const NAV = [
   { key: 'Settings', label: 'Ajustes', Icon: SettingsNav, href: '/settings' },
 ] as const;
 
-/** Altura da fileira de destinos. É o que a barra economiza ao colapsar. */
-const NAV_HEIGHT = 42;
+/** Altura da pílula: 42 do item, mais 5 de recuo de cada lado e a borda. */
+const NAV_HEIGHT = 54;
 
-export function Chrome() {
+export function Chrome({
+  /**
+   * Renderizada de dentro de uma tela `transparentModal`, e não do root.
+   *
+   * No Android essas telas sobem numa janela própria, acima de tudo o que está no root —
+   * a barra ficava atrás do conteúdo do álbum e do artista mesmo com música tocando. Ali
+   * a única forma de ficar por cima é ser filha da própria tela.
+   */
+  overModal = false,
+}: {
+  overModal?: boolean;
+}) {
   const pathname = usePathname();
   const { track } = usePlayer();
   const insets = useSafeAreaInsets();
@@ -75,7 +88,9 @@ export function Chrome() {
     pathname.startsWith('/folders') ||
     pathname.startsWith('/playlist') ||
     pathname.startsWith('/settings');
-  if (!visible) return null;
+
+  const modal = pathname.startsWith('/album') || pathname.startsWith('/artist');
+  if (!visible || modal !== overModal) return null;
 
   const active = pathname.startsWith('/settings')
     ? 'Settings'
@@ -103,29 +118,32 @@ export function Chrome() {
   );
 }
 
-/** O cartão: player em cima, destinos embaixo, um recolhendo sobre o outro. */
+/** O player em cima, a pílula embaixo — e a pílula recolhendo sob ele. */
 function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
   // Sem faixa, o colapso é desligado na origem em vez de espalhar `if` pelos estilos.
   const collapse = useDerivedValue(() => (hasTrack ? chromeCollapsed.value : 0));
 
   const nav = useAnimatedStyle(() => ({
     height: (1 - collapse.value) * NAV_HEIGHT,
-    marginTop: (1 - collapse.value) * 6,
+    marginTop: (1 - collapse.value) * 13,
     opacity: 1 - collapse.value,
   }));
 
   return (
-    <View
-      style={{
-        borderRadius: 24,
-        padding: 5,
-        backgroundColor: 'rgba(26,22,20,.94)',
-        borderWidth: 1,
-        borderColor: T.t1,
-      }}>
+    <View>
       {hasTrack && <MiniPlayer active={active} collapse={collapse} />}
-      <Animated.View style={[{ overflow: 'hidden' }, nav]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+      <Animated.View style={[{ overflow: 'hidden', alignItems: 'center' }, nav]}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 3,
+            padding: 5,
+            borderRadius: R.r26,
+            backgroundColor: 'rgba(26,22,20,.94)',
+            borderWidth: 1,
+            borderColor: T.t1,
+          }}>
           {NAV.map((item) => (
             <NavItem key={item.key} item={item} active={item.key === active} />
           ))}
@@ -143,14 +161,19 @@ function MiniPlayer({
   collapse: SharedValue<number>;
 }) {
   const router = useRouter();
-  const { track, playing, toggle, duration } = usePlayer();
+  const { track, playing, toggle, duration, elapsed } = usePlayer();
   const { accent } = usePrefs();
   const { albumById } = useLibrary();
-  const elapsed = useElapsed();
 
   const art = artworkFor(track!.artist, track!.album);
   const cover = albumById(track!.albumId)?.cover ?? null;
-  const progress = duration > 0 ? Math.min(1, elapsed / duration) : 0;
+
+  // O mini player fica montado o tempo todo. Com o tempo em estado do React ele
+  // re-renderizava cinco vezes por segundo, em toda tela do app, só para mover 2 px de
+  // barra. Aqui a barra anda na thread de UI e o React não é acordado.
+  const bar = useAnimatedStyle(() => ({
+    width: `${(duration > 0 ? Math.min(1, elapsed.value / duration) : 0) * 100}%`,
+  }));
 
   // A capa é o que viaja até o Now Playing — não o cartão inteiro.
   const { ref, launch } = useZoomLaunch(12);
@@ -273,7 +296,7 @@ function MiniPlayer({
           height: 2,
           backgroundColor: T.t08,
         }}>
-        <View style={{ height: 2, width: `${progress * 100}%`, backgroundColor: accent }} />
+        <Animated.View style={[{ height: 2, backgroundColor: accent }, bar]} />
       </View>
     </Pressable>
     </GestureDetector>

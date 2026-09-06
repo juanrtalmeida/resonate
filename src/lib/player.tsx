@@ -25,6 +25,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
+import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 import { useLibrary } from './library';
 import * as liveActivity from '../../modules/live-activity';
@@ -84,6 +85,19 @@ type PlayerApi = {
   next: () => void;
   previous: () => void;
   seekTo: (seconds: number) => void;
+  /**
+   * Posição atual, em segundos, como shared value.
+   *
+   * O status do player chega a cada 200 ms. Quando isso era estado do React, todo tick
+   * re-renderizava a tela inteira do Now Playing — e com ela o ZoomScreen e cada
+   * ZoomFade abaixo dele, cinco vezes por segundo, inclusive durante a animação de
+   * entrada. Aqui a escrita não acorda o React: quem desenha barra, fita e forma de onda
+   * lê isto num worklet.
+   *
+   * Quem precisa do número em JavaScript — os rótulos de tempo, a letra sincronizada —
+   * usa `useElapsed()`, que re-renderiza só a folha que o chama.
+   */
+  elapsed: SharedValue<number>;
   /** Só para useAudioPlayerStatus em quem precisa do tempo decorrido. */
   player: ReturnType<typeof useAudioPlayer>;
 };
@@ -248,14 +262,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     stepRef.current = step;
   }, [step]);
 
+  const elapsed = useSharedValue(0);
+
   useEffect(() => {
     const sub = player.addListener('playbackStatusUpdate', (status) => {
+      // Escrever num shared value não re-renderiza nada: os três setState abaixo só
+      // disparam quando o valor muda de verdade, e o tempo não passa por eles.
+      elapsed.value = status.currentTime;
       setPlaying(status.playing);
       if (status.isLoaded && status.duration > 0) setLoadedDuration(status.duration);
       if (status.didJustFinish) advanceRef.current();
     });
     return () => sub.remove();
-  }, [player]);
+  }, [player, elapsed]);
 
   // Carrega no player o que a sessão anterior estava tocando, pausado e na posição certa.
   // Uma vez só: repetir isto no meio da sessão jogaria o usuário de volta ao ponto salvo.
@@ -384,8 +403,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       seekTo: (seconds) => {
         const limit = loadedDuration || track?.duration || 0;
         const target = limit > 0 ? Math.min(seconds, limit - 0.05) : seconds;
-        player.seekTo(Math.max(0, target)).catch(() => {});
+        const at = Math.max(0, target);
+        // Adianta o valor: sem isto a fita só reagiria no próximo status, 200 ms depois,
+        // e o toque parecia não ter pegado.
+        // eslint-disable-next-line react-hooks/immutability
+        elapsed.value = at;
+        player.seekTo(at).catch(() => {});
       },
+      elapsed,
     }),
     [
       track,
@@ -400,6 +425,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setShuffle,
       continuation,
       repeat,
+      elapsed,
     ]
   );
 
@@ -412,7 +438,13 @@ export function usePlayer(): PlayerApi {
   return api;
 }
 
-/** Tempo decorrido. Só chame em quem realmente precisa: re-renderiza a cada 200 ms. */
+/**
+ * Tempo decorrido como número de JavaScript.
+ *
+ * Re-renderiza quem chama a cada 200 ms, então só vale em folha — um rótulo de tempo, o
+ * painel de letra. Para desenhar progresso use `usePlayer().elapsed`, que é shared value
+ * e não acorda o React.
+ */
 export function useElapsed(): number {
   const { player } = usePlayer();
   return useAudioPlayerStatus(player).currentTime;

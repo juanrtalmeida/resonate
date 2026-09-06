@@ -4,8 +4,6 @@ import { Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, View } f
 import Animated, {
   FadeInLeft,
   FadeInRight,
-  FadeOutLeft,
-  FadeOutRight,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
@@ -112,6 +110,12 @@ export default function LibraryScreen() {
 
       <Tabs current={tab} onPick={pickTab} />
 
+      {/*
+        Daqui para baixo é conteúdo, e é só isto que se move na troca de aba. O título e
+        as abas ficam de fora: o traço de acento corre até a aba nova e nada mais sai do
+        lugar.
+      */}
+      <Animated.View entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
       {tab === 'albums' && albums.length > 0 && <Fresh albums={albums.slice(0, 8)} />}
 
       {tab === 'albums' && (
@@ -141,10 +145,18 @@ export default function LibraryScreen() {
           </Body>
         </Pressable>
       )}
+      </Animated.View>
     </View>
   );
 
   const bottom = CHROME_HEIGHT + insets.bottom;
+
+  /**
+   * Só as primeiras linhas animam. As de baixo montam por virtualização enquanto se
+   * rola, e animá-las faria a lista piscar a cada rolagem.
+   */
+  const enter = (i: number) =>
+    i < 8 ? (forward ? FadeInRight : FadeInLeft).duration(240).delay(i * 22) : undefined;
 
   /**
    * Um `content` em vez de um `return` por aba: o Modal de nova lista vivia só no ramo
@@ -174,8 +186,10 @@ export default function LibraryScreen() {
             Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
           </EmptyState>
         }
-        renderItem={({ item }) => (
-          <AlbumCell album={item} size={cell} count={item.trackIds.length} />
+        renderItem={({ item, index }) => (
+          <Animated.View entering={enter(index)}>
+            <AlbumCell album={item} size={cell} count={item.trackIds.length} />
+          </Animated.View>
         )}
       />
     );
@@ -199,14 +213,16 @@ export default function LibraryScreen() {
           paddingBottom: bottom,
           paddingHorizontal: PADDING,
         }}
-        renderItem={({ item }) => (
-          <GroupRow
-            title={item.name}
-            subtitle={`${item.trackIds.length} ${item.trackIds.length === 1 ? 'faixa' : 'faixas'}`}
-            art={artworkFor(item.name, 'lista')}
-            cover={item.cover ?? null}
-            onPress={() => router.push(`/playlist/${item.id}`)}
-          />
+        renderItem={({ item, index }) => (
+          <Animated.View entering={enter(index)}>
+            <GroupRow
+              title={item.name}
+              subtitle={`${item.trackIds.length} ${item.trackIds.length === 1 ? 'faixa' : 'faixas'}`}
+              art={artworkFor(item.name, 'lista')}
+              cover={item.cover ?? null}
+              onPress={() => router.push(`/playlist/${item.id}`)}
+            />
+          </Animated.View>
         )}
       />
     );
@@ -230,7 +246,11 @@ export default function LibraryScreen() {
           paddingBottom: bottom,
           paddingHorizontal: PADDING,
         }}
-        renderItem={({ item }) => <ArtistRow artist={item} />}
+        renderItem={({ item, index }) => (
+          <Animated.View entering={enter(index)}>
+            <ArtistRow artist={item} />
+          </Animated.View>
+        )}
       />
     );
   }
@@ -254,15 +274,17 @@ export default function LibraryScreen() {
           paddingHorizontal: PADDING,
         }}
         renderItem={({ item, index }) => (
-          <TrackRow
-            track={item}
-            position={index + 1}
-            accent={accent}
-            onPress={() => play(tracks, index)}
-            onLongPress={() => open([item.id])}
-            onQueue={() => enqueueLast([item])}
-            onPlaylist={() => open([item.id])}
-          />
+          <Animated.View entering={enter(index)}>
+            <TrackRow
+              track={item}
+              position={index + 1}
+              accent={accent}
+              onPress={() => play(tracks, index)}
+              onLongPress={() => open([item.id])}
+              onQueue={() => enqueueLast([item])}
+              onPlaylist={() => open([item.id])}
+            />
+          </Animated.View>
         )}
       />
     );
@@ -270,13 +292,7 @@ export default function LibraryScreen() {
 
   return (
     <>
-      <Animated.View
-        key={tab}
-        entering={(forward ? FadeInRight : FadeInLeft).duration(240)}
-        exiting={(forward ? FadeOutLeft : FadeOutRight).duration(140)}
-        style={{ flex: 1 }}>
-        {content}
-      </Animated.View>
+      {content}
       {sheet}
       <NewPlaylist visible={naming} onClose={() => setNaming(false)} />
     </>

@@ -1,4 +1,3 @@
-import { Accelerometer } from 'expo-sensors';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -6,8 +5,12 @@ import Animated, {
   FadeInDown,
   FadeOut,
   LinearTransition,
+  SensorType,
   runOnJS,
+  useAnimatedReaction,
+  useAnimatedSensor,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSpring,
@@ -37,7 +40,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
-import { TILT_INTERVAL, createTilt } from '@/lib/tilt';
+import { TILT_INTERVAL, TILT_REST, tiltAngles, tiltStep } from '@/lib/tilt';
 import { LyricsView, NoLyrics } from '@/components/lyrics';
 import { parseLrc, type Lyrics } from '@/lib/lrc';
 import { CONTINUATIONS, continuationFor } from '@/lib/queue';
@@ -47,11 +50,10 @@ import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
-  const { track, playing, duration, toggle, next, previous, seekTo, canNext, canPrevious } =
+  const { track, playing, duration, toggle, next, previous, seekTo, canNext, canPrevious, elapsed } =
     usePlayer();
   const { accent, treatment, isLiked, toggleLike } = usePrefs();
   const { albumById } = useLibrary();
-  const elapsed = useElapsed();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
 
@@ -60,6 +62,11 @@ export default function PlayerScreen() {
   useEffect(() => {
     q.value = withTiming(showQueue ? 1 : 0, { duration: 320 });
   }, [showQueue, q]);
+
+  // Derivado na thread de UI: a fita e a forma de onda leem isto sem passar pelo React.
+  const progress = useDerivedValue(() =>
+    duration > 0 ? Math.min(1, elapsed.value / duration) : 0
+  );
 
   const dragX = useSharedValue(0);
   const tilt = useTilt();
@@ -112,7 +119,6 @@ export default function PlayerScreen() {
 
   const art = artworkFor(track.artist, track.album);
   const cover = albumById(track.albumId)?.cover ?? null;
-  const progress = duration > 0 ? Math.min(1, elapsed / duration) : 0;
   const liked = isLiked(track.id);
 
   // Os callbacks rodam na thread de UI, fora do render: escrever no shared value ali é
@@ -178,7 +184,7 @@ export default function PlayerScreen() {
         {/* área da arte, ou a letra no lugar dela */}
         {showLyrics ? (
           <ZoomFade style={{ flex: 1 }}>
-            <LyricsPane track={track} elapsed={elapsed} onSeek={seekTo} />
+            <LyricsPane track={track} onSeek={seekTo} />
           </ZoomFade>
         ) : (
         <GestureDetector gesture={swipe}>
@@ -289,7 +295,7 @@ export default function PlayerScreen() {
               seed={track.id}
               progress={progress}
               accent={accent}
-              onSeek={(delta) => seekTo(elapsed + delta * duration)}
+              onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
             />
           )}
 
@@ -301,18 +307,14 @@ export default function PlayerScreen() {
               gap: 10,
               marginTop: 16,
             }}>
-            <Mono size={13} weight={500} color={T.full} style={{ minWidth: 56 }}>
-              {fmt(Math.floor(elapsed))}.{Math.floor((elapsed % 1) * 10)}
-            </Mono>
+            <Elapsed />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: accent }} />
               <Mono size={10} weight={500} tracking={0.14} caps color={T.t62}>
                 {playing ? track.file.split('.').pop() : 'pausado'}
               </Mono>
             </View>
-            <Mono size={13} weight={500} color={T.t5} align="right" style={{ minWidth: 56 }}>
-              {duration > 0 ? `-${fmt(duration - elapsed)}` : '--:--'}
-            </Mono>
+            <Remaining duration={duration} />
           </View>
 
           <View
@@ -382,37 +384,57 @@ const EMPTY_LYRICS: Lyrics = { synced: false, lines: [] };
 const ART_MINI = 92;
 
 /**
- * Assina o acelerômetro e devolve os ângulos do tilt em shared values. Sem sensor — web,
- * emulador sem acelerômetro — fica em zero e nada se move.
+ * Os dois relógios são folhas de propósito: `useElapsed` re-renderiza quem o chama a
+ * cada 200 ms, e aqui isso custa um texto — não a tela inteira do Now Playing.
+ */
+function Elapsed() {
+  const elapsed = useElapsed();
+  return (
+    <Mono size={13} weight={500} color={T.full} style={{ minWidth: 56 }}>
+      {fmt(Math.floor(elapsed))}.{Math.floor((elapsed % 1) * 10)}
+    </Mono>
+  );
+}
+
+function Remaining({ duration }: { duration: number }) {
+  const elapsed = useElapsed();
+  return (
+    <Mono size={13} weight={500} color={T.t5} align="right" style={{ minWidth: 56 }}>
+      {duration > 0 ? `-${fmt(duration - elapsed)}` : '--:--'}
+    </Mono>
+  );
+}
+
+/**
+ * Ângulos do tilt, em shared values. Sem sensor — web, emulador sem acelerômetro — fica
+ * em zero e nada se move.
+ *
+ * O sensor é o do próprio Reanimated: leitura e filtro rodam na thread de UI, e o
+ * JavaScript não é acordado uma vez sequer. A versão anterior assinava o `expo-sensors`
+ * e escrevia os shared values de um callback em JS a cada 80 ms — trabalho na thread
+ * errada, e bem no meio da transição de entrada do Now Playing.
  *
  * O `withTiming` entre leituras é o que separa o efeito do serrilhado: a 80 ms o sinal
  * chega em degraus, e a animação preenche o intervalo.
  */
 function useTilt() {
+  const gravity = useAnimatedSensor(SensorType.GRAVITY, { interval: TILT_INTERVAL });
+  const state = useSharedValue(TILT_REST);
   const rx = useSharedValue(0);
   const ry = useSharedValue(0);
 
-  useEffect(() => {
-    let sub: { remove: () => void } | undefined;
-    let cancelled = false;
-    const step = createTilt();
-    Accelerometer.isAvailableAsync()
-      .then((ok) => {
-        if (!ok || cancelled) return;
-        Accelerometer.setUpdateInterval(TILT_INTERVAL);
-        sub = Accelerometer.addListener(({ x, y }) => {
-          const angle = step(x, y);
-          const ease = { duration: TILT_INTERVAL * 1.6 };
-          rx.value = withTiming(angle.rx, ease);
-          ry.value = withTiming(angle.ry, ease);
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      sub?.remove();
-    };
-  }, [rx, ry]);
+  // useAnimatedReaction, e não useDerivedValue: o passo lê e escreve o mesmo estado, e um
+  // derived value que depende do que ele próprio escreve se realimenta.
+  useAnimatedReaction(
+    () => gravity.sensor.value,
+    (reading) => {
+      state.value = tiltStep(state.value, reading.x, reading.y);
+      const angle = tiltAngles(state.value);
+      const ease = { duration: TILT_INTERVAL * 1.6 };
+      rx.value = withTiming(angle.rx, ease);
+      ry.value = withTiming(angle.ry, ease);
+    }
+  );
 
   return { rx, ry };
 }
@@ -694,20 +716,21 @@ function ArtLyricsTabs({
  * Busca a letra da faixa quando a aba abre. O texto não fica no índice da biblioteca
  * (ver docs/03-decisoes.md, D11), então é lido do arquivo aqui.
  */
-function LyricsPane(props: { track: Track; elapsed: number; onSeek: (seconds: number) => void }) {
+function LyricsPane(props: { track: Track; onSeek: (seconds: number) => void }) {
   // A key remonta ao trocar de faixa, o que zera o estado sem um setState no efeito.
   return <LoadedLyrics key={props.track.id} {...props} />;
 }
 
 function LoadedLyrics({
   track,
-  elapsed,
   onSeek,
 }: {
   track: Track;
-  elapsed: number;
   onSeek: (seconds: number) => void;
 }) {
+  // A letra sincronizada é o único lugar que realmente precisa do tempo em JavaScript, e
+  // só enquanto o painel está aberto. Re-renderiza daqui para baixo, não a tela inteira.
+  const elapsed = useElapsed();
   const { markLyrics } = useLibrary();
   const [lyrics, setLyrics] = useState<Lyrics | null>(track.hasLyrics ? null : EMPTY_LYRICS);
 
