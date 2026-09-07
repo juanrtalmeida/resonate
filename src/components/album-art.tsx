@@ -21,6 +21,7 @@ export function AlbumArt({
   detail = 'full',
   scrim = false,
   cover,
+  onCoverSettled,
   style,
 }: {
   art: Artwork;
@@ -31,6 +32,14 @@ export function AlbumArt({
   scrim?: boolean;
   /** Capa extraída do arquivo. Quando existe, cobre a arte procedural. */
   cover?: string | null;
+  /**
+   * Chamado quando a capa terminou de carregar — ou falhou.
+   *
+   * Existe para a captura do card de compartilhamento: ela roda com o card fora da tela,
+   * e capturar antes de a imagem chegar sai com a arte procedural no lugar da capa. Erro
+   * também avisa, senão uma capa ilegível travaria o compartilhamento para sempre.
+   */
+  onCoverSettled?: () => void;
   style?: ViewStyle;
 }) {
   const ring = size * 0.68;
@@ -54,6 +63,8 @@ export function AlbumArt({
           source={{ uri: cover }}
           style={{ position: 'absolute', width: size, height: size }}
           resizeMode="cover"
+          onLoad={onCoverSettled}
+          onError={onCoverSettled}
         />
       ) : null}
       {!cover && detail !== 'plain' && (

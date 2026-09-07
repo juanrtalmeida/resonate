@@ -23,6 +23,9 @@ lint aplicar as regras de pureza e imutabilidade do compilador ao código-fonte.
 ## Estrutura de pastas
 
 ```
+modules/
+  live-activity/          Live Activity do iOS: cartão na tela de bloqueio
+  story-share/            intent do Stories com grantUriPermission (Android)
 src/
   app/                    rotas do expo-router (file-based)
     _layout.tsx           fontes, providers, <Stack>, <Chrome/> flutuante

@@ -65,10 +65,23 @@ esse espaço no `paddingBottom`, e a `Sheet` sobe com mola por esse tanto.
 
 Compartilhar captura uma View em PNG (`react-native-view-shot`) e entrega por dois
 caminhos: a folha do sistema (`expo-sharing`, o único que existe no iOS) e o intent
-`com.instagram.share.ADD_TO_STORY`, que é Android puro. O intent precisa de um
-`content://` — `getContentUriAsync` de `expo-file-system/legacy` — e da flag 1
-(`FLAG_GRANT_READ_URI_PERMISSION`), senão o Instagram não consegue ler o arquivo. Falhando,
-cai na folha.
+`com.instagram.share.ADD_TO_STORY`, que é Android puro. Falhando, cai na folha.
+
+O Stories vai em **duas camadas**, que é o que separa um card de um print: a caixa como
+etiqueta arrastável em `interactive_asset_uri`, e o gradiente do fundo em
+`top_background_color`/`bottom_background_color` — duas strings, sem segunda imagem.
+
+O intent sai de `modules/story-share`, e não do `expo-intent-launcher`, por um detalhe do
+Android sem contorno em JavaScript: `FLAG_GRANT_READ_URI_PERMISSION` só concede a URI do
+`data` do intent (e as do ClipData), nunca as que viajam em *extras*. Uma etiqueta em
+`interactive_asset_uri` chega ilegível, e o FileProvider do Expo é `exported="false"`,
+como todo FileProvider deve ser. O módulo chama `grantUriPermission` antes de disparar.
+
+A alternativa sem código nativo era publicar a etiqueta no MediaStore, de onde qualquer
+app com permissão de mídia lê. Foi tentada e descartada: deixa um arquivo na galeria do
+usuário a cada compartilhamento, e apagá-lo depois faz o Android pedir "apagar esta foto?"
+— um diálogo de sistema no fim de cada envio. **Nada é escrito fora do app**: a captura
+fica no cache dele.
 
 Apagar um arquivo tem duas rotas, porque o Android tem duas realidades para o mesmo
 arquivo: `File.delete()` resolve o que o app pode escrever (SAF, Documents do iOS), e o

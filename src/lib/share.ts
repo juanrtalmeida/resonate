@@ -1,20 +1,31 @@
 /**
  * Compartilhar uma faixa, um álbum ou uma lista como imagem.
  *
- * O card é uma View de verdade, montada em RN e capturada em PNG — é como Spotify e
- * Apple Music fazem. Nada de desenhar a mesma coisa duas vezes: o que o usuário vê na
- * pré-visualização é literalmente o arquivo que sai.
+ * Dois caminhos de saída, e eles não produzem a mesma coisa:
  *
- * Dois caminhos de saída, porque um não cobre o outro:
+ * - **A folha do sistema** (`expo-sharing`) recebe *um* arquivo e nada mais. Alcança tudo
+ *   o que o aparelho tem instalado, é o único caminho no iOS, e por isso o card sai dela
+ *   achatado: fundo, capa, nome e marca assados num PNG de 1080x1920.
  *
- * - A folha do sistema (`expo-sharing`) alcança tudo o que o aparelho tem instalado, sem
- *   integração por app, e é o único caminho no iOS.
- * - O Stories do Instagram só entra pelo intent `com.instagram.share.ADD_TO_STORY`, que
- *   é Android puro. Vale o trabalho porque é o destino que as pessoas de fato usam, e é
- *   o que o Spotify oferece.
+ * - **O Stories do Instagram** aceita duas camadas, e é assim que o card do Spotify não
+ *   parece um print: a caixa vai como *etiqueta* (`interactive_asset_uri`), que o usuário
+ *   arrasta e redimensiona lá dentro, e o fundo é um gradiente que o próprio Instagram
+ *   desenha a partir de `top_background_color` e `bottom_background_color`. Duas strings
+ *   de cor — nenhuma segunda imagem.
+ *
+ * A etiqueta é a razão de existir `publishSticker`. `FLAG_GRANT_READ_URI_PERMISSION` só
+ * concede a URI que está no `data` do intent, nunca as que viajam em extras — e o
+ * FileProvider do Expo é `exported="false"`, então um `content://` dele em extra sai
+ * ilegível para o Instagram. A saída sem código nativo é publicar a etiqueta no
+ * MediaStore: dali qualquer app com permissão de mídia lê, sem precisar de concessão.
  *
  * Os módulos nativos entram por `import()` dentro das funções, e não no topo: assim um
  * build feito antes deles existirem continua abrindo o app, e só esta ação falha.
+ *
+ * Nada é escrito fora do app: a captura fica no cache dele, que é onde o view-shot grava.
+ * O PNG que aparecia em `DCIM/` — indexado como foto na galeria — vinha do
+ * `Asset.create` da versão anterior, que publicava a etiqueta no MediaStore para o
+ * Instagram poder lê-la. Não existe mais.
  */
 
 import { Platform } from 'react-native';
@@ -37,48 +48,50 @@ export const canShareToStories = Platform.OS === 'android';
  *
  * `tmpfile` em vez de base64: o arquivo é o que os dois caminhos de saída querem, e
  * atravessar um PNG de 1080x1920 pela ponte como string não serve para nada.
+ *
+ * Sem `resize` a captura sai no tamanho nativo da View — que é o que a etiqueta quer, e
+ * o alfa fora dos cantos arredondados vem de graça no PNG. O card achatado, esse sim,
+ * precisa dos 1080x1920 que o Instagram pede.
  */
-async function capture(ref: React.RefObject<unknown>): Promise<string> {
+async function capture(ref: React.RefObject<unknown>, resize: boolean): Promise<string> {
   const { captureRef } = await import('react-native-view-shot');
   return captureRef(ref, {
     format: 'png',
     quality: 1,
     result: 'tmpfile',
-    fileName: `resonate-${Date.now()}`,
-    width: OUT_WIDTH,
-    height: OUT_HEIGHT,
+    ...(resize ? { width: OUT_WIDTH, height: OUT_HEIGHT } : null),
   });
 }
 
 /**
- * Manda o card para o Stories do Instagram.
+ * Manda a etiqueta para o Stories, com o fundo por conta do Instagram.
  *
- * O intent precisa de um `content://`, não de um `file://`: o Instagram é outro
- * processo, e desde o Android 7 passar um caminho de arquivo entre apps lança
- * `FileUriExposedException`. `getContentUriAsync` devolve a URI do FileProvider que o
- * Expo já registra, e a flag 1 (`FLAG_GRANT_READ_URI_PERMISSION`) é o que autoriza o
- * Instagram a lê-la.
+ * `interactive_asset_uri` é o que faz a caixa chegar como objeto arrastável em vez de
+ * papel de parede, e as duas cores substituem a imagem de fundo — é a combinação que dá
+ * o card do Spotify. Sem `data` de propósito: uma imagem ali viraria o fundo e cobriria o
+ * gradiente.
  *
- * `source_application` é exigido pelo Instagram para atribuir a origem. Sem um app id
- * do Facebook registrado sobra o nome do pacote, que as versões atuais aceitam.
+ * O intent sai de um módulo nativo nosso, e não do `expo-intent-launcher`, por um detalhe
+ * do Android sem contorno em JavaScript: `FLAG_GRANT_READ_URI_PERMISSION` só concede a
+ * URI do `data`, nunca as que viajam em extras. Uma etiqueta em `interactive_asset_uri`
+ * chega ilegível, e o FileProvider do Expo é `exported="false"` — como todo FileProvider
+ * deve ser. `modules/story-share` chama `grantUriPermission` antes de disparar, e com isso
+ * a etiqueta pode ficar no cache do app.
  *
- * Devolve false quando o Instagram não está instalado ou recusou — quem chama cai na
- * folha do sistema.
+ * A versão anterior publicava a etiqueta no MediaStore para escapar disso. Funcionava, e
+ * deixava um arquivo na galeria do usuário a cada compartilhamento; apagá-lo depois fazia
+ * o Android pedir "apagar esta foto?" no fim de cada envio. Nada é escrito fora do app
+ * agora.
+ *
+ * Devolve false quando o Instagram não está instalado, quando o módulo nativo não está no
+ * build, ou quando ele recusou — quem chama cai na folha do sistema com o card achatado.
  */
-async function toStories(file: string): Promise<boolean> {
+async function toStories(sticker: string, top: string, bottom: string): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   try {
     const { getContentUriAsync } = await import('expo-file-system/legacy');
-    const IntentLauncher = await import('expo-intent-launcher');
-    const uri = await getContentUriAsync(file);
-    await IntentLauncher.startActivityAsync('com.instagram.share.ADD_TO_STORY', {
-      packageName: 'com.instagram.android',
-      data: uri,
-      type: 'image/png',
-      flags: 1,
-      extra: { source_application: 'com.nossapesca.Resonate' },
-    });
-    return true;
+    const { openStory } = await import('../../modules/story-share');
+    return await openStory(await getContentUriAsync(sticker), top, bottom);
   } catch {
     return false;
   }
@@ -104,20 +117,40 @@ async function toSheet(file: string, title: string): Promise<boolean> {
  * Captura e entrega. Devolve false quando não deu — sem módulo nativo, sem app de
  * destino, ou o usuário fechou a folha.
  *
+ * Cada destino captura a sua View: o Stories quer só a caixa, com o fundo transparente,
+ * e a folha quer o card inteiro. Duas capturas da mesma árvore, e nenhuma tela a mais.
+ *
  * O Stories cai na folha quando falha: é melhor abrir a folha do que não fazer nada
  * depois de o usuário ter escolhido compartilhar.
  */
-export async function shareCard(
-  ref: React.RefObject<unknown>,
-  target: ShareTarget,
-  title: string
-): Promise<boolean> {
-  let file: string;
+export async function shareCard({
+  card,
+  sticker,
+  target,
+  title,
+  top,
+  bottom,
+}: {
+  /** O card inteiro, com fundo. Vai para a folha do sistema. */
+  card: React.RefObject<unknown>;
+  /** Só a caixa. Vira etiqueta no Stories. */
+  sticker: React.RefObject<unknown>;
+  target: ShareTarget;
+  title: string;
+  /** As duas paradas do gradiente que o Instagram desenha atrás da etiqueta. */
+  top: string;
+  bottom: string;
+}): Promise<boolean> {
+  if (target === 'stories') {
+    try {
+      if (await toStories(await capture(sticker, false), top, bottom)) return true;
+    } catch {
+      // segue para a folha
+    }
+  }
   try {
-    file = await capture(ref);
+    return await toSheet(await capture(card, true), title);
   } catch {
     return false;
   }
-  if (target === 'stories' && (await toStories(file))) return true;
-  return toSheet(file, title);
 }

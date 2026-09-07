@@ -27,11 +27,22 @@ import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePrefs } from '@/lib/prefs';
 import { removeFromDevice } from '@/lib/remove';
+import { canShareToStories } from '@/lib/share';
 import type { Album, Track } from '@/lib/scan';
 import { AlbumArt } from './album-art';
-import { Heart, Play, Plus, Queue, Share as ShareIcon, Shuffle, Trash } from './icons';
+import {
+  Close,
+  Heart,
+  Instagram,
+  Play,
+  Plus,
+  Queue,
+  Share as ShareIcon,
+  Shuffle,
+  Trash,
+} from './icons';
 import { usePlaylistSheet } from './playlist-sheet';
-import { ShareSheet, type Shareable } from './share-card';
+import { useShareCard, type Shareable } from './share-card';
 import { Body, Display, Mono } from './text';
 
 export type MenuAction = {
@@ -106,6 +117,30 @@ export function ContextMenu({
             paddingTop: insets.top,
             paddingBottom: insets.bottom,
           }}>
+          {/*
+            Um X, e não só o toque no fundo. O fundo fecha desde sempre, mas ele exige
+            acertar as beiradas — e com a lista de ações ocupando o meio da tela, sobra
+            pouca beirada para acertar.
+          */}
+          <Animated.View
+            entering={FadeIn.duration(200).delay(80)}
+            style={{ position: 'absolute', top: insets.top + 10, right: 22 }}>
+            <Pressable
+              onPress={close}
+              hitSlop={12}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: T.t08,
+                borderWidth: 1,
+                borderColor: T.t1,
+              }}>
+              <Close size={16} color={T.t72} />
+            </Pressable>
+          </Animated.View>
           <Animated.View entering={FadeInDown.duration(260)} style={{ alignItems: 'center' }}>
             <AlbumArt
               art={header.art}
@@ -277,7 +312,7 @@ export type MenuItem =
  */
 export function useItemMenu() {
   const [item, setItem] = useState<MenuItem | null>(null);
-  const [sharing, setSharing] = useState<Shareable | null>(null);
+  const { share, card } = useShareCard();
 
   const { tracksOf, trackById, albumById, removeTracks } = useLibrary();
   const { play, enqueueNext, enqueueLast } = usePlayer();
@@ -359,11 +394,23 @@ export function useItemMenu() {
       });
     }
 
+    /*
+      Dois destinos, duas linhas — e nenhuma tela no meio. A folha do sistema alcança
+      tudo; o Stories é o atalho que dispensa escolher na folha, e por isso vale uma
+      linha própria.
+    */
     list.push({
       label: 'Compartilhar',
       icon: <ShareIcon size={16} color={T.t72} />,
-      onPress: () => setSharing(shareableFor(menu, tracks.length, coverOf(menu))),
+      onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu)), 'sheet'),
     });
+    if (canShareToStories) {
+      list.push({
+        label: 'Stories',
+        icon: <Instagram size={16} color={T.t72} />,
+        onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu)), 'stories'),
+      });
+    }
 
     if (menu.kind === 'playlist') {
       list.push({
@@ -412,11 +459,7 @@ export function useItemMenu() {
           actions={actions}
           onClose={() => setItem(null)}
         />
-        <ShareSheet
-          visible={sharing !== null}
-          item={sharing}
-          onClose={() => setSharing(null)}
-        />
+        {card}
         {sheet}
       </>
     ),

@@ -124,6 +124,24 @@ Uma simplificação de custo, não de capacidade: no protótipo, as barras da fi
 próximas ao cursor pulsam individualmente. Seriam 96 estilos animados simultâneos para um
 brilho; a fita já desliza, e o pulso saiu.
 
+## Molas — a pegadinha do `mass`
+
+No Reanimated 4 o padrão do `withSpring` é o `GentleSpringConfig`, que traz **`mass: 4`**.
+Um config só com `damping` e `stiffness` herda essa massa, e a razão de amortecimento sai
+pela metade do pretendido: `{damping: 32, stiffness: 220}` dá ζ = 0,54, não 1,08 — 14% de
+overshoot medido no traço das abas.
+
+**Escreva `mass` sempre.** Quem quer "chega e para" precisa de ζ ≥ 1: `damping ≥ 2·√(k·m)`.
+Os springs que repicam de propósito (arraste da faixa, o visto do enfileirar, o knob dos
+ajustes) ficaram com a massa herdada — foi assim que foram aprovados.
+
+## Alturas de barra amarradas ao contêiner
+
+A fita de seek e a forma de onda desenham barras a partir de `waveform()`, que devolve
+0,14..1. As duas tinham a altura em números soltos — `9 + h*52` numa fita de 58, `10 + h*82`
+numa caixa de 84 — e a barra mais alta passava do contêiner: cortada em cima e embaixo.
+Agora as duas derivam da própria altura (`RIBBON_H`, `WAVE_H`), então não há como estourar.
+
 ## Animações
 
 Todas em Reanimated 4. Padrões usados:

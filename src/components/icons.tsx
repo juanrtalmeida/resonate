@@ -394,6 +394,21 @@ export function Trash({ size = 18, color = '#F6F1EA' }: IconProps) {
   );
 }
 
+/** X. Fecha o menu do toque longo. */
+export function Close({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18">
+      <Path
+        d="M4.6 4.6l8.8 8.8M13.4 4.6l-8.8 8.8"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
 /** Reticências. Marca o toque longo nas linhas que abrem menu. */
 export function More({ size = 18, color = 'rgba(246,241,234,.5)' }: IconProps) {
   return (

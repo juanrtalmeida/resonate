@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Pressable,
@@ -81,10 +82,15 @@ const tracePosition = makeMutable(0);
 let traceWidth = 0;
 
 /**
- * Superamortecida de propósito: nesta rigidez qualquer razão abaixo de 1 fazia o traço
- * passar da aba nova e voltar, e esse repique era o que mais se via na troca.
+ * Superamortecida de propósito: o traço chega na aba nova e para.
+ *
+ * `mass: 1` é explícito e obrigatório. O padrão do `withSpring` no Reanimated 4 é o
+ * `GentleSpringConfig`, que traz **mass 4** — um config só com `damping` e `stiffness`
+ * herda essa massa e sai com metade da razão de amortecimento pretendida. Com 32/220 e
+ * massa 4 a razão cai para 0,54, e foi isso que medi: o traço passava 56 px da aba e
+ * voltava em 13 quadros. Com massa 1 a razão é 1,08 e não há repique.
  */
-const TRACE = { damping: 32, stiffness: 220 };
+const TRACE = { damping: 32, mass: 1, stiffness: 220 };
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -100,6 +106,21 @@ export default function LibraryScreen() {
   const { tab: raw } = useLocalSearchParams<{ tab?: string }>();
 
   const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'albums';
+
+  /*
+    A aba troca na hora; as linhas chegam depois.
+
+    Não há leitura de disco nenhuma aqui — a biblioteca já está em memória desde o boot.
+    O que travava era o *mount* das linhas: montar uma dezena de TrackRow, cada uma com um
+    GestureDetector nativo e shared values próprios, no mesmo commit que move o traço de
+    acento. Medido: 370 ms entre o toque e o traço começar a andar.
+
+    `useDeferredValue` separa os dois. O commit urgente move a faixa de abas e põe o
+    loader; o commit de baixa prioridade monta as linhas. O toque responde num quadro, e o
+    custo continua existindo — só saiu da frente do usuário.
+  */
+  const shown: TabKey = useDeferredValue(tab);
+  const settling = shown !== tab;
 
   // A lista nova entra do lado para onde a aba andou; a velha sai para o outro.
   // Decidido no toque, não no render: a direção é da interação, e a aba chega pela URL
@@ -180,9 +201,12 @@ export default function LibraryScreen() {
 
         A `key` é a aba porque o cabeçalho não remonta mais — a lista virou uma só. Sem
         ela este bloco ficaria montado para sempre e a entrada nunca correria de novo.
+
+        Segue `shown`, e não `tab`: as tiras de capa e os rótulos chegam junto com as
+        linhas, no commit de baixa prioridade. Só a faixa de abas é urgente.
       */}
-      <Animated.View key={tab} entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
-      {tab === 'albums' && albums.length > 0 && (
+      <Animated.View key={shown} entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
+      {shown === 'albums' && albums.length > 0 && (
         <AlbumStrip
           title="Recém-encontrados"
           albums={albums.slice(0, 8)}
@@ -191,7 +215,7 @@ export default function LibraryScreen() {
         />
       )}
 
-      {tab === 'albums' && (
+      {shown === 'albums' && (
         <SectionLabel
           title="Todos os álbuns"
           trailing={`${albums.length}`}
@@ -199,7 +223,7 @@ export default function LibraryScreen() {
         />
       )}
 
-      {tab === 'liked' && favoriteAlbums.length > 0 && (
+      {shown === 'liked' && favoriteAlbums.length > 0 && (
         <AlbumStrip
           title="Álbuns curtidos"
           albums={favoriteAlbums}
@@ -207,11 +231,11 @@ export default function LibraryScreen() {
         />
       )}
 
-      {tab === 'liked' && likedTracks.length > 0 && (
+      {shown === 'liked' && likedTracks.length > 0 && (
         <SectionLabel title="Faixas curtidas" trailing={`${likedTracks.length}`} />
       )}
 
-      {tab === 'playlists' && (
+      {shown === 'playlists' && (
         <Pressable
           onPress={() => setNaming(true)}
           style={{
@@ -247,10 +271,10 @@ export default function LibraryScreen() {
   const enter = (i: number) =>
     i < 8 ? (forward ? FadeInRight : FadeInLeft).duration(240).delay(i * 22) : undefined;
 
-  const carousel = tab === 'albums' && albumView === 'carousel';
+  const carousel = shown === 'albums' && albumView === 'carousel';
 
   /** As faixas que uma linha de faixa toca: a aba diz qual das duas listas é. */
-  const listTracks = tab === 'liked' ? likedTracks : tracks;
+  const listTracks = shown === 'liked' ? likedTracks : tracks;
 
   /*
     Uma FlatList só, para as cinco abas.
@@ -262,7 +286,7 @@ export default function LibraryScreen() {
     `numColumns` nunca muda, a `key` nunca muda, e nada remonta.
   */
   const rows = useMemo<Row[]>(() => {
-    if (tab === 'albums') {
+    if (shown === 'albums') {
       // No carrossel a lista fica vazia de propósito: as capas vão no cabeçalho.
       if (albumView === 'carousel') return NO_ROWS;
       const pairs: Row[] = [];
@@ -271,22 +295,23 @@ export default function LibraryScreen() {
       }
       return pairs;
     }
-    if (tab === 'artists') {
+    if (shown === 'artists') {
       return artists.map((artist) => ({ kind: 'artist', id: artist.name, artist }));
     }
-    if (tab === 'playlists') {
+    if (shown === 'playlists') {
       return playlists.map((playlist) => ({ kind: 'playlist', id: playlist.id, playlist }));
     }
     return listTracks.map((track) => ({ kind: 'track', id: track.id, track }));
-  }, [tab, albumView, albums, artists, playlists, listTracks]);
+  }, [shown, albumView, albums, artists, playlists, listTracks]);
 
-  const empty = emptyFor(tab, favoriteAlbums.length > 0);
+  const empty = emptyFor(shown, favoriteAlbums.length > 0);
 
   return (
     <>
       <FlatList
         {...chromeScroll}
-        data={rows}
+        // Vazia enquanto assenta: é isto que faz o commit urgente ser barato.
+        data={settling ? NO_ROWS : rows}
         keyExtractor={(r) => r.id}
         ListHeaderComponent={
           <>
@@ -308,13 +333,13 @@ export default function LibraryScreen() {
           </>
         }
         // No carrossel o vazio de verdade já está no cabeçalho.
-        ListEmptyComponent={carousel ? null : empty}
+        ListEmptyComponent={settling ? <Settling /> : carousel ? null : empty}
         contentContainerStyle={{
           paddingTop: insets.top + 24,
           paddingBottom: bottom,
           paddingHorizontal: PADDING,
           // Só a grade precisa de respiro entre as linhas; as listas já têm o seu dentro.
-          gap: tab === 'albums' ? 16 : 0,
+          gap: shown === 'albums' ? 16 : 0,
         }}
         renderItem={({ item, index }) => (
           <Animated.View entering={enter(index)}>
@@ -364,6 +389,21 @@ export default function LibraryScreen() {
       {menu}
       <NewPlaylist visible={naming} onClose={() => setNaming(false)} />
     </>
+  );
+}
+
+/**
+ * O lugar da lista enquanto as linhas montam.
+ *
+ * Alto o bastante para o conteúdo não pular quando elas chegarem, e discreto: quem trocou
+ * de aba já viu o traço de acento andar, e este é só o aviso de que falta um instante.
+ */
+function Settling() {
+  const { accent } = usePrefs();
+  return (
+    <View style={{ paddingTop: 70, alignItems: 'center' }}>
+      <ActivityIndicator color={accent} />
+    </View>
   );
 }
 

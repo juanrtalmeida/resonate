@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    O Instagram precisa ser consultável para o intent resolver, e o Android 11+ esconde
+    os pacotes instalados por padrão.
+  -->
+  <queries>
+    <package android:name="com.instagram.android" />
+  </queries>
+</manifest>

@@ -30,7 +30,11 @@ const AnimatedG = Animated.createAnimatedComponent(G);
 // ------------------------------------------------------------------- fita
 
 const BARS = 96;
-const RIBBON_H = 58;
+/**
+ * Altura da fita. Era 58, e a faixa ficava grande demais para o peso que ela tem na tela
+ * — é um controle de seek, não o assunto do Now Playing.
+ */
+const RIBBON_H = 44;
 const STEP = 6; // 2.5 de largura + 3.5 de espaço
 const SPAN = BARS * STEP - STEP; // 570: o percurso total da fita
 
@@ -158,7 +162,9 @@ export function Ribbon({
 /** As 96 barras da fita, numa cor só. Renderizadas duas vezes: apagadas e no acento. */
 function bars(heights: number[], width: number, fill: string) {
   return heights.map((h, i) => {
-    const barHeight = Math.round(9 + h * 52);
+    // Amarrada ao contêiner: com `9 + h * 52` a barra mais alta dava 61 numa fita de 58,
+    // e o topo e o pé dela saíam cortados pelo viewBox.
+    const barHeight = Math.round(RIBBON_H * (0.16 + h * 0.84));
     return (
       <Rect
         key={i}
@@ -233,7 +239,9 @@ export function Waveform({
         style={{
           flex: 1,
           borderRadius: 2,
-          height: Math.round(10 + h * 82),
+          // Amarrada ao contêiner, como na fita: `10 + h * 82` dava 92 numa caixa de 84,
+          // e as barras mais altas saíam cortadas em cima e embaixo.
+          height: Math.round(WAVE_H * (0.14 + h * 0.86)),
           backgroundColor: color,
         }}
       />

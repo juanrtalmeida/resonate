@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   FadeInDown,
@@ -19,6 +19,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
+import { Backdrop } from '@/components/backdrop';
 import {
   ChevronDown,
   Disc,
@@ -30,17 +31,19 @@ import {
   Play,
   Previous,
   Queue,
+  Instagram,
   Repeat,
   Share as ShareIcon,
   Shuffle,
 } from '@/components/icons';
 import { Ribbon, Vinyl, Waveform } from '@/components/player-visuals';
-import { ShareSheet, type Shareable } from '@/components/share-card';
+import { useShareCard } from '@/components/share-card';
 import { QueueRow } from '@/components/queue-row';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { canPickOutput, pickAudioOutput } from '@/lib/audio-output';
+import { canShareToStories } from '@/lib/share';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
@@ -54,13 +57,14 @@ import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screen } = useWindowDimensions();
   const { track, playing, duration, toggle, next, previous, seekTo, canNext, canPrevious, elapsed } =
     usePlayer();
   const { accent, treatment, isLiked, toggleLike } = usePrefs();
   const { albumById } = useLibrary();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
-  const [sharing, setSharing] = useState<Shareable | null>(null);
+  const { share, card: shareCardView } = useShareCard();
 
   // 0 = capa cheia, 1 = capa reduzida com a fila embaixo.
   const q = useSharedValue(0);
@@ -148,20 +152,26 @@ export default function PlayerScreen() {
   const ribbon = (treatment !== 'wave' || showLyrics) && !showQueue;
 
   // dismissable só fora das letras: lá o arraste vertical pertence à rolagem do texto.
+  /** O que o card leva quando se compartilha do Now Playing. */
+  const nowPlaying = () => ({
+    title: track.title,
+    subtitle: track.artist,
+    detail: track.album,
+    cover,
+    art,
+  });
+
   return (
     <ZoomScreen background={C.surface} dismissable={!showLyrics}>
+      {/*
+        O fundo é a própria capa, borrada — o mesmo `Backdrop` das telas de álbum e de
+        lista. Eram dois radial-gradients tingidos com `art.a` e `art.b`, cores sorteadas
+        pelo hash de "artista + álbum": quando o arquivo tem capa embutida, o fundo
+        combinava com ela só por acaso. Fora do ZoomFade abaixo porque o Backdrop já traz
+        o seu — dois aninhados multiplicariam a opacidade.
+      */}
+      <Backdrop cover={cover} color={art.a} height={screen} />
       <ZoomFade style={{ position: 'absolute', inset: 0 }}>
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: 0.5,
-          experimental_backgroundImage:
-            `radial-gradient(110% 60% at 50% 0%, ${art.a} 0%, transparent 62%),` +
-            `radial-gradient(90% 50% at 20% 100%, ${art.b} 0%, transparent 60%)`,
-        }}
-      />
       <Glow color={art.a} playing={playing} />
       </ZoomFade>
 
@@ -169,13 +179,32 @@ export default function PlayerScreen() {
         style={{
           flex: 1,
           paddingTop: insets.top + 16,
-          paddingBottom: Math.max(insets.bottom, 18) + 16,
+          // Só o recuo do sistema, mais um fio: o inset já reserva a barra de gestos, e o
+      // que havia além dele era vão puro no pé da tela.
+      paddingBottom: Math.max(insets.bottom, 18) + 4,
           paddingHorizontal: 24,
         }}>
-        {/* barra superior */}
+        {/*
+          barra superior
+
+          O bloco do meio é absoluto, e não um `flex: 1` entre os dois lados: os lados têm
+          larguras diferentes — 38 do botão de fechar contra ~64 das abas de arte e letra —
+          e um filho centrado no espaço que sobra entre eles nasce fora do centro da tela.
+          Era o que jogava o nome do álbum para a esquerda. O recuo simétrico de 72 é a
+          largura do lado mais largo: mantém o centro no centro e impede a colisão.
+        */}
         <ZoomFade style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <CloseButton />
-          <View style={{ alignItems: 'center', flex: 1 }}>
+          <ArtLyricsTabs showLyrics={showLyrics} onChange={setShowLyrics} />
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              alignItems: 'center',
+              paddingHorizontal: 72,
+            }}>
             <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
               Tocando de
             </Mono>
@@ -183,7 +212,6 @@ export default function PlayerScreen() {
               {track.album}
             </Body>
           </View>
-          <ArtLyricsTabs showLyrics={showLyrics} onChange={setShowLyrics} />
         </ZoomFade>
 
         {/* área da arte, ou a letra no lugar dela */}
@@ -232,9 +260,19 @@ export default function PlayerScreen() {
             )}
 
             {treatment === 'wave' && (
-              <View>
-                <Animated.View
-                  style={[{ flexDirection: 'row', alignItems: 'center', gap: 16 }, slideOnly]}>
+              /*
+                `alignSelf: 'stretch'` é o que faz este modo existir. O envoltório acima
+                centraliza (é o que os outros dois querem), e centralizar encolhe o filho
+                até o conteúdo: o bloco de texto `flex: 1` colapsava para largura zero — o
+                título e o artista simplesmente não apareciam — e as 52 barras da onda
+                viravam fios de 1 px.
+
+                O `slideOnly` vem para cá, e não fica só na fileira da capa: o arraste
+                move o modo inteiro, como nos outros dois.
+              */
+              <Animated.View style={[{ alignSelf: 'stretch' }, slideOnly]}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                   <ZoomTarget radius={20}>
                     <AlbumArt art={art} size={artSize} radius={20} detail="ring" cover={cover} />
                   </ZoomTarget>
@@ -246,7 +284,7 @@ export default function PlayerScreen() {
                       {track.artist}
                     </Body>
                   </ZoomFade>
-                </Animated.View>
+                </View>
                 <ZoomFade style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 30 }}>
                   <Mono size={10} weight={500} tracking={0.16} caps color={T.t62}>
                     Faixa inteira
@@ -267,7 +305,7 @@ export default function PlayerScreen() {
                     onSeek={(f) => seekTo(f * duration)}
                   />
                 </ZoomFade>
-              </View>
+              </Animated.View>
             )}
             </Animated.View>
 
@@ -283,8 +321,15 @@ export default function PlayerScreen() {
         </GestureDetector>
         )}
 
-        {/* rodapé */}
-        <ZoomFade style={{ marginTop: 14 }}>
+        {/*
+          rodapé
+
+          A área da arte é `flex: 1` e comia toda a folga: tempo, transporte e pílulas
+          ficavam grudados nos últimos 200 px com um vão enorme acima. O `flexGrow` dá ao
+          rodapé um pedaço dessa folga, e `space-evenly` reparte esse pedaço em quatro
+          vãos iguais — o cluster sobe e respira, sem virar três fileiras soltas na tela.
+        */}
+        <ZoomFade style={{ marginTop: 14, flexGrow: 0.45, justifyContent: 'space-evenly' }}>
           {bigTitle && (
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
               <Display size={26} tracking={-0.035} align="center" numberOfLines={2}>
@@ -379,31 +424,21 @@ export default function PlayerScreen() {
                 <Output size={16} color={T.t72} />
               </Pill>
             )}
-            <Pill
-              onPress={() =>
-                setSharing({
-                  title: track.title,
-                  subtitle: track.artist,
-                  detail: track.album,
-                  cover,
-                  art,
-                })
-              }
-              label="Compartilhar">
+            {/* Stories só como ícone: com a saída de áudio ao lado, três pílulas com
+                rótulo não cabem na largura de um telefone. */}
+            {canShareToStories && (
+              <Pill onPress={() => share(nowPlaying(), 'stories')}>
+                <Instagram size={16} color={T.t72} />
+              </Pill>
+            )}
+            <Pill onPress={() => share(nowPlaying(), 'sheet')} label="Compartilhar">
               <ShareIcon size={15} color={T.t72} />
             </Pill>
           </View>
 
-          <Body size={11} color={T.t24} align="center" style={{ marginTop: 12 }}>
-            Arraste a capa · {treatment === 'wave' ? 'toque na onda para buscar' : 'toque na fita para buscar'}
-          </Body>
         </ZoomFade>
       </View>
-      <ShareSheet
-        visible={sharing !== null}
-        item={sharing}
-        onClose={() => setSharing(null)}
-      />
+      {shareCardView}
     </ZoomScreen>
   );
 }
@@ -415,7 +450,8 @@ function Pill({
   children,
 }: {
   onPress: () => void;
-  label: string;
+  /** Sem rótulo a pílula fica redonda, só com o ícone. */
+  label?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -424,8 +460,10 @@ function Pill({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
+        justifyContent: 'center',
+        gap: label ? 8 : 0,
+        paddingHorizontal: label ? 14 : 0,
+        width: label ? undefined : 34,
         height: 34,
         borderRadius: 17,
         borderWidth: 1,
@@ -433,9 +471,11 @@ function Pill({
         backgroundColor: T.t06,
       }}>
       {children}
-      <Body size={12} weight={600} color={T.t72}>
-        {label}
-      </Body>
+      {label ? (
+        <Body size={12} weight={600} color={T.t72}>
+          {label}
+        </Body>
+      ) : null}
     </Pressable>
   );
 }
@@ -469,20 +509,41 @@ const ART_MINI = 92;
  * Os dois relógios são folhas de propósito: `useElapsed` re-renderiza quem o chama a
  * cada 200 ms, e aqui isso custa um texto — não a tela inteira do Now Playing.
  */
+/**
+ * O segundo decorrido, e só ele.
+ *
+ * Vem do shared value, não de `useElapsed()`: aquele é o status do expo-audio, que chega
+ * várias vezes por segundo e re-renderizava os dois contadores a cada leitura — trabalho
+ * na thread de JS para redesenhar um texto que muda uma vez por segundo. A reação corre
+ * na thread de UI e só acorda o React quando o segundo inteiro vira.
+ */
+function useSecond(): number {
+  const { elapsed } = usePlayer();
+  const [second, setSecond] = useState(0);
+  useAnimatedReaction(
+    () => Math.floor(elapsed.value),
+    (now, before) => {
+      if (now !== before) runOnJS(setSecond)(now);
+    },
+    []
+  );
+  return second;
+}
+
 function Elapsed() {
-  const elapsed = useElapsed();
+  const second = useSecond();
   return (
-    <Mono size={13} weight={500} color={T.full} style={{ minWidth: 56 }}>
-      {fmt(Math.floor(elapsed))}.{Math.floor((elapsed % 1) * 10)}
+    <Mono size={13} weight={500} color={T.full} style={{ minWidth: 48 }}>
+      {fmt(second)}
     </Mono>
   );
 }
 
 function Remaining({ duration }: { duration: number }) {
-  const elapsed = useElapsed();
+  const second = useSecond();
   return (
-    <Mono size={13} weight={500} color={T.t5} align="right" style={{ minWidth: 56 }}>
-      {duration > 0 ? `-${fmt(duration - elapsed)}` : '--:--'}
+    <Mono size={13} weight={500} color={T.t5} align="right" style={{ minWidth: 48 }}>
+      {duration > 0 ? `-${fmt(duration - second)}` : '--:--'}
     </Mono>
   );
 }

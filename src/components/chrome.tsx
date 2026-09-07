@@ -133,7 +133,8 @@ export function Chrome({
         right: 0,
         bottom: 0,
         paddingHorizontal: 14,
-        paddingBottom: Math.max(insets.bottom, 16) + 14,
+        // O inset já reserva a barra de gestos; o que se somava além dele era vão puro.
+        paddingBottom: Math.max(insets.bottom, 16) + 4,
         paddingTop: 40,
         experimental_backgroundImage: `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
       }}>
@@ -338,11 +339,13 @@ function NavItem({
   const { accent } = usePrefs();
 
   // Só o item ativo abre o rótulo — a largura anima de 0 a 78, como no design.
-  // Amortecida perto do crítico: o rótulo passava dos 78 e voltava, e a pílula inteira
-  // balançava atrás dele na troca de destino.
+  //
+  // `mass: 1` explícito: o padrão do withSpring no Reanimated 4 traz mass 4, e sem dizer
+  // isto a razão de amortecimento caía para 0,45 — o rótulo passava dos 78 e voltava, com
+  // a pílula balançando atrás dele. Ver a nota em `05-design-system.md`.
   const open = useSharedValue(active ? 1 : 0);
   useEffect(() => {
-    open.value = withSpring(active ? 1 : 0, { damping: 24, stiffness: 180 });
+    open.value = withSpring(active ? 1 : 0, { damping: 26, mass: 1, stiffness: 180 });
   }, [active, open]);
 
   const label = useAnimatedStyle(() => ({
