@@ -59,6 +59,29 @@ const NAV = [
 /** Altura da pílula: 42 do item, mais 5 de recuo de cada lado e a borda. */
 const NAV_HEIGHT = 54;
 
+/**
+ * Última aba de verdade que o usuário abriu.
+ *
+ * Álbum, artista e lista são detalhes empilhados *sobre* uma aba, não abas. Derivando o
+ * destino aceso só do pathname, abrir um artista vindo da Busca acendia Biblioteca — o
+ * `else` da cadeia — e a pílula trocava de destino na entrada e trocava de volta na
+ * saída, com as molas dos rótulos correndo duas vezes em cima da transição de zoom.
+ *
+ * Vive num módulo, e não em estado, porque a Chrome tem duas instâncias que se alternam:
+ * a do root e a de dentro da tela `transparentModal`. Um `useState` morreria exatamente
+ * na troca que ele precisaria sobreviver — mesma razão de `chrome-scroll.ts`.
+ */
+let lastBase = 'Library';
+
+/** O destino que este caminho acende, ou null se ele for uma tela de detalhe. */
+function baseOf(pathname: string): string | null {
+  if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/search')) return 'Search';
+  if (pathname.startsWith('/folders')) return 'Folders';
+  if (pathname.startsWith('/library')) return 'Library';
+  return null;
+}
+
 export function Chrome({
   /**
    * Renderizada de dentro de uma tela `transparentModal`, e não do root.
@@ -80,6 +103,12 @@ export function Chrome({
     chromeExpand();
   }, [pathname]);
 
+  // Detalhe não é aba: só um caminho de aba move o destino aceso.
+  const base = baseOf(pathname);
+  useEffect(() => {
+    if (base) lastBase = base;
+  }, [base]);
+
   const visible =
     pathname.startsWith('/library') ||
     pathname.startsWith('/album') ||
@@ -92,13 +121,8 @@ export function Chrome({
   const modal = pathname.startsWith('/album') || pathname.startsWith('/artist');
   if (!visible || modal !== overModal) return null;
 
-  const active = pathname.startsWith('/settings')
-    ? 'Settings'
-    : pathname.startsWith('/search')
-      ? 'Search'
-      : pathname.startsWith('/folders')
-        ? 'Folders'
-        : 'Library';
+  // Numa tela de detalhe fica aceso o destino de onde ela foi aberta.
+  const active = base ?? lastBase;
 
   return (
     <View
@@ -314,9 +338,11 @@ function NavItem({
   const { accent } = usePrefs();
 
   // Só o item ativo abre o rótulo — a largura anima de 0 a 78, como no design.
+  // Amortecida perto do crítico: o rótulo passava dos 78 e voltava, e a pílula inteira
+  // balançava atrás dele na troca de destino.
   const open = useSharedValue(active ? 1 : 0);
   useEffect(() => {
-    open.value = withSpring(active ? 1 : 0, { damping: 18, stiffness: 160 });
+    open.value = withSpring(active ? 1 : 0, { damping: 24, stiffness: 180 });
   }, [active, open]);
 
   const label = useAnimatedStyle(() => ({

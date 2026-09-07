@@ -30,7 +30,7 @@ src/
     onboarding.tsx        escolha das fontes de música
     scan.tsx              progresso da varredura
     folders.tsx           pastas com música, e as faixas de cada uma
-    library.tsx           abas Álbuns/Artistas/Faixas/Listas
+    library.tsx           abas Álbuns/Artistas/Faixas/Listas/Favoritos
     album/[id].tsx        capa hero, transporte, lista de faixas
     player.tsx            Now Playing, com a aba de letras
     playlist/[id].tsx     faixas da lista, renomear, apagar
@@ -49,6 +49,7 @@ src/
     track-row.tsx         linha de faixa
   lib/
     artwork.ts            hash determinístico → cores, rotação, iniciais, forma de onda
+    keyboard.ts           altura que o teclado cobre (o Android não encolhe mais a janela)
     library.tsx           LibraryProvider: biblioteca em memória
     lrc.ts                parser de LRC e localização da linha atual
     lrc.test.ts           testes do parser
@@ -90,6 +91,12 @@ O **Chrome** (mini player + navegação) não é uma tab bar do router: é um ov
 absoluto irmão do `<Stack>`, dentro do layout raiz. Ele decide sozinho se aparece,
 olhando o `pathname`. Isso reproduz o protótipo, onde os dois flutuam sobre a tela como
 uma peça só, e evita que o router remonte a árvore ao trocar de aba.
+
+Quatro caminhos são **abas**: `/library`, `/search`, `/folders`, `/settings`. Álbum,
+artista e lista são **detalhes** empilhados sobre uma aba, e não acendem destino nenhum:
+`baseOf()` em `chrome.tsx` devolve null para eles, e a pílula mantém a última aba de
+verdade (`lastBase`, num módulo, porque a Chrome tem duas instâncias que se alternam —
+ver `overModal`). Sem isso, abrir um artista vindo da Busca acendia Biblioteca.
 
 ## Estado
 

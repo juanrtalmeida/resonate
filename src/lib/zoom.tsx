@@ -27,7 +27,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { BackHandler, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { BackHandler, Keyboard, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -102,6 +102,18 @@ export function useZoomLaunch(radius: number) {
         } else {
           pendingRelease = null;
         }
+        /*
+          O teclado sai aqui, junto com a navegação — e depois da medida, que precisa ser
+          da tela como ela está agora.
+
+          No Android as telas de detalhe sobem numa janela própria. Com um campo ainda
+          focado atrás dela, o sistema derruba o teclado ao abrir a janela e o devolve ao
+          fechá-la: dois ciclos de IME em cima da transição, cada um re-renderizando a
+          tela de baixo inteira — a Busca, com dezenas de linhas com gesto de arraste, é
+          onde isso custava caro e virava o engasgo na volta. Desfocando antes, não há
+          foco nenhum para o sistema restaurar.
+        */
+        Keyboard.dismiss();
         go();
       });
     },

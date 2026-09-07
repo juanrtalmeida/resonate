@@ -36,7 +36,7 @@ Fluxo ponta a ponta, do primeiro boot ao áudio tocando com o aparelho bloqueado
 1. **Onboarding** — pede acesso, lista as pastas com áudio, o usuário liga e desliga cada uma.
 2. **Varredura** — lê as tags de cada arquivo em lotes, mostrando progresso, contadores de
    álbuns/artistas/horas e o arquivo atual.
-3. **Biblioteca** — abas Álbuns / Artistas / Pastas / Faixas, grid de capas procedurais.
+3. **Biblioteca** — abas Álbuns / Artistas / Faixas / Listas / Favoritos, grid de capas procedurais.
 4. **Álbum** — capa hero, tocar, aleatório, curtir, lista de faixas.
 5. **Now Playing** — três tratamentos visuais (Brasa, Vinil, Forma de onda), troca de faixa
    por gesto na capa, busca pela fita de seek.

@@ -48,6 +48,19 @@ de agrupar os `uri` pelo diretório pai, sem SAF nenhum.
 leva alguns segundos, então ela roda em lotes de 100 e o resultado é cacheado entre o
 onboarding e a varredura. O onboarding força a releitura (`listAudioFiles(true, granted)`).
 
+### Teclado e edge-to-edge
+
+`android:windowSoftInputMode="adjustResize"` está no manifesto e não vale mais nada: o
+build mira o SDK 35+, onde o edge-to-edge é obrigatório e a janela deixa de encolher
+quando o teclado sobe. Vale igual para a janela de `Modal` — o React Native lê
+`statusBarTranslucent` e `navigationBarTranslucent` como ligados quando a flag está on,
+então não há prop que traga o encolhimento de volta.
+
+Quem cobre o buraco é `useKeyboardOverlap()` (`src/lib/keyboard.ts`): devolve quanto do
+fundo da tela o teclado ocupa, já normalizado entre as plataformas — o evento do Android
+desconta a barra de navegação, o do iOS não. Toda tela que junta campo e listagem reserva
+esse espaço no `paddingBottom`, e a `Sheet` sobe com mola por esse tanto.
+
 ### Pastas fora da mídia indexada
 
 O MediaStore não indexa tudo. Para incluir uma pasta que ele ignora, o onboarding oferece

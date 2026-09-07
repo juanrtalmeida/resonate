@@ -24,7 +24,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
-import { Carousel, Grid, LibraryIcon, Search } from '@/components/icons';
+import { Carousel, Grid, Heart, LibraryIcon, Search } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { SectionLabel } from '@/components/section-label';
 import { Body, Display, Mono } from '@/components/text';
@@ -46,6 +46,7 @@ const TABS = [
   { key: 'artists', label: 'Artistas' },
   { key: 'tracks', label: 'Faixas' },
   { key: 'playlists', label: 'Listas' },
+  { key: 'liked', label: 'Favoritos' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -58,8 +59,8 @@ const GAP = 14;
 export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { library, artists } = useLibrary();
-  const { accent, albumView, setAlbumView } = usePrefs();
+  const { library, artists, trackById, albumById } = useLibrary();
+  const { accent, albumView, setAlbumView, liked, likedAlbums } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
@@ -85,6 +86,21 @@ export default function LibraryScreen() {
   const totalSeconds = useMemo(
     () => tracks.reduce((n, t) => n + (t.duration ?? 0), 0),
     [tracks]
+  );
+
+  /*
+    Curtir é um append, então a lista salva está em ordem de quando foi curtido — do mais
+    antigo para o mais novo. Invertida aqui: o que acabou de ganhar o coração é o que a
+    aba tem de mostrar primeiro. O `filter` é o que descarta o que uma nova varredura não
+    encontrou mais, do mesmo jeito que a tela de lista faz.
+  */
+  const likedTracks = useMemo(
+    () => [...liked].reverse().map(trackById).filter((t) => !!t),
+    [liked, trackById]
+  );
+  const favoriteAlbums = useMemo(
+    () => [...likedAlbums].reverse().map(albumById).filter((a) => !!a),
+    [likedAlbums, albumById]
   );
 
   const header = (
@@ -131,7 +147,9 @@ export default function LibraryScreen() {
         lugar.
       */}
       <Animated.View entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
-      {tab === 'albums' && albums.length > 0 && <Fresh albums={albums.slice(0, 8)} />}
+      {tab === 'albums' && albums.length > 0 && (
+        <AlbumStrip title="Recém-encontrados" albums={albums.slice(0, 8)} badge="NOVO" />
+      )}
 
       {tab === 'albums' && (
         <SectionLabel
@@ -139,6 +157,14 @@ export default function LibraryScreen() {
           trailing={`${albums.length}`}
           action={<ViewToggle value={albumView} onPick={setAlbumView} accent={accent} />}
         />
+      )}
+
+      {tab === 'liked' && favoriteAlbums.length > 0 && (
+        <AlbumStrip title="Álbuns curtidos" albums={favoriteAlbums} />
+      )}
+
+      {tab === 'liked' && likedTracks.length > 0 && (
+        <SectionLabel title="Faixas curtidas" trailing={`${likedTracks.length}`} />
       )}
 
       {tab === 'playlists' && (
@@ -268,6 +294,50 @@ export default function LibraryScreen() {
               art={artworkFor(item.name, 'lista')}
               cover={item.cover ?? null}
               onPress={() => router.push(`/playlist/${item.id}`)}
+            />
+          </Animated.View>
+        )}
+      />
+    );
+  }
+
+  if (tab === 'liked') {
+    content = (
+      <FlatList
+        {...chromeScroll}
+        key="liked"
+        data={likedTracks}
+        keyExtractor={(t) => t.id}
+        ListHeaderComponent={header}
+        /*
+          Álbum curtido sem faixa curtida não é uma aba vazia: as capas já estão no
+          cabeçalho. O vazio de verdade é não ter curtido nada.
+        */
+        ListEmptyComponent={
+          favoriteAlbums.length > 0 ? null : (
+            <EmptyState
+              icon={<Heart size={30} color={T.full} filled />}
+              title="Nada curtido ainda">
+              Toque no coração de uma faixa no Now Playing, ou no de um álbum, para
+              guardá-la aqui.
+            </EmptyState>
+          )
+        }
+        contentContainerStyle={{
+          paddingTop: insets.top + 24,
+          paddingBottom: bottom,
+          paddingHorizontal: PADDING,
+        }}
+        renderItem={({ item, index }) => (
+          <Animated.View entering={enter(index)}>
+            <TrackRow
+              track={item}
+              position={index + 1}
+              accent={accent}
+              onPress={() => play(likedTracks, index)}
+              onLongPress={() => open([item.id])}
+              onQueue={() => enqueueLast([item])}
+              onPlaylist={() => open([item.id])}
             />
           </Animated.View>
         )}
@@ -414,8 +484,12 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
   const [width, setWidth] = useState(0);
   const slot = width / TABS.length;
   const at = TABS.findIndex((t) => t.key === current);
+  /*
+    Quase criticamente amortecida: com damping 20 nesta rigidez o traço passava da aba
+    nova e voltava, e o salto era o que mais se via na troca. Agora ele chega e para.
+  */
   const slide = useAnimatedStyle(() => ({
-    transform: [{ translateX: withSpring(at * slot, { damping: 20, stiffness: 190 }) }],
+    transform: [{ translateX: withSpring(at * slot, { damping: 26, stiffness: 200 }) }],
   }));
 
   return (
@@ -435,7 +509,7 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
                 justifyContent: 'center',
                 backgroundColor: active ? '#252019' : 'transparent',
               }}>
-              <Body size={12.5} weight={600} color={active ? T.full : T.t42}>
+              <Body size={12} weight={600} numberOfLines={1} color={active ? T.full : T.t42}>
                 {t.label}
               </Body>
             </Pressable>
@@ -457,24 +531,34 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
   );
 }
 
-function Fresh({ albums }: { albums: Album[] }) {
+/** Fileira horizontal de capas. Serve os recém-encontrados e os álbuns curtidos. */
+function AlbumStrip({
+  title,
+  albums,
+  badge,
+}: {
+  title: string;
+  albums: Album[];
+  /** Selo no canto da capa. Sem ele a capa vai limpa. */
+  badge?: string;
+}) {
   return (
     <View style={{ marginTop: 24 }}>
-      <SectionLabel title="Recém-encontrados" />
+      <SectionLabel title={title} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ marginHorizontal: -PADDING }}
         contentContainerStyle={{ gap: 12, paddingHorizontal: PADDING }}>
         {albums.map((album) => (
-          <FreshCell key={album.id} album={album} />
+          <StripCell key={album.id} album={album} badge={badge} />
         ))}
       </ScrollView>
     </View>
   );
 }
 
-function FreshCell({ album }: { album: Album }) {
+function StripCell({ album, badge }: { album: Album; badge?: string }) {
   const router = useRouter();
   const art = artworkFor(album.artist, album.title);
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
@@ -485,20 +569,22 @@ function FreshCell({ album }: { album: Album }) {
       style={{ width: 112 }}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={art} size={112} radius={R.r15} detail="ring" cover={album.cover} />
-        <View
-          style={{
-            position: 'absolute',
-            top: 7,
-            right: 7,
-            paddingHorizontal: 6,
-            paddingVertical: 3,
-            borderRadius: 6,
-            backgroundColor: 'rgba(10,9,8,.62)',
-          }}>
-          <Mono size={8.5} weight={500} tracking={0.08} color={T.full}>
-            NOVO
-          </Mono>
-        </View>
+        {badge ? (
+          <View
+            style={{
+              position: 'absolute',
+              top: 7,
+              right: 7,
+              paddingHorizontal: 6,
+              paddingVertical: 3,
+              borderRadius: 6,
+              backgroundColor: 'rgba(10,9,8,.62)',
+            }}>
+            <Mono size={8.5} weight={500} tracking={0.08} color={T.full}>
+              {badge}
+            </Mono>
+          </View>
+        ) : null}
       </View>
       <Body size={12.5} weight={600} numberOfLines={1} style={{ marginTop: 8 }}>
         {album.title}

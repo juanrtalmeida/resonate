@@ -29,6 +29,7 @@ import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
 import { isEmpty, search } from '@/lib/search';
 import { chromeScroll } from '@/lib/chrome-scroll';
+import { useKeyboardOverlap } from '@/lib/keyboard';
 import type { Album } from '@/lib/scan';
 
 export default function SearchScreen() {
@@ -38,6 +39,12 @@ export default function SearchScreen() {
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
   const [query, setQuery] = useState('');
+  /*
+    A tela abre com o campo focado, e no Android edge-to-edge a janela não encolhe mais
+    quando o teclado sobe: sem reservar a altura dele aqui, os últimos resultados nascem
+    atrás do teclado e não há rolagem que os alcance.
+  */
+  const keyboard = useKeyboardOverlap();
 
   const results = useMemo(
     () => search(query, library?.tracks ?? [], library?.albums ?? []),
@@ -164,7 +171,9 @@ export default function SearchScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
-          paddingBottom: CHROME_HEIGHT + insets.bottom,
+          // Com o teclado aberto a barra inferior está atrás dele: o espaço dela não
+          // precisa ser somado, só o que for maior dos dois.
+          paddingBottom: Math.max(CHROME_HEIGHT + insets.bottom, keyboard + 24),
           paddingHorizontal: PADDING,
         }}>
         {!typed && (

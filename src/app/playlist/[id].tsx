@@ -17,6 +17,7 @@ import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
 import { chromeScroll } from '@/lib/chrome-scroll';
+import { useKeyboardOverlap } from '@/lib/keyboard';
 
 export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,6 +46,8 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
   const { open, sheet } = usePlaylistSheet();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(playlist.name);
+  // Renomear abre o teclado sobre a lista — a janela não encolhe sozinha no edge-to-edge.
+  const keyboard = useKeyboardOverlap();
 
   // Faixas que sumiram numa nova varredura simplesmente não aparecem.
   const tracks = playlist.trackIds.map(trackById).filter((t) => !!t);
@@ -209,7 +212,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
         }
         contentContainerStyle={{
           paddingTop: insets.top + 24,
-          paddingBottom: CHROME_HEIGHT + insets.bottom,
+          paddingBottom: Math.max(CHROME_HEIGHT + insets.bottom, keyboard + 24),
           paddingHorizontal: PADDING,
         }}
         renderItem={({ item, index }) => (

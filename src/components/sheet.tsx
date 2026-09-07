@@ -16,7 +16,7 @@
 /* eslint-disable react-hooks/immutability */
 
 import { useEffect, type ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
 import {
   Gesture,
   GestureDetector,
@@ -34,6 +34,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, R, T } from '@/constants/theme';
+import { useKeyboardOverlap } from '@/lib/keyboard';
 import { Display } from './text';
 
 const IN = { damping: 24, stiffness: 240, mass: 0.9 };
@@ -57,12 +58,26 @@ export function Sheet({
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const { height: screen } = useWindowDimensions();
+
+  /*
+    A folha mora numa janela de Modal, e essa janela também é edge-to-edge no Expo 57 —
+    o `SOFT_INPUT_ADJUST_RESIZE` que o React Native pede para ela não encolhe mais nada.
+    Sem subir a folha na mão, um campo dentro dela nasce atrás do teclado.
+  */
+  const keyboard = useKeyboardOverlap();
 
   // 0 fechada, 1 aberta. `drag` é o que o dedo somou por cima disso.
   const progress = useSharedValue(0);
   const drag = useSharedValue(0);
   // Altura real da folha, medida no layout: é a distância que ela percorre para sumir.
   const travel = useSharedValue(GUESS);
+  // Quanto a folha sobe para escapar do teclado. Com mola, como todo o resto do app.
+  const lift = useSharedValue(0);
+
+  useEffect(() => {
+    lift.value = withSpring(keyboard, IN);
+  }, [keyboard, lift]);
 
   /*
     Quem monta e desmonta é o próprio `visible`, direto no Modal.
@@ -97,7 +112,12 @@ export function Sheet({
     });
 
   const sheet = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [travel.value, 0]) + drag.value }],
+    transform: [
+      {
+        translateY:
+          interpolate(progress.value, [0, 1], [travel.value, 0]) + drag.value - lift.value,
+      },
+    ],
   }));
 
   // O fundo escurece junto com a entrada e clareia de novo enquanto o dedo desce.
@@ -107,9 +127,10 @@ export function Sheet({
   }));
 
   /*
-    Sem `statusBarTranslucent`: ele liga o edge-to-edge na janela do diálogo
-    (`setDecorFitsSystemWindows(false)`), e aí o Android para de encolher a janela quando o
-    teclado sobe — a folha ficava atrás dele.
+    Não há prop de Modal que traga o encolhimento da janela de volta: mirando o SDK 35+, o
+    React Native lê `statusBarTranslucent` e `navigationBarTranslucent` como ligados de
+    qualquer jeito e põe a janela do diálogo em edge-to-edge. Quem tira a folha de trás do
+    teclado é o `lift` acima.
 
     O GestureHandlerRootView é obrigatório aqui: o Modal abre uma janela nativa própria, e
     o root de gestos do app não alcança dentro dela. Sem isto o arrasto do cabeçalho não
@@ -137,8 +158,11 @@ export function Sheet({
             borderTopRightRadius: R.r26,
             borderTopWidth: 1,
             borderColor: T.t1,
-            paddingBottom: Math.max(insets.bottom, 16) + 12,
-            maxHeight: '82%',
+            // Levantada, o recuo da barra de navegação viraria um vão sobre o teclado.
+            paddingBottom: (keyboard > 0 ? 16 : Math.max(insets.bottom, 16)) + 12,
+            // O teto desce junto com a subida: 82% da tela, mais o que a folha andou,
+            // passaria do topo.
+            maxHeight: Math.min(screen * 0.82, screen - keyboard - 24),
           },
           sheet,
         ]}>
