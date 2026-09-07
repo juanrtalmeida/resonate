@@ -335,6 +335,76 @@ export function ArrowRight({ size = 14, color = '#12100E' }: IconProps) {
 }
 
 /** Anel de progresso da tela de varredura (r=98, circunferência 615.75). */
+/** Compartilhar: o quadrado com a seta saindo, como no sistema. */
+export function Share({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18">
+      <Path
+        d="M9 12V2.4M9 2.4 5.9 5.5M9 2.4l3.1 3.1"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Path
+        d="M3.4 9.6v4.6a1.4 1.4 0 0 0 1.4 1.4h8.4a1.4 1.4 0 0 0 1.4-1.4V9.6"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+/** Instagram: a moldura arredondada, o círculo e o ponto. */
+export function Instagram({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18">
+      <Rect
+        x={2.2}
+        y={2.2}
+        width={13.6}
+        height={13.6}
+        rx={4.2}
+        stroke={color}
+        strokeWidth={1.5}
+        fill="none"
+      />
+      <Circle cx={9} cy={9} r={3.4} stroke={color} strokeWidth={1.5} fill="none" />
+      <Circle cx={12.9} cy={5.1} r={1} fill={color} />
+    </Svg>
+  );
+}
+
+/** Lixeira. Só aparece em ações destrutivas, sempre no acento. */
+export function Trash({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18">
+      <Path
+        d="M2.8 5.1h12.4M7 5.1V3.6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4.4 5.1l.7 9a1.4 1.4 0 0 0 1.4 1.3h5a1.4 1.4 0 0 0 1.4-1.3l.7-9"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+/** Reticências. Marca o toque longo nas linhas que abrem menu. */
+export function More({ size = 18, color = 'rgba(246,241,234,.5)' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18">
+      <Circle cx={4} cy={9} r={1.4} fill={color} />
+      <Circle cx={9} cy={9} r={1.4} fill={color} />
+      <Circle cx={14} cy={9} r={1.4} fill={color} />
+    </Svg>
+  );
+}
+
 export function ScanRing({ size = 236, progress, color }: { size?: number; progress: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 236 236" style={{ transform: [{ rotate: '-90deg' }] }}>

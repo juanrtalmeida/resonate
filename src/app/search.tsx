@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeInLeft,
   FadeOut,
@@ -9,7 +10,6 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +25,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
 import { isEmpty, search } from '@/lib/search';
@@ -38,6 +39,7 @@ export default function SearchScreen() {
   const { accent } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
+  const { open: openMenu, menu } = useItemMenu();
   const [query, setQuery] = useState('');
   /*
     A tela abre com o campo focado, e no Android edge-to-edge a janela não encolhe mais
@@ -64,12 +66,20 @@ export default function SearchScreen() {
   useEffect(() => {
     lit.value = withTiming(focused ? 1 : 0, { duration: 240 });
   }, [focused, lit]);
+  /*
+    Rampa, e não mola: `grew` dirige uma **altura de layout**, e mola com razão de
+    amortecimento abaixo de 1 passa do alvo. Media: a barra de busca subia até 137 px,
+    voltava para 157 e parava — a página inteira dava um pulo para cima e caía de volta
+    quando os resultados apareciam. Uma rampa monótona sobe uma vez e fica.
+  */
   useEffect(() => {
-    grew.value = withSpring(typed ? 1 : 0, { damping: 20, stiffness: 190 });
+    grew.value = withTiming(typed ? 1 : 0, COLLAPSE);
   }, [typed, grew]);
 
   const titleStyle = useAnimatedStyle(() => ({
-    height: interpolate(grew.value, [0, 1], [46, 0]),
+    // 'clamp' porque altura negativa não existe: se algum dia isto voltar a passar do
+    // alvo, ele para em zero em vez de arrastar o layout junto.
+    height: interpolate(grew.value, [0, 1], [46, 0], 'clamp'),
     opacity: 1 - grew.value,
     transform: [
       { translateY: -12 * grew.value },
@@ -193,7 +203,10 @@ export default function SearchScreen() {
             <SectionLabel title="Álbuns" />
             {results.albums.map((album, index) => (
               <Animated.View key={album.id} entering={found(index)}>
-                <AlbumResult album={album} />
+                <AlbumResult
+                  album={album}
+                  onLongPress={() => openMenu({ kind: 'album', album })}
+                />
               </Animated.View>
             ))}
           </View>
@@ -209,6 +222,13 @@ export default function SearchScreen() {
                   cover={
                     artists.find((a) => a.name === artist)?.albums.find((al) => al.cover)
                       ?.cover ?? null
+                  }
+                  onLongPress={() =>
+                    openMenu({
+                      kind: 'artist',
+                      name: artist,
+                      albums: artists.find((a) => a.name === artist)?.albums ?? [],
+                    })
                   }
                 />
               </Animated.View>
@@ -226,7 +246,7 @@ export default function SearchScreen() {
                   position={index + 1}
                   accent={accent}
                   onPress={() => play(results.tracks, index)}
-                  onLongPress={() => open([track.id])}
+                  onLongPress={() => openMenu({ kind: 'track', track })}
                   onQueue={() => enqueueLast([track])}
                   onPlaylist={() => open([track.id])}
                 />
@@ -236,16 +256,21 @@ export default function SearchScreen() {
         )}
       </ScrollView>
       {sheet}
+      {menu}
     </View>
   );
 }
 
 /** A capa do resultado é a origem do zoom, como na grade da biblioteca. */
-function AlbumResult({ album }: { album: Album }) {
+function AlbumResult({ album, onLongPress }: { album: Album; onLongPress?: () => void }) {
   const router = useRouter();
   const { ref, launch, style: originStyle } = useZoomLaunch(14);
   return (
-    <Pressable onPress={() => launch(() => router.push(`/album/${album.id}`))} style={row}>
+    <Pressable
+      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onLongPress={onLongPress}
+      delayLongPress={280}
+      style={row}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt
           art={artworkFor(album.artist, album.title)}
@@ -268,12 +293,22 @@ function AlbumResult({ album }: { album: Album }) {
 }
 
 /** Mesma origem de zoom da aba Artistas. */
-function ArtistResult({ name, cover }: { name: string; cover: string | null }) {
+function ArtistResult({
+  name,
+  cover,
+  onLongPress,
+}: {
+  name: string;
+  cover: string | null;
+  onLongPress?: () => void;
+}) {
   const router = useRouter();
   const { ref, launch, style: originStyle } = useZoomLaunch(26);
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/artist/${encodeURIComponent(name)}`))}
+      onLongPress={onLongPress}
+      delayLongPress={280}
       style={row}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={artworkFor(name, '')} size={52} radius={26} detail="ring" cover={cover} />
@@ -302,5 +337,8 @@ const row = {
  * esquerda porque `translateX` não desloca o layout de ninguém.
  */
 const found = (index: number) => FadeInLeft.duration(200).delay(Math.min(index, 8) * 20);
+
+/** Recolhimento do título. Ease-out: sai rápido e encosta, sem repique. */
+const COLLAPSE = { duration: 240, easing: Easing.out(Easing.cubic) };
 
 

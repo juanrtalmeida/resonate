@@ -31,9 +31,11 @@ import {
   Previous,
   Queue,
   Repeat,
+  Share as ShareIcon,
   Shuffle,
 } from '@/components/icons';
 import { Ribbon, Vinyl, Waveform } from '@/components/player-visuals';
+import { ShareSheet, type Shareable } from '@/components/share-card';
 import { QueueRow } from '@/components/queue-row';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha, fmt } from '@/constants/theme';
@@ -58,6 +60,7 @@ export default function PlayerScreen() {
   const { albumById } = useLibrary();
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [sharing, setSharing] = useState<Shareable | null>(null);
 
   // 0 = capa cheia, 1 = capa reduzida com a fila embaixo.
   const q = useSharedValue(0);
@@ -352,39 +355,89 @@ export default function PlayerScreen() {
             </Pressable>
           </View>
 
-          {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
-              para a nossa reprodução. */}
-          {canPickOutput && (
-            <Pressable
-              onPress={() => {
-                void pickAudioOutput();
-              }}
-              style={{
-                alignSelf: 'center',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                marginTop: 16,
-                paddingHorizontal: 14,
-                height: 34,
-                borderRadius: 17,
-                borderWidth: 1,
-                borderColor: T.t12,
-                backgroundColor: T.t06,
-              }}>
-              <Output size={16} color={T.t72} />
-              <Body size={12} weight={600} color={T.t72}>
-                Saída de áudio
-              </Body>
-            </Pressable>
-          )}
+          {/*
+            Fileira secundária. Compartilhar mora aqui, e não na fileira do transporte:
+            ali são cinco alvos de toque já colados, e um sexto deixaria todos pequenos
+            demais para a mão. É o mesmo peso que Spotify e Apple Music dão a ele.
+          */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignSelf: 'center',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 16,
+            }}>
+            {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
+                para a nossa reprodução. */}
+            {canPickOutput && (
+              <Pill
+                onPress={() => {
+                  void pickAudioOutput();
+                }}
+                label="Saída de áudio">
+                <Output size={16} color={T.t72} />
+              </Pill>
+            )}
+            <Pill
+              onPress={() =>
+                setSharing({
+                  kind: 'Faixa',
+                  title: track.title,
+                  subtitle: track.artist,
+                  detail: track.album,
+                  cover,
+                  art,
+                })
+              }
+              label="Compartilhar">
+              <ShareIcon size={15} color={T.t72} />
+            </Pill>
+          </View>
 
           <Body size={11} color={T.t24} align="center" style={{ marginTop: 12 }}>
             Arraste a capa · {treatment === 'wave' ? 'toque na onda para buscar' : 'toque na fita para buscar'}
           </Body>
         </ZoomFade>
       </View>
+      <ShareSheet
+        visible={sharing !== null}
+        item={sharing}
+        onClose={() => setSharing(null)}
+      />
     </ZoomScreen>
+  );
+}
+
+/** Pílula das ações secundárias do player. */
+function Pill({
+  onPress,
+  label,
+  children,
+}: {
+  onPress: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 14,
+        height: 34,
+        borderRadius: 17,
+        borderWidth: 1,
+        borderColor: T.t12,
+        backgroundColor: T.t06,
+      }}>
+      {children}
+      <Body size={12} weight={600} color={T.t72}>
+        {label}
+      </Body>
+    </Pressable>
   );
 }
 

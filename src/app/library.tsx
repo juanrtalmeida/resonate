@@ -35,6 +35,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { Sheet } from '@/components/sheet';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
@@ -93,6 +94,8 @@ export default function LibraryScreen() {
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
+  // O toque longo abre o menu; o arraste continua indo direto para a folha de listas.
+  const { open: openMenu, menu } = useItemMenu();
   const [naming, setNaming] = useState(false);
   const { tab: raw } = useLocalSearchParams<{ tab?: string }>();
 
@@ -311,11 +314,17 @@ export default function LibraryScreen() {
                     album={album}
                     size={cell}
                     count={album.trackIds.length}
+                    onLongPress={() => openMenu({ kind: 'album', album })}
                   />
                 ))}
               </View>
             ) : item.kind === 'artist' ? (
-              <ArtistRow artist={item.artist} />
+              <ArtistRow
+                artist={item.artist}
+                onLongPress={() =>
+                  openMenu({ kind: 'artist', name: item.artist.name, albums: item.artist.albums })
+                }
+              />
             ) : item.kind === 'playlist' ? (
               <GroupRow
                 title={item.playlist.name}
@@ -323,6 +332,7 @@ export default function LibraryScreen() {
                 art={artworkFor(item.playlist.name, 'lista')}
                 cover={item.playlist.cover ?? null}
                 onPress={() => router.push(`/playlist/${item.playlist.id}`)}
+                onLongPress={() => openMenu({ kind: 'playlist', playlist: item.playlist })}
               />
             ) : (
               <TrackRow
@@ -330,7 +340,7 @@ export default function LibraryScreen() {
                 position={index + 1}
                 accent={accent}
                 onPress={() => play(listTracks, index)}
-                onLongPress={() => open([item.track.id])}
+                onLongPress={() => openMenu({ kind: 'track', track: item.track })}
                 onQueue={() => enqueueLast([item.track])}
                 onPlaylist={() => open([item.track.id])}
               />
@@ -339,6 +349,7 @@ export default function LibraryScreen() {
         )}
       />
       {sheet}
+      {menu}
       <NewPlaylist visible={naming} onClose={() => setNaming(false)} />
     </>
   );
@@ -576,7 +587,17 @@ function StripCell({ album, badge }: { album: Album; badge?: string }) {
   );
 }
 
-function AlbumCell({ album, size, count }: { album: Album; size: number; count: number }) {
+function AlbumCell({
+  album,
+  size,
+  count,
+  onLongPress,
+}: {
+  album: Album;
+  size: number;
+  count: number;
+  onLongPress?: () => void;
+}) {
   const router = useRouter();
   const art = artworkFor(album.artist, album.title);
   // A capa é o retângulo de onde a tela do álbum cresce.
@@ -585,6 +606,8 @@ function AlbumCell({ album, size, count }: { album: Album; size: number; count: 
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onLongPress={onLongPress}
+      delayLongPress={280}
       style={{ width: size }}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={art} size={size} radius={R.r17} cover={album.cover} scrim />
@@ -608,7 +631,13 @@ function AlbumCell({ album, size, count }: { album: Album; size: number; count: 
 }
 
 /** Linha de artista: a capa redonda é a origem do zoom para a tela dele. */
-function ArtistRow({ artist }: { artist: ReturnType<typeof useLibrary>['artists'][number] }) {
+function ArtistRow({
+  artist,
+  onLongPress,
+}: {
+  artist: ReturnType<typeof useLibrary>['artists'][number];
+  onLongPress?: () => void;
+}) {
   const router = useRouter();
   const { ref, launch, style: originStyle } = useZoomLaunch(26);
   const cover = artist.albums.find((a) => a.cover)?.cover ?? null;
@@ -618,6 +647,8 @@ function ArtistRow({ artist }: { artist: ReturnType<typeof useLibrary>['artists'
       onPress={() =>
         launch(() => router.push(`/artist/${encodeURIComponent(artist.name)}`))
       }
+      onLongPress={onLongPress}
+      delayLongPress={280}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 10 }}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt
@@ -801,6 +832,7 @@ function GroupRow({
   cover,
   round = false,
   onPress,
+  onLongPress,
 }: {
   title: string;
   subtitle: string;
@@ -811,10 +843,13 @@ function GroupRow({
   /** Artista aparece em círculo; álbum e pasta, em quadrado. */
   round?: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={280}
       style={{
         flexDirection: 'row',
         alignItems: 'center',

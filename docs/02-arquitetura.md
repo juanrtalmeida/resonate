@@ -36,15 +36,19 @@ src/
     playlist/[id].tsx     faixas da lista, renomear, apagar
     search.tsx            busca por faixa, álbum e artista
     settings.tsx          tratamento, acento, gerenciar biblioteca
+    brand.tsx             folha da marca, sem entrada na navegação
   components/
     album-art.tsx         capa procedural em gradientes
     chrome.tsx            mini player + navegação em pílula
+    context-menu.tsx      menu do toque longo, e as ações de cada tipo de item
     eq-bars.tsx           barras de equalizador animadas
     icons.tsx             ícones SVG copiados do protótipo
+    logo.tsx              a marca Nought: Wordmark e Mark
     lyrics.tsx            letra rolante com a linha do momento ancorada
     player-visuals.tsx    fita de seek, forma de onda, vinil
     playlist-sheet.tsx    folha para jogar faixas numa lista
     section-label.tsx     rótulo de seção com filete
+    share-card.tsx        o card 9:16 e a folha que o mostra antes de sair
     text.tsx              Display / Body / Mono
     track-row.tsx         linha de faixa
   lib/
@@ -55,10 +59,12 @@ src/
     lrc.test.ts           testes do parser
     player.tsx            PlayerProvider: fila e reprodução sobre expo-audio
     playlists.tsx         PlaylistsProvider: listas do usuário
+    remove.ts             apagar arquivos: direto, ou pelo MediaStore com escopo
     prefs.tsx             PrefsProvider: acento, tratamento, curtidas, fontes
     scan.ts               varredura, agrupamento, persistência, leitura de letras
     search.ts             filtro sobre a biblioteca em memória
     search.test.ts        testes da busca
+    share.ts              captura o card e entrega na folha do sistema ou no Stories
     sources.ts            de onde vêm os arquivos, por plataforma
     tags.ts               leitor de tags e de duração (puro, sem I/O)
     tags.test.ts          testes do leitor (node --test)

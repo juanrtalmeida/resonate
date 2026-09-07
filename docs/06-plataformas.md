@@ -61,6 +61,25 @@ fundo da tela o teclado ocupa, já normalizado entre as plataformas — o evento
 desconta a barra de navegação, o do iOS não. Toda tela que junta campo e listagem reserva
 esse espaço no `paddingBottom`, e a `Sheet` sobe com mola por esse tanto.
 
+### Compartilhar e apagar
+
+Compartilhar captura uma View em PNG (`react-native-view-shot`) e entrega por dois
+caminhos: a folha do sistema (`expo-sharing`, o único que existe no iOS) e o intent
+`com.instagram.share.ADD_TO_STORY`, que é Android puro. O intent precisa de um
+`content://` — `getContentUriAsync` de `expo-file-system/legacy` — e da flag 1
+(`FLAG_GRANT_READ_URI_PERMISSION`), senão o Instagram não consegue ler o arquivo. Falhando,
+cai na folha.
+
+Apagar um arquivo tem duas rotas, porque o Android tem duas realidades para o mesmo
+arquivo: `File.delete()` resolve o que o app pode escrever (SAF, Documents do iOS), e o
+resto sai só pelo MediaStore, onde o **Android 11+ exige a confirmação do sistema** — o
+diálogo é dele, não nosso, e é por isso que `removeFromDevice` pode voltar sem ter apagado
+nada e sem erro. Achar o asset pela URI custa uma varredura da consulta de áudio: `Asset`
+só se reconstrói de um `content://`, e o que a biblioteca guarda é `file://`.
+
+Os três módulos entram por `import()` dentro das funções, não no topo: um build feito antes
+deles existirem continua abrindo o app, e só a ação falha.
+
 ### Pastas fora da mídia indexada
 
 O MediaStore não indexa tudo. Para incluir uma pasta que ele ignora, o onboarding oferece

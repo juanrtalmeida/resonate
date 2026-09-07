@@ -14,6 +14,8 @@ type LibraryApi = {
   replace: (library: Library) => void;
   /** Depois de importar um .lrc, para o selo aparecer sem esperar uma nova varredura. */
   markLyrics: (trackId: string) => void;
+  /** Depois de apagar arquivos do aparelho, para o índice não citar o que não existe. */
+  removeTracks: (trackIds: string[]) => void;
   reset: () => void;
 };
 
@@ -80,6 +82,24 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
             ...prev,
             tracks: prev.tracks.map((t) => (t.id === trackId ? { ...t, hasLyrics: true } : t)),
           };
+          save(next);
+          return next;
+        }),
+      /*
+        Álbum que ficou sem faixa nenhuma sai junto: um álbum vazio na grade é uma capa
+        que abre numa tela em branco. A varredura seguinte reconstrói tudo de qualquer
+        forma — isto é só para a tela não mentir enquanto ela não acontece.
+      */
+      removeTracks: (trackIds) =>
+        setLibrary((prev) => {
+          if (!prev) return prev;
+          const gone = new Set(trackIds);
+          const kept = prev.tracks.filter((t) => !gone.has(t.id));
+          if (kept.length === prev.tracks.length) return prev;
+          const albums = prev.albums
+            .map((a) => ({ ...a, trackIds: a.trackIds.filter((id) => !gone.has(id)) }))
+            .filter((a) => a.trackIds.length > 0);
+          const next = { ...prev, tracks: kept, albums };
           save(next);
           return next;
         }),

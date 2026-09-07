@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlbumArt } from '@/components/album-art';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, ChevronRight, FolderNav, FolderPlus } from '@/components/icons';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
@@ -25,6 +26,7 @@ export default function FoldersScreen() {
   const { accent, grantFolder } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { open: openSheet, sheet } = usePlaylistSheet();
+  const { open: openMenu, menu } = useItemMenu();
   // Abrir uma pasta troca o conteúdo desta mesma tela: não vale uma rota só para isso.
   const [open, setOpen] = useState<Open | null>(null);
 
@@ -78,7 +80,7 @@ export default function FoldersScreen() {
               position={index + 1}
               accent={accent}
               onPress={() => play(open.tracks, index)}
-              onLongPress={() => openSheet([item.id])}
+              onLongPress={() => openMenu({ kind: 'track', track: item })}
               onQueue={() => enqueueLast([item])}
               onPlaylist={() => openSheet([item.id])}
               subtitle={[item.artist, item.album].filter(Boolean).join(' · ')}
@@ -86,6 +88,7 @@ export default function FoldersScreen() {
           )}
         />
         {sheet}
+      {menu}
       </View>
     );
   }

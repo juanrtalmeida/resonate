@@ -15,6 +15,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
 import type { Album } from '@/lib/scan';
@@ -44,6 +45,7 @@ function AlbumDetail({ album }: { album: Album }) {
   const { play, enqueueLast } = usePlayer();
   const { accent, isAlbumLiked, toggleAlbumLike } = usePrefs();
   const { open, sheet } = usePlaylistSheet();
+  const { open: openMenu, menu } = useItemMenu();
 
   const tracks = tracksOf(album);
   const art = artworkFor(album.artist, album.title);
@@ -138,7 +140,7 @@ function AlbumDetail({ album }: { album: Album }) {
               position={item.trackNumber ?? index + 1}
               accent={accent}
               onPress={() => play(tracks, index)}
-              onLongPress={() => open([item.id])}
+              onLongPress={() => openMenu({ kind: 'track', track: item })}
               onQueue={() => enqueueLast([item])}
               onPlaylist={() => open([item.id])}
               subtitle={item.artist}
@@ -147,6 +149,7 @@ function AlbumDetail({ album }: { album: Album }) {
         )}
       />
       {sheet}
+      {menu}
     </ZoomScreen>
     {/*
       A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no

@@ -14,6 +14,39 @@ onde cada valor de tipografia, espaçamento e cor está nos inline styles.
 
 Os tokens vivem em `src/constants/theme.ts`.
 
+## Marca — Nought
+
+O logo é tipográfico e não tem símbolo separado: o **"o"** da palavra `resonate` é um disco
+vazado com um núcleo vivo, e esse "o" isolado é o ícone do app. Sempre minúsculo, sempre
+Bricolage Grotesque 800, `letter-spacing -0.04em`.
+
+`src/components/logo.tsx` exporta os dois usos:
+
+- `Wordmark` — o logotipo. `size` dirige tudo por proporção (anel `0.66em`, traço `0.12em`,
+  núcleo `0.2em`, deslocado `0.055em` para alinhar à altura-x e não à baseline). `animated`
+  pulsa o núcleo, e só deve ser ligado quando há áudio tocando.
+- `Mark` — o "o" sozinho, para o que não é texto. O desenho **muda com o tamanho**, não só
+  a escala: ≥24 traço 8 e núcleo 7; 16–23 traço 10 e núcleo 6; ≤15 só o anel, traço 13 —
+  abaixo disso o núcleo empasta contra ele. A tabela vive em `reduction()`, e o gerador de
+  ícones usa os mesmos números.
+
+As cores da marca não são novas — ember é `ACCENTS[0]`, gold é `ACCENTS[1]`, cream é
+`T.full`, ink é `C.onAccent`. Por isso não existe arquivo de tokens à parte. **A marca não
+segue o acento escolhido em Ajustes**: o anel é sempre ember.
+
+Em monocromia, anel e núcleo assumem a mesma tinta (ink sobre claro, cream sobre escuro);
+o núcleo em gold só existe na versão colorida.
+
+A pulsação respeita "reduzir movimento" por `ReduceMotion.System` do Reanimated, sem
+listener nosso.
+
+Os PNGs de ícone saem de `scripts/brand-icons.py` — encoder PNG em zlib puro, porque a
+marca são dois círculos e um gradiente, e um rasterizador de SVG seria uma dependência
+para desenhar isso. Rodar de novo depois de mexer nas cores da marca.
+
+`/brand` é a folha de especificação viva: logotipo em três tamanhos, símbolo em 64/24/16/12,
+os dois ícones e o teste em monocromia. Sem entrada na navegação, de propósito.
+
 ## Cores
 
 ```

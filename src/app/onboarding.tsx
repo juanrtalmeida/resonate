@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EqBars } from '@/components/eq-bars';
 import { ArrowRight, ChevronRight, Folder, FolderPlus } from '@/components/icons';
+import { Wordmark } from '@/components/logo';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha } from '@/constants/theme';
 import { usePrefs } from '@/lib/prefs';
@@ -110,7 +111,10 @@ export default function Onboarding() {
           paddingBottom: Math.max(insets.bottom, 20) + 20,
           flexGrow: 1,
         }}>
-        <Mono size={10} weight={500} tracking={0.2} caps color={accent}>
+        {/* Primeira execução é onde o logotipo aparece por inteiro. Dali em diante o app
+            se identifica pelo símbolo — na notificação, no ícone, na tela de bloqueio. */}
+        <Wordmark size={30} animated />
+        <Mono size={10} weight={500} tracking={0.2} caps color={accent} style={{ marginTop: 22 }}>
           Primeira execução
         </Mono>
         <Display size={38} tracking={-0.035} style={{ marginTop: 14 }}>

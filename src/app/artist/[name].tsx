@@ -14,6 +14,7 @@ import { Chrome } from '@/components/chrome';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, LibraryIcon, Play, Queue as QueueIcon, Shuffle } from '@/components/icons';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { SectionLabel } from '@/components/section-label';
 import { Body, Display, Mono } from '@/components/text';
@@ -86,6 +87,7 @@ function Artist({
   const { accent } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
+  const { open: openMenu, menu } = useItemMenu();
   const [limit, setLimit] = useState(PAGE);
 
   const cover = albums.find((a) => a.cover)?.cover ?? null;
@@ -194,7 +196,7 @@ function Artist({
                 position={index + 1}
                 accent={accent}
                 onPress={() => play(top, index)}
-                onLongPress={() => open([track.id])}
+                onLongPress={() => openMenu({ kind: 'track', track })}
                 onQueue={() => enqueueLast([track])}
                 onPlaylist={() => open([track.id])}
                 subtitle={track.album}
@@ -215,6 +217,8 @@ function Artist({
                 <Pressable
                   key={album.id}
                   onPress={() => router.push(`/album/${album.id}`)}
+                  onLongPress={() => openMenu({ kind: 'album', album })}
+                  delayLongPress={280}
                   style={{ width: 130 }}>
                   <AlbumArt
                     art={artworkFor(album.artist, album.title)}
@@ -308,7 +312,7 @@ function Artist({
               position={index + 1}
               accent={accent}
               onPress={() => play(shown, index)}
-              onLongPress={() => open([(item as Track).id])}
+              onLongPress={() => openMenu({ kind: 'track', track: item as Track })}
               onQueue={() => enqueueLast([item as Track])}
               onPlaylist={() => open([(item as Track).id])}
               subtitle={(item as Track).album}
@@ -353,6 +357,7 @@ function Artist({
       </ZoomFade>
 
       {sheet}
+      {menu}
     </ZoomScreen>
     {/*
       A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no

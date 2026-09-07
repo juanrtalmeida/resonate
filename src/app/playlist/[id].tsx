@@ -14,6 +14,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
+import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
 import { chromeScroll } from '@/lib/chrome-scroll';
@@ -44,6 +45,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
   const { accent } = usePrefs();
   const { rename, remove, removeTrack, pickCover, clearCover } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
+  const { open: openMenu, menu } = useItemMenu();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(playlist.name);
   // Renomear abre o teclado sobre a lista — a janela não encolhe sozinha no edge-to-edge.
@@ -223,7 +225,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
                 position={index + 1}
                 accent={accent}
                 onPress={() => play(tracks, index)}
-                onLongPress={() => open([item.id])}
+                onLongPress={() => openMenu({ kind: 'track', track: item })}
                 onQueue={() => enqueueLast([item])}
                 onPlaylist={() => open([item.id])}
               />
@@ -242,6 +244,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
         )}
       />
       {sheet}
+      {menu}
     </View>
   );
 }
