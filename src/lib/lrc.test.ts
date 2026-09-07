@@ -85,9 +85,9 @@ test('carimbo por palavra sai do texto e vira trechos cronometrados', () => {
   assert.equal(lines[0].time, 10);
   assert.equal(lines[0].text, 'um dois três', 'nenhum carimbo sobra na letra');
   assert.deepEqual(lines[0].words, [
-    { time: 10, text: 'um' },
-    { time: 10.5, text: 'dois' },
-    { time: 11.2, text: 'três' },
+    { time: 10, text: 'um', space: true },
+    { time: 10.5, text: 'dois', space: true },
+    { time: 11.2, text: 'três', space: false },
   ]);
 });
 
@@ -101,8 +101,8 @@ test('linha só com carimbo por palavra começa na primeira delas', () => {
 test('texto antes do primeiro carimbo por palavra fica com o tempo da linha', () => {
   const { lines } = parseLrc('[00:20.00]um <00:21.00>dois');
   assert.deepEqual(lines[0].words, [
-    { time: 20, text: 'um' },
-    { time: 21, text: 'dois' },
+    { time: 20, text: 'um', space: true },
+    { time: 21, text: 'dois', space: false },
   ]);
 });
 
@@ -123,4 +123,30 @@ test('wordAt', () => {
   assert.equal(wordAt(words, 10), 0, 'exatamente no carimbo');
   assert.equal(wordAt(words, 11.9), 0);
   assert.equal(wordAt(words, 99), 1, 'depois da última');
+});
+
+test('palavra partida em sílabas não ganha espaço no meio', () => {
+  const { lines } = parseLrc('[00:10.00]<00:10.00>can<00:10.40>tan<00:10.80>do <00:11.50>bem');
+  assert.deepEqual(
+    lines[0].words?.map((w) => [w.text, w.space]),
+    [
+      ['can', false],
+      ['tan', false],
+      ['do', true],
+      ['bem', false],
+    ]
+  );
+  assert.equal(lines[0].text, 'cantando bem');
+});
+
+test('espaço depois do carimbo também separa', () => {
+  const { lines } = parseLrc('[00:10.00]<00:10.00>um<00:10.50> dois');
+  assert.deepEqual(
+    lines[0].words?.map((w) => [w.text, w.space]),
+    [
+      ['um', true],
+      ['dois', false],
+    ]
+  );
+  assert.equal(lines[0].text, 'um dois');
 });

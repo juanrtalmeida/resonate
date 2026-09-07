@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   Easing,
+  interpolate,
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
@@ -18,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { F, T } from '@/constants/theme';
+import { usePrefs } from '@/lib/prefs';
 import { lineAt, wordAt, type LyricWord, type Lyrics } from '@/lib/lrc';
 import { EmptyState } from './empty-state';
 import { Lyrics as LyricsIcon } from './icons';
@@ -34,9 +36,13 @@ const SIZE = 28;
 const LIFT = 7;
 const WORD_LIFT = 3.5;
 
+/** Espaço entre trechos que o arquivo separou. Um espaço da fonte, mais ou menos. */
+const SPACE = SIZE * 0.26;
+
 /** Mola de todo o movimento da letra: sem repique, só um assentar macio. */
 const SOFT = { damping: 22, stiffness: 120, mass: 0.7 };
-const SUNG = { duration: 260, easing: Easing.out(Easing.cubic) };
+/** A ignição de uma palavra. Longa de propósito: é ela que dá o "acendeu". */
+const SUNG = { duration: 380, easing: Easing.out(Easing.cubic) };
 
 /**
  * O estilo do <Display> repetido à mão.
@@ -63,6 +69,7 @@ export function LyricsView({
   elapsed: number;
   onSeek: (seconds: number) => void;
 }) {
+  const { accent } = usePrefs();
   const scroller = useRef<ScrollView>(null);
   const offsets = useRef<number[]>([]);
   const [height, setHeight] = useState(0);
@@ -106,6 +113,7 @@ export function LyricsView({
           text={line.text}
           words={line.words}
           elapsed={elapsed}
+          accent={accent}
           active={index === at}
           dimmed={lyrics.synced}
           onLayout={(e: LayoutChangeEvent) => measure(index, e.nativeEvent.layout.y)}
@@ -120,6 +128,7 @@ function Line({
   text,
   words,
   elapsed,
+  accent,
   active,
   dimmed,
   onLayout,
@@ -129,6 +138,8 @@ function Line({
   /** Trechos cronometrados, quando o arquivo é do formato por palavra. */
   words: LyricWord[] | null;
   elapsed: number;
+  /** A palavra acesa passa por ele antes de assentar no branco. */
+  accent: string;
   active: boolean;
   /** Letra sem sincronia não tem linha "atual": todas ficam legíveis. */
   dimmed: boolean;
@@ -161,19 +172,13 @@ function Line({
             Apple. Dentro dela, a cor e a altura avançam palavra a palavra quando o
             arquivo traz o tempo de cada uma. */}
         {words ? (
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              alignItems: 'flex-end',
-              columnGap: SIZE * 0.28,
-            }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             {words.map((word, index) =>
               active ? (
-                <Word key={index} text={word.text} sung={index <= sung} />
+                <Word key={index} word={word} sung={index <= sung} accent={accent} />
               ) : (
                 // Fora da linha do momento, texto parado: mesmo estilo, sem nó animado.
-                <Text key={index} style={WORD_STYLE}>
+                <Text key={index} style={[WORD_STYLE, { marginRight: word.space ? SPACE : 0 }]}>
                   {word.text}
                 </Text>
               )
@@ -189,20 +194,45 @@ function Line({
   );
 }
 
-/** Uma palavra cronometrada: acende e sobe quando o tempo dela chega. */
-function Word({ text, sung }: { text: string; sung: boolean }) {
-  const hot = useSharedValue(sung ? 1 : 0);
+/**
+ * Uma palavra cronometrada.
+ *
+ * Acender não é trocar de cor: ela sobe do lugar onde esperava, passa pelo acento e
+ * assenta no branco, crescendo um pouco no meio do caminho. O pico no acento é o que
+ * marca *o instante* em que a palavra foi cantada — sem ele, o que se vê é um degrau.
+ *
+ * `hot` começa sempre em zero, mesmo quando a palavra já deveria estar acesa: assim a
+ * primeira palavra da linha, que monta junto com a linha, também acende em vez de já
+ * nascer branca.
+ */
+function Word({ word, sung, accent }: { word: LyricWord; sung: boolean; accent: string }) {
+  const hot = useSharedValue(0);
   useEffect(() => {
     hot.value = withTiming(sung ? 1 : 0, SUNG);
   }, [sung, hot]);
 
-  const style = useAnimatedStyle(() => ({
-    color: interpolateColor(hot.value, [0, 1], [T.t46, T.full]),
-    // Espera um pouco abaixo da linha e sobe ao ser cantada.
-    transform: [{ translateY: WORD_LIFT * (1 - hot.value) }],
-  }));
+  const style = useAnimatedStyle(() => {
+    // Sobe até 1 no meio da ignição e volta a 0: é o brilho passando pela palavra.
+    const flash = interpolate(hot.value, [0, 0.5, 1], [0, 1, 0]);
+    return {
+      color: interpolateColor(hot.value, [0, 0.45, 1], [T.t46, accent, T.full]),
+      transform: [
+        { translateY: WORD_LIFT * (1 - hot.value) },
+        { scale: 1 + flash * 0.07 },
+      ],
+    };
+  });
 
-  return <Animated.Text style={[WORD_STYLE, style]}>{text}</Animated.Text>;
+  return (
+    <Animated.Text
+      style={[
+        WORD_STYLE,
+        { marginRight: word.space ? SPACE : 0, transformOrigin: 'center bottom' },
+        style,
+      ]}>
+      {word.text}
+    </Animated.Text>
+  );
 }
 
 /** Estado vazio, na mesma linguagem do resto do app. */

@@ -10,6 +10,14 @@
 export type LyricWord = {
   time: number;
   text: string;
+  /**
+   * Se havia espaço entre este trecho e o próximo.
+   *
+   * O formato por palavra também parte palavra no meio — `<t>can<t>tan<t>do` é uma
+   * palavra só, em três tempos. Sem guardar o espaço original, tudo virava trecho solto
+   * e a letra aparecia picada.
+   */
+  space: boolean;
 };
 
 export type LyricLine = {
@@ -47,22 +55,35 @@ function wordsOf(rest: string, start: number | null): LyricWord[] | null {
   WORD.lastIndex = 0;
   if (!WORD.test(rest)) return null;
 
-  const out: LyricWord[] = [];
+  // Os trechos crus primeiro: o espaço que separa dois deles pode estar no fim de um ou
+  // no começo do outro, e isso só se sabe olhando o par.
+  const chunks: { time: number; raw: string }[] = [];
   let time = start;
   let cursor = 0;
   let match: RegExpExecArray | null;
 
   WORD.lastIndex = 0;
   while ((match = WORD.exec(rest)) !== null) {
-    const text = rest.slice(cursor, match.index).trim();
-    if (text && time !== null) out.push({ time, text });
+    if (time !== null) chunks.push({ time, raw: rest.slice(cursor, match.index) });
     time = stamp(match[1], match[2], match[3]);
     cursor = WORD.lastIndex;
   }
-  const tail = rest.slice(cursor).trim();
-  if (tail && time !== null) out.push({ time, text: tail });
+  if (time !== null) chunks.push({ time, raw: rest.slice(cursor) });
+
+  const out = chunks
+    .map((chunk, i) => ({
+      time: chunk.time,
+      text: chunk.raw.trim(),
+      space: /\s$/.test(chunk.raw) || /^\s/.test(chunks[i + 1]?.raw ?? ''),
+    }))
+    .filter((word) => word.text.length > 0);
 
   return out.length ? out : null;
+}
+
+/** A linha inteira a partir dos trechos, com os espaços de volta nos lugares certos. */
+export function joinWords(words: LyricWord[]): string {
+  return words.map((w) => w.text + (w.space ? ' ' : '')).join('').trim();
 }
 
 export function parseLrc(raw: string): Lyrics {
@@ -85,7 +106,7 @@ export function parseLrc(raw: string): Lyrics {
     // Uma linha repetida em vários momentos (refrão) não pode levar os carimbos por
     // palavra junto: eles valem para a primeira aparição e mentiriam nas outras.
     const words = times.length > 1 ? null : wordsOf(rest, times[0] ?? null);
-    const text = (words ? words.map((w) => w.text).join(' ') : rest.replace(WORD, '')).trim();
+    const text = (words ? joinWords(words) : rest.replace(WORD, '').trim());
 
     if (!times.length) {
       // Só carimbo por palavra: a linha começa junto com a primeira delas.
