@@ -1,13 +1,13 @@
 /**
  * A folha de baixo do app. Uma só, usada por todas as telas que precisam de uma.
  *
- * O `Modal` do React Native anima com `animationType="slide"`, que é uma rampa linear e
- * destoa do resto — aqui tudo entra com mola. Então o Modal entra sem animação nenhuma e
- * a folha se move por conta própria: mola na entrada, tempo curto na saída, e o dedo no
- * meio do caminho quando o usuário arrasta para baixo.
+ * O `animationType="slide"` do Modal é uma rampa linear e destoa do resto do app, onde
+ * tudo entra com mola. Então a entrada é nossa: a folha sobe com mola, e o dedo assume o
+ * comando dela no meio do caminho quando o usuário arrasta para baixo.
  *
- * A saída precisa do estado `mounted`: fechar o Modal desmonta o conteúdo na hora e não
- * sobra nada para animar. O Modal só sai depois que a folha termina de descer.
+ * A saída fica com o fade do Modal. Animar a saída por conta própria exigiria segurar a
+ * folha montada depois de `visible` virar falso, e a tentativa anterior disso — estado
+ * ajustado durante o render — deixou a folha sem abrir.
  *
  * Este arquivo escreve em shared values de handlers e de worklets de gesto, que é o
  * contrato do Reanimated e não o que a regra de imutabilidade do React Compiler modela —
@@ -15,11 +15,14 @@
  */
 /* eslint-disable react-hooks/immutability */
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useEffect, type ReactNode } from 'react';
+import { Modal, Pressable, View } from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import Animated, {
-  Easing,
   FadeInDown,
   interpolate,
   runOnJS,
@@ -34,7 +37,9 @@ import { C, R, T } from '@/constants/theme';
 import { Display } from './text';
 
 const IN = { damping: 24, stiffness: 240, mass: 0.9 };
-const OUT = { duration: 220, easing: Easing.bezier(0.35, 0, 0.3, 1) };
+
+/** Enquanto a folha não foi medida, ela sobe de um palpite. */
+const GUESS = 560;
 
 /** Arrasto que já conta como fechar, em pixels, e a velocidade que dispensa a distância. */
 const DISMISS = 96;
@@ -52,35 +57,29 @@ export function Sheet({
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const [mounted, setMounted] = useState(visible);
-
-  // Abrir é durante o render, e não num efeito: o Modal precisa já estar montado no
-  // mesmo quadro em que a animação de entrada começa, senão ela roda com a folha fora
-  // da tela e a primeira coisa que se vê é a folha já aberta.
-  const [was, setWas] = useState(visible);
-  if (was !== visible) {
-    setWas(visible);
-    if (visible) setMounted(true);
-  }
 
   // 0 fechada, 1 aberta. `drag` é o que o dedo somou por cima disso.
   const progress = useSharedValue(0);
   const drag = useSharedValue(0);
   // Altura real da folha, medida no layout: é a distância que ela percorre para sumir.
-  const travel = useSharedValue(height * 0.6);
+  const travel = useSharedValue(GUESS);
 
+  /*
+    Quem monta e desmonta é o próprio `visible`, direto no Modal.
+
+    A versão anterior segurava a folha montada para animar a saída, com um estado ajustado
+    durante o render. Isso deixava a folha invisível quando ela devia abrir — e uma folha
+    que não abre é pior que uma saída sem mola. A entrada continua nossa; a saída é o fade
+    do Modal, que é nativo e não tem como falhar.
+  */
   useEffect(() => {
-    if (visible) {
+    if (!visible) {
+      // Zerar no fechamento é o que faz a próxima abertura começar de baixo outra vez.
+      progress.value = 0;
       drag.value = 0;
-      progress.value = withSpring(1, IN);
       return;
     }
-    // Descer e só então tirar o Modal da tela.
-    drag.value = withTiming(0, OUT);
-    progress.value = withTiming(0, OUT, (done) => {
-      if (done) runOnJS(setMounted)(false);
-    });
+    progress.value = withSpring(1, IN);
   }, [visible, progress, drag]);
 
   /** Arrasto para baixo, pego pelo cabeçalho — o corpo pode ter lista rolando dentro. */
@@ -107,16 +106,18 @@ export function Sheet({
       progress.value * (1 - Math.min(1, drag.value / Math.max(1, travel.value))) * 0.62,
   }));
 
-  if (!mounted) return null;
-
   /*
-    O Modal vai sem `statusBarTranslucent`: ele liga o edge-to-edge na janela do diálogo
+    Sem `statusBarTranslucent`: ele liga o edge-to-edge na janela do diálogo
     (`setDecorFitsSystemWindows(false)`), e aí o Android para de encolher a janela quando o
-    teclado sobe — a folha ficava atrás dele, e criar lista parecia não fazer nada. O preço
-    é a faixa da barra de status não escurecer junto com o resto.
+    teclado sobe — a folha ficava atrás dele.
+
+    O GestureHandlerRootView é obrigatório aqui: o Modal abre uma janela nativa própria, e
+    o root de gestos do app não alcança dentro dela. Sem isto o arrasto do cabeçalho não
+    recebe toque nenhum.
   */
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <Animated.View style={[{ flex: 1, backgroundColor: '#060504' }, backdrop]}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
       </Animated.View>
@@ -178,6 +179,7 @@ export function Sheet({
         {/* flexShrink para a lista de dentro caber no teto da folha em vez de estourá-lo. */}
         <View style={{ paddingHorizontal: 22, flexShrink: 1 }}>{children}</View>
       </Animated.View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

@@ -477,13 +477,13 @@ function Fresh({ albums }: { albums: Album[] }) {
 function FreshCell({ album }: { album: Album }) {
   const router = useRouter();
   const art = artworkFor(album.artist, album.title);
-  const { ref, launch } = useZoomLaunch(R.r15);
+  const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
 
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/album/${album.id}`))}
       style={{ width: 112 }}>
-      <View ref={ref} collapsable={false}>
+      <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={art} size={112} radius={R.r15} detail="ring" cover={album.cover} />
         <View
           style={{
@@ -514,13 +514,13 @@ function AlbumCell({ album, size, count }: { album: Album; size: number; count: 
   const router = useRouter();
   const art = artworkFor(album.artist, album.title);
   // A capa é o retângulo de onde a tela do álbum cresce.
-  const { ref, launch } = useZoomLaunch(R.r17);
+  const { ref, launch, style: originStyle } = useZoomLaunch(R.r17);
 
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/album/${album.id}`))}
       style={{ width: size }}>
-      <View ref={ref} collapsable={false}>
+      <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={art} size={size} radius={R.r17} cover={album.cover} scrim />
       </View>
       <Body size={13.5} weight={600} tracking={-0.01} numberOfLines={1} style={{ marginTop: 9 }}>
@@ -544,7 +544,7 @@ function AlbumCell({ album, size, count }: { album: Album; size: number; count: 
 /** Linha de artista: a capa redonda é a origem do zoom para a tela dele. */
 function ArtistRow({ artist }: { artist: ReturnType<typeof useLibrary>['artists'][number] }) {
   const router = useRouter();
-  const { ref, launch } = useZoomLaunch(26);
+  const { ref, launch, style: originStyle } = useZoomLaunch(26);
   const cover = artist.albums.find((a) => a.cover)?.cover ?? null;
 
   return (
@@ -553,7 +553,7 @@ function ArtistRow({ artist }: { artist: ReturnType<typeof useLibrary>['artists'
         launch(() => router.push(`/artist/${encodeURIComponent(artist.name)}`))
       }
       style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 10 }}>
-      <View ref={ref} collapsable={false}>
+      <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt
           art={artworkFor(artist.name, artist.albums[0]?.title ?? '')}
           size={52}
@@ -668,7 +668,7 @@ function CarouselCard({
 }) {
   const router = useRouter();
   // A moldura é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
-  const { ref, launch } = useZoomLaunch(R.r21);
+  const { ref, launch, style: originStyle } = useZoomLaunch(R.r21);
 
   // A arte é maior que a moldura; a sobra é o curso que ela tem para deslizar dentro.
   const inner = Math.round(size * OVERSCAN);
@@ -700,7 +700,10 @@ function CarouselCard({
         <View
           ref={ref}
           collapsable={false}
-          style={{ width: size, height: size, borderRadius: R.r21, overflow: 'hidden' }}>
+          style={[
+            { width: size, height: size, borderRadius: R.r21, overflow: 'hidden' },
+            originStyle,
+          ]}>
           <Animated.View style={[{ marginLeft: -drift, marginTop: -drift }, pan]}>
             <AlbumArt
               art={artworkFor(album.artist, album.title)}

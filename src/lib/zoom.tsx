@@ -56,10 +56,26 @@ const CLOSE = { duration: 300, easing: Easing.bezier(0.35, 0, 0.3, 1) };
  */
 let pending: Rect | null = null;
 
+/**
+ * Como devolver a origem à tela depois do voo.
+ *
+ * Enquanto a capa viaja, o elemento de onde ela saiu tem de sumir: com ele no lugar, o
+ * que se vê no fim é uma imagem pousando em cima de outra igual, e não uma voltando para
+ * casa. Quem esconde é o próprio `useZoomLaunch`; quem devolve é a tela de destino, no
+ * quadro em que a animação termina.
+ */
+let pendingRelease: (() => void) | null = null;
+
 function takeOrigin(): Rect | null {
   const rect = pending;
   pending = null;
   return rect;
+}
+
+function takeRelease(): (() => void) | null {
+  const release = pendingRelease;
+  pendingRelease = null;
+  return release;
 }
 
 /**
@@ -67,24 +83,36 @@ function takeOrigin(): Rect | null {
  */
 export function useZoomLaunch(radius: number) {
   const ref = useRef<View>(null);
+  const [hidden, setHidden] = useState(false);
 
   const launch = useCallback(
     (go: () => void) => {
       const node = ref.current;
       if (!node) {
         pending = null;
+        pendingRelease = null;
         return go();
       }
       node.measureInWindow((x, y, width, height) => {
-        pending = width > 0 && height > 0 ? { x, y, width, height, radius } : null;
+        const measured = width > 0 && height > 0;
+        pending = measured ? { x, y, width, height, radius } : null;
+        if (measured) {
+          setHidden(true);
+          pendingRelease = () => setHidden(false);
+        } else {
+          pendingRelease = null;
+        }
         go();
       });
     },
     [radius]
   );
 
-  return { ref, launch };
+  // `style` vai no mesmo elemento do `ref`: é ele que sai de cena enquanto a capa voa.
+  return { ref, launch, style: hidden ? HIDDEN : undefined };
 }
+
+const HIDDEN = { opacity: 0 } as const;
 
 type Zoom = {
   progress: SharedValue<number>;
@@ -132,6 +160,7 @@ export function ZoomScreen({
   const router = useRouter();
   const { height, width } = useWindowDimensions();
   const [from] = useState(takeOrigin);
+  const [release] = useState(takeRelease);
   const progress = useSharedValue(0);
   const stale = useSharedValue(0);
 
@@ -140,8 +169,13 @@ export function ZoomScreen({
   }, [progress]);
 
   const finish = useCallback(() => {
+    // A origem volta no mesmo quadro em que a capa chega nela.
+    release?.();
     (onClosed ?? router.back)();
-  }, [onClosed, router]);
+  }, [onClosed, router, release]);
+
+  // Rede de segurança: sair por qualquer outro caminho não pode deixar a origem apagada.
+  useEffect(() => () => release?.(), [release]);
 
   // Shared value, não ref: este guard é lido dentro dos worklets do gesto, que rodam na
   // thread de UI e não enxergam refs do JavaScript.
@@ -379,6 +413,14 @@ export function ZoomTarget({
       {children}
     </Animated.View>
   );
+}
+
+/**
+ * O progresso da tela em volta, para quem precisa desfazer um efeito próprio enquanto ela
+ * fecha — o parallax do hero do artista, por exemplo, que senão voa distorcido.
+ */
+export function useZoomProgress(): SharedValue<number> | null {
+  return use(Ctx)?.progress ?? null;
 }
 
 /** Sai da tela com a animação inversa. Fora de um ZoomScreen, só volta a rota. */

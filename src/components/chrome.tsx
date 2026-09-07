@@ -176,7 +176,7 @@ function MiniPlayer({
   }));
 
   // A capa é o que viaja até o Now Playing — não o cartão inteiro.
-  const { ref, launch } = useZoomLaunch(12);
+  const { ref, launch, style: originStyle } = useZoomLaunch(12);
 
   const breathe = useSharedValue(1);
   useEffect(() => {
@@ -256,7 +256,7 @@ function MiniPlayer({
       <Animated.View
         ref={ref}
         collapsable={false}
-        style={[{ marginRight: 12 }, breathing]}>
+        style={[{ marginRight: 12 }, breathing, originStyle]}>
         <AlbumArt art={art} size={46} radius={12} detail="ring" cover={cover} />
       </Animated.View>
 

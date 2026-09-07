@@ -24,7 +24,7 @@ import { chromeScrollTo } from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
-import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
+import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose, useZoomProgress } from '@/lib/zoom';
 import type { Track } from '@/lib/scan';
 
 /** Quantas faixas a seção "Mais tocadas" mostra. */
@@ -109,13 +109,23 @@ function Artist({
    * tarja preta. Subindo pela metade, a imagem sempre cobre o topo e ainda fica atrás do
    * conteúdo, que sobe mais rápido.
    */
+  /**
+   * O parallax se desfaz enquanto a tela fecha.
+   *
+   * A foto voa de volta para a bolinha do artista, e o que voava era a foto *como estava
+   * na tela* — deslocada pela rolagem e esticada pelo overscroll. Chegava torta num lugar
+   * que nunca esteve torto. Multiplicado pelo progresso do zoom, o efeito volta ao
+   * repouso no mesmo movimento em que a tela sai.
+   */
+  const zoom = useZoomProgress();
   const hero = useAnimatedStyle(() => {
+    const open = zoom ? zoom.value : 1;
     const y = scrollY.value;
     const overscroll = y < 0 ? -y : 0;
     return {
       transform: [
-        { translateY: y < 0 ? 0 : -y * 0.5 },
-        { scale: 1 + overscroll / HERO },
+        { translateY: (y < 0 ? 0 : -y * 0.5) * open },
+        { scale: 1 + (overscroll / HERO) * open },
       ],
     };
   });

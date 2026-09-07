@@ -232,10 +232,10 @@ export default function SearchScreen() {
 /** A capa do resultado é a origem do zoom, como na grade da biblioteca. */
 function AlbumResult({ album }: { album: Album }) {
   const router = useRouter();
-  const { ref, launch } = useZoomLaunch(14);
+  const { ref, launch, style: originStyle } = useZoomLaunch(14);
   return (
     <Pressable onPress={() => launch(() => router.push(`/album/${album.id}`))} style={row}>
-      <View ref={ref} collapsable={false}>
+      <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt
           art={artworkFor(album.artist, album.title)}
           size={52}
@@ -259,12 +259,12 @@ function AlbumResult({ album }: { album: Album }) {
 /** Mesma origem de zoom da aba Artistas. */
 function ArtistResult({ name, cover }: { name: string; cover: string | null }) {
   const router = useRouter();
-  const { ref, launch } = useZoomLaunch(26);
+  const { ref, launch, style: originStyle } = useZoomLaunch(26);
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/artist/${encodeURIComponent(name)}`))}
       style={row}>
-      <View ref={ref} collapsable={false}>
+      <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={artworkFor(name, '')} size={52} radius={26} detail="ring" cover={cover} />
       </View>
       <Body size={14.5} weight={600} tracking={-0.01} numberOfLines={1}>
