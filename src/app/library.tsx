@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -15,6 +15,7 @@ import Animated, {
   FadeInRight,
   FadeOut,
   interpolate,
+  makeMutable,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -36,7 +37,7 @@ import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { Sheet } from '@/components/sheet';
-import { usePlaylists } from '@/lib/playlists';
+import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePrefs, type AlbumView } from '@/lib/prefs';
 import { useZoomLaunch } from '@/lib/zoom';
 import type { Album, Track } from '@/lib/scan';
@@ -55,6 +56,34 @@ const NO_TRACKS: Track[] = [];
 const NO_ALBUMS: Album[] = [];
 
 const GAP = 14;
+
+/**
+ * Onde o traço de acento está, medido em fatias de aba (0 = Álbuns, 4 = Favoritos).
+ *
+ * Fora do componente porque a posição do traço é estado da *tela*, não da faixa de abas:
+ * ela precisa valer o que valia por último toda vez que a faixa monta. Num shared value
+ * de componente o traço nascia em zero e corria da borda esquerda até a aba nova em vez
+ * de sair da anterior — e, como a largura só se sabe depois do layout, o primeiro alvo
+ * calculado era mesmo zero. A lista unificada tirou a remontagem que expôs isso; a
+ * posição fica aqui de qualquer forma, que é onde ela deve estar.
+ *
+ * Em fatias, e não em pixels, para não precisar de sincronia com a medida da largura: o
+ * worklet multiplica pela fatia atual.
+ */
+const tracePosition = makeMutable(0);
+
+/**
+ * Largura medida da linha de abas, guardada pelo mesmo motivo do `tracePosition`: a cada
+ * remontagem ela voltava a zero e o traço passava um quadro fora da tela, o que piscava
+ * em toda troca de aba.
+ */
+let traceWidth = 0;
+
+/**
+ * Superamortecida de propósito: nesta rigidez qualquer razão abaixo de 1 fazia o traço
+ * passar da aba nova e voltar, e esse repique era o que mais se via na troca.
+ */
+const TRACE = { damping: 32, stiffness: 220 };
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -145,8 +174,11 @@ export default function LibraryScreen() {
         Daqui para baixo é conteúdo, e é só isto que se move na troca de aba. O título e
         as abas ficam de fora: o traço de acento corre até a aba nova e nada mais sai do
         lugar.
+
+        A `key` é a aba porque o cabeçalho não remonta mais — a lista virou uma só. Sem
+        ela este bloco ficaria montado para sempre e a entrada nunca correria de novo.
       */}
-      <Animated.View entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
+      <Animated.View key={tab} entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
       {tab === 'albums' && albums.length > 0 && (
         <AlbumStrip title="Recém-encontrados" albums={albums.slice(0, 8)} badge="NOVO" />
       )}
@@ -203,37 +235,47 @@ export default function LibraryScreen() {
   const enter = (i: number) =>
     i < 8 ? (forward ? FadeInRight : FadeInLeft).duration(240).delay(i * 22) : undefined;
 
-  /**
-   * Um `content` em vez de um `return` por aba: o Modal de nova lista vivia só no ramo
-   * de Faixas, então tocar em "Nova lista" na aba Listas marcava o estado sem montar o
-   * Modal — ele só aparecia ao trocar de aba.
-   */
-  let content: ReactNode;
+  const carousel = tab === 'albums' && albumView === 'carousel';
 
-  if (tab === 'albums') {
-    const carousel = albumView === 'carousel';
-    const empty = (
-      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
-        Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
-      </EmptyState>
-    );
+  /** As faixas que uma linha de faixa toca: a aba diz qual das duas listas é. */
+  const listTracks = tab === 'liked' ? likedTracks : tracks;
 
-    /*
-      Uma lista só para os dois modos, com `numColumns` fixo e a mesma `key`.
+  /*
+    Uma FlatList só, para as cinco abas.
 
-      Trocar de modo não pode trocar de container: com uma ScrollView de um lado e uma
-      FlatList do outro, o React remontava a tela inteira e a animação de entrada do
-      cabeçalho — que é da troca de *aba* — corria de novo, fazendo a página andar toda.
-      No carrossel a lista fica sem dados e as capas vão no cabeçalho: quem entra e sai é
-      só o bloco dos álbuns.
-    */
-    content = (
+    Antes era uma por aba, cada uma com a sua `key` — o que a grade de álbuns exigia para
+    ter `numColumns={2}`. Trocar de aba trocava a `key`, o React remontava a lista inteira
+    e com ela o cabeçalho, onde as abas moram: era isso que fazia o traço de acento nascer
+    de novo do zero a cada troca. Aqui a grade é uma lista de linhas de dois álbuns, então
+    `numColumns` nunca muda, a `key` nunca muda, e nada remonta.
+  */
+  const rows = useMemo<Row[]>(() => {
+    if (tab === 'albums') {
+      // No carrossel a lista fica vazia de propósito: as capas vão no cabeçalho.
+      if (albumView === 'carousel') return NO_ROWS;
+      const pairs: Row[] = [];
+      for (let i = 0; i < albums.length; i += 2) {
+        pairs.push({ kind: 'albums', id: albums[i].id, albums: albums.slice(i, i + 2) });
+      }
+      return pairs;
+    }
+    if (tab === 'artists') {
+      return artists.map((artist) => ({ kind: 'artist', id: artist.name, artist }));
+    }
+    if (tab === 'playlists') {
+      return playlists.map((playlist) => ({ kind: 'playlist', id: playlist.id, playlist }));
+    }
+    return listTracks.map((track) => ({ kind: 'track', id: track.id, track }));
+  }, [tab, albumView, albums, artists, playlists, listTracks]);
+
+  const empty = emptyFor(tab, favoriteAlbums.length > 0);
+
+  return (
+    <>
       <FlatList
         {...chromeScroll}
-        key="albums"
-        data={carousel ? NO_ALBUMS : albums}
-        keyExtractor={(a) => a.id}
-        numColumns={2}
+        data={rows}
+        keyExtractor={(r) => r.id}
         ListHeaderComponent={
           <>
             {header}
@@ -250,169 +292,104 @@ export default function LibraryScreen() {
               ))}
           </>
         }
-        columnWrapperStyle={{ gap: GAP }}
-        contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingBottom: bottom,
-          paddingHorizontal: PADDING,
-          gap: 16,
-        }}
-        // No carrossel a lista está vazia de propósito: o vazio de verdade vai no cabeçalho.
+        // No carrossel o vazio de verdade já está no cabeçalho.
         ListEmptyComponent={carousel ? null : empty}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={enter(index)}>
-            <AlbumCell album={item} size={cell} count={item.trackIds.length} />
-          </Animated.View>
-        )}
-      />
-    );
-  }
-
-  if (tab === 'playlists') {
-    content = (
-      <FlatList
-        {...chromeScroll}
-        key="playlists"
-        data={playlists}
-        keyExtractor={(p) => p.id}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma lista ainda">
-            Segure uma faixa em qualquer tela para criar a primeira.
-          </EmptyState>
-        }
         contentContainerStyle={{
           paddingTop: insets.top + 24,
           paddingBottom: bottom,
           paddingHorizontal: PADDING,
+          // Só a grade precisa de respiro entre as linhas; as listas já têm o seu dentro.
+          gap: tab === 'albums' ? 16 : 0,
         }}
         renderItem={({ item, index }) => (
           <Animated.View entering={enter(index)}>
-            <GroupRow
-              title={item.name}
-              subtitle={`${item.trackIds.length} ${item.trackIds.length === 1 ? 'faixa' : 'faixas'}`}
-              art={artworkFor(item.name, 'lista')}
-              cover={item.cover ?? null}
-              onPress={() => router.push(`/playlist/${item.id}`)}
-            />
+            {item.kind === 'albums' ? (
+              <View style={{ flexDirection: 'row', gap: GAP }}>
+                {item.albums.map((album) => (
+                  <AlbumCell
+                    key={album.id}
+                    album={album}
+                    size={cell}
+                    count={album.trackIds.length}
+                  />
+                ))}
+              </View>
+            ) : item.kind === 'artist' ? (
+              <ArtistRow artist={item.artist} />
+            ) : item.kind === 'playlist' ? (
+              <GroupRow
+                title={item.playlist.name}
+                subtitle={`${item.playlist.trackIds.length} ${item.playlist.trackIds.length === 1 ? 'faixa' : 'faixas'}`}
+                art={artworkFor(item.playlist.name, 'lista')}
+                cover={item.playlist.cover ?? null}
+                onPress={() => router.push(`/playlist/${item.playlist.id}`)}
+              />
+            ) : (
+              <TrackRow
+                track={item.track}
+                position={index + 1}
+                accent={accent}
+                onPress={() => play(listTracks, index)}
+                onLongPress={() => open([item.track.id])}
+                onQueue={() => enqueueLast([item.track])}
+                onPlaylist={() => open([item.track.id])}
+              />
+            )}
           </Animated.View>
         )}
       />
-    );
-  }
-
-  if (tab === 'liked') {
-    content = (
-      <FlatList
-        {...chromeScroll}
-        key="liked"
-        data={likedTracks}
-        keyExtractor={(t) => t.id}
-        ListHeaderComponent={header}
-        /*
-          Álbum curtido sem faixa curtida não é uma aba vazia: as capas já estão no
-          cabeçalho. O vazio de verdade é não ter curtido nada.
-        */
-        ListEmptyComponent={
-          favoriteAlbums.length > 0 ? null : (
-            <EmptyState
-              icon={<Heart size={30} color={T.full} filled />}
-              title="Nada curtido ainda">
-              Toque no coração de uma faixa no Now Playing, ou no de um álbum, para
-              guardá-la aqui.
-            </EmptyState>
-          )
-        }
-        contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingBottom: bottom,
-          paddingHorizontal: PADDING,
-        }}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={enter(index)}>
-            <TrackRow
-              track={item}
-              position={index + 1}
-              accent={accent}
-              onPress={() => play(likedTracks, index)}
-              onLongPress={() => open([item.id])}
-              onQueue={() => enqueueLast([item])}
-              onPlaylist={() => open([item.id])}
-            />
-          </Animated.View>
-        )}
-      />
-    );
-  }
-
-  if (tab === 'artists') {
-    content = (
-      <FlatList
-        {...chromeScroll}
-        key="artists"
-        data={artists}
-        keyExtractor={(a) => a.name}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhum artista">
-            A varredura não encontrou nada com metadados de artista.
-          </EmptyState>
-        }
-        contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingBottom: bottom,
-          paddingHorizontal: PADDING,
-        }}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={enter(index)}>
-            <ArtistRow artist={item} />
-          </Animated.View>
-        )}
-      />
-    );
-  }
-
-  if (!content) {
-    content = (
-      <FlatList
-        {...chromeScroll}
-        key="tracks"
-        data={tracks}
-        keyExtractor={(t) => t.id}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma faixa">
-            Varra o aparelho de novo em Ajustes para procurar música.
-          </EmptyState>
-        }
-        contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingBottom: bottom,
-          paddingHorizontal: PADDING,
-        }}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={enter(index)}>
-            <TrackRow
-              track={item}
-              position={index + 1}
-              accent={accent}
-              onPress={() => play(tracks, index)}
-              onLongPress={() => open([item.id])}
-              onQueue={() => enqueueLast([item])}
-              onPlaylist={() => open([item.id])}
-            />
-          </Animated.View>
-        )}
-      />
-    );
-  }
-
-  return (
-    <>
-      {content}
       {sheet}
       <NewPlaylist visible={naming} onClose={() => setNaming(false)} />
     </>
+  );
+}
+
+/** Uma linha da lista. A aba escolhe qual das quatro formas ela tem. */
+type Row =
+  | { kind: 'albums'; id: string; albums: Album[] }
+  | { kind: 'artist'; id: string; artist: ReturnType<typeof useLibrary>['artists'][number] }
+  | { kind: 'playlist'; id: string; playlist: Playlist }
+  | { kind: 'track'; id: string; track: Track };
+
+const NO_ROWS: Row[] = [];
+
+/** O vazio de cada aba. */
+function emptyFor(tab: TabKey, hasFavoriteAlbums: boolean) {
+  if (tab === 'albums') {
+    return (
+      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
+        Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
+      </EmptyState>
+    );
+  }
+  if (tab === 'artists') {
+    return (
+      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhum artista">
+        A varredura não encontrou nada com metadados de artista.
+      </EmptyState>
+    );
+  }
+  if (tab === 'playlists') {
+    return (
+      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma lista ainda">
+        Segure uma faixa em qualquer tela para criar a primeira.
+      </EmptyState>
+    );
+  }
+  if (tab === 'liked') {
+    // Álbum curtido sem faixa curtida não é uma aba vazia: as capas já estão no cabeçalho.
+    if (hasFavoriteAlbums) return null;
+    return (
+      <EmptyState icon={<Heart size={30} color={T.full} filled />} title="Nada curtido ainda">
+        Toque no coração de uma faixa no Now Playing, ou no de um álbum, para guardá-la
+        aqui.
+      </EmptyState>
+    );
+  }
+  return (
+    <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma faixa">
+      Varra o aparelho de novo em Ajustes para procurar música.
+    </EmptyState>
   );
 }
 
@@ -480,16 +457,16 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
 function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => void }) {
   const { accent } = usePrefs();
 
-  // A largura do traço só se sabe depois do layout: são quatro fatias iguais da linha.
-  const [width, setWidth] = useState(0);
+  // A largura do traço só se sabe depois do layout: são fatias iguais da linha, uma por aba.
+  const [width, setWidth] = useState(traceWidth);
   const slot = width / TABS.length;
   const at = TABS.findIndex((t) => t.key === current);
-  /*
-    Quase criticamente amortecida: com damping 20 nesta rigidez o traço passava da aba
-    nova e voltava, e o salto era o que mais se via na troca. Agora ele chega e para.
-  */
+  useEffect(() => {
+    tracePosition.value = withSpring(at, TRACE);
+  }, [at]);
+
   const slide = useAnimatedStyle(() => ({
-    transform: [{ translateX: withSpring(at * slot, { damping: 26, stiffness: 200 }) }],
+    transform: [{ translateX: tracePosition.value * slot }],
   }));
 
   return (
@@ -519,7 +496,10 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
       {/* Um traço fino no acento marca a aba, como a pílula do design. Ele corre até a
           aba nova: quatro traços acendendo e apagando não diziam de onde para onde. */}
       <View
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => {
+          traceWidth = e.nativeEvent.layout.width;
+          setWidth(traceWidth);
+        }}
         style={{ height: 2, marginTop: 6 }}>
         {width > 0 && (
           <Animated.View style={[{ width: slot, height: 2, paddingHorizontal: 6 }, slide]}>

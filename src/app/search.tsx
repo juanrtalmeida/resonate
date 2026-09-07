@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
   FadeIn,
-  FadeInDown,
+  FadeInLeft,
   FadeOut,
   interpolate,
   interpolateColor,
@@ -189,37 +189,39 @@ export default function SearchScreen() {
         )}
 
         {results.albums.length > 0 && (
-          <Animated.View entering={FadeInDown.duration(240)}>
+          <View>
             <SectionLabel title="Álbuns" />
-            {results.albums.map((album) => (
-              <AlbumResult key={album.id} album={album} />
+            {results.albums.map((album, index) => (
+              <Animated.View key={album.id} entering={found(index)}>
+                <AlbumResult album={album} />
+              </Animated.View>
             ))}
-          </Animated.View>
+          </View>
         )}
 
         {results.artists.length > 0 && (
-          <Animated.View entering={FadeInDown.duration(240).delay(60)}>
+          <View>
             <SectionLabel title="Artistas" />
-            {results.artists.map((artist) => (
-              <ArtistResult
-                key={artist}
-                name={artist}
-                cover={
-                  artists.find((a) => a.name === artist)?.albums.find((al) => al.cover)?.cover ??
-                  null
-                }
-              />
+            {results.artists.map((artist, index) => (
+              <Animated.View key={artist} entering={found(index)}>
+                <ArtistResult
+                  name={artist}
+                  cover={
+                    artists.find((a) => a.name === artist)?.albums.find((al) => al.cover)
+                      ?.cover ?? null
+                  }
+                />
+              </Animated.View>
             ))}
-          </Animated.View>
+          </View>
         )}
 
         {results.tracks.length > 0 && (
-          <Animated.View entering={FadeInDown.duration(240).delay(120)}>
+          <View>
             <SectionLabel title="Faixas" />
-            <View>
-              {results.tracks.map((track, index) => (
+            {results.tracks.map((track, index) => (
+              <Animated.View key={track.id} entering={found(index)}>
                 <TrackRow
-                  key={track.id}
                   track={track}
                   position={index + 1}
                   accent={accent}
@@ -228,9 +230,9 @@ export default function SearchScreen() {
                   onQueue={() => enqueueLast([track])}
                   onPlaylist={() => open([track.id])}
                 />
-              ))}
-            </View>
-          </Animated.View>
+              </Animated.View>
+            ))}
+          </View>
         )}
       </ScrollView>
       {sheet}
@@ -289,5 +291,16 @@ const row = {
   gap: 13,
   paddingVertical: 10,
 };
+
+/**
+ * Entrada de um resultado, na própria linha e vindo da esquerda.
+ *
+ * Antes era um `FadeInDown` no bloco de cada seção. Digitar uma letra podia esvaziar uma
+ * seção e repovoar outra: o bloco remontava e descia de novo inteiro, e era esse o
+ * movimento vertical que a lista fazia a cada tecla. Na linha, e com o id como chave,
+ * quem já está na tela não remonta — anima só o que acabou de casar com a busca. Da
+ * esquerda porque `translateX` não desloca o layout de ninguém.
+ */
+const found = (index: number) => FadeInLeft.duration(200).delay(Math.min(index, 8) * 20);
 
 

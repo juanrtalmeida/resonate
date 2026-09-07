@@ -81,7 +81,7 @@ renomear uma rota é preciso rodar `npx expo start` uma vez, senão o `tsc` vali
 caminhos contra a lista antiga.
 
 A aba ativa da biblioteca é um parâmetro de busca
-(`/library?tab=albums|artists|tracks|playlists`), não uma rota. "Pastas" tem tela própria
+(`/library?tab=albums|artists|tracks|playlists|liked`), não uma rota. "Pastas" tem tela própria
 (`/folders`), porque um item da navegação que só troca a aba de outra tela parece quebrado.
 
 `/album/[id]` e `/player` são declaradas com `presentation: 'transparentModal'` e
@@ -91,6 +91,12 @@ O **Chrome** (mini player + navegação) não é uma tab bar do router: é um ov
 absoluto irmão do `<Stack>`, dentro do layout raiz. Ele decide sozinho se aparece,
 olhando o `pathname`. Isso reproduz o protótipo, onde os dois flutuam sobre a tela como
 uma peça só, e evita que o router remonte a árvore ao trocar de aba.
+
+As cinco abas dividem **uma** `FlatList`, com `data` montada por `rows` (um union
+discriminado: par de álbuns, artista, lista, faixa). A grade de álbuns é uma lista de
+linhas de dois, e não `numColumns={2}` — que só muda com a `key`, e trocar a `key` a cada
+aba remontava a lista e o cabeçalho com ela, onde as abas moram. Nada remonta mais; o que
+precisa reanimar na troca pede `key={tab}` explicitamente.
 
 Quatro caminhos são **abas**: `/library`, `/search`, `/folders`, `/settings`. Álbum,
 artista e lista são **detalhes** empilhados sobre uma aba, e não acendem destino nenhum:
