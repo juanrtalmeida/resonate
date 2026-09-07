@@ -56,8 +56,16 @@ export const CHROME_HEIGHT = 168;
  */
 export const PADDING = 22;
 
-/** rgba a partir de um hex #RRGGBB. */
+/**
+ * rgba a partir de um hex #RRGGBB.
+ *
+ * Worklet porque cor entra em estilo animado: chamada de dentro de um `useAnimatedStyle`,
+ * uma função comum estoura na thread de UI — foi o que derrubava a tela de busca. Marcada
+ * aqui, e não contornada em cada chamador, porque qualquer estilo animado do app pode
+ * precisar dela.
+ */
 export function alpha(hex: string, a: number): string {
+  'worklet';
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }

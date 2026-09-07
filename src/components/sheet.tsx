@@ -109,8 +109,14 @@ export function Sheet({
 
   if (!mounted) return null;
 
+  /*
+    O Modal vai sem `statusBarTranslucent`: ele liga o edge-to-edge na janela do diálogo
+    (`setDecorFitsSystemWindows(false)`), e aí o Android para de encolher a janela quando o
+    teclado sobe — a folha ficava atrás dele, e criar lista parecia não fazer nada. O preço
+    é a faixa da barra de status não escurecer junto com o resto.
+  */
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
       <Animated.View style={[{ flex: 1, backgroundColor: '#060504' }, backdrop]}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
       </Animated.View>

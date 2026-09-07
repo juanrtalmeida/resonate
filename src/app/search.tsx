@@ -71,8 +71,10 @@ export default function SearchScreen() {
     transformOrigin: 'left center',
   }));
 
+  // Fora do worklet: a cor não muda a cada quadro, só quando o acento muda.
+  const litBorder = alpha(accent, 0.55);
   const barStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(lit.value, [0, 1], [T.t07, alpha(accent, 0.55)]),
+    borderColor: interpolateColor(lit.value, [0, 1], [T.t07, litBorder]),
     backgroundColor: interpolateColor(lit.value, [0, 1], [C.card, C.raised]),
     transform: [{ scale: 1 + lit.value * 0.012 }],
   }));
