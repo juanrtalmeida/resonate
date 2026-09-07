@@ -24,10 +24,8 @@ import { Wordmark } from './logo';
 import { Sheet } from './sheet';
 import { Body, Display, Mono } from './text';
 
-/** O que está sendo compartilhado. A etiqueta do topo do card sai daqui. */
+/** O que está sendo compartilhado. */
 export type Shareable = {
-  /** "Faixa", "Álbum", "Artista", "Lista" — em caixa alta no card. */
-  kind: string;
   title: string;
   subtitle: string;
   /** Terceira linha, em mono. O álbum de uma faixa, a contagem de uma lista. */
@@ -68,7 +66,7 @@ export function ShareSheet({
             <ShareCard ref={card} item={item} accent={accent} />
           </Preview>
 
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
             {canShareToStories && (
               <Action
                 label="Stories"
@@ -98,24 +96,28 @@ export function ShareSheet({
  *
  * A escala sai do menor dos dois limites, e não só da largura: um card 9:16 escalado pela
  * largura da folha fica com 562 de altura, e aí o cabeçalho da folha mais os botões
- * passavam do teto de 82% — os botões ficavam cortados fora da tela. `ROOM` é o que a
- * folha gasta em volta da pré-visualização.
+ * passavam do teto de 82% — os botões ficavam cortados fora da tela.
+ *
+ * `SHEET` é a fração da tela que a folha deve ocupar e `ROOM` é o que ela gasta em volta
+ * da pré-visualização. 72% em vez do teto de 82%: escolher para onde mandar não precisa
+ * cobrir a tela toda, e o card é alto por natureza.
  *
  * A altura da moldura é a do card já escalado; senão sobraria o vão dos 640 originais.
  */
-const ROOM = 210;
+const SHEET = 0.72;
+const ROOM = 200;
 
 function Preview({ children }: { children: React.ReactNode }) {
   const { height: screen } = useWindowDimensions();
   const [width, setWidth] = useState(0);
-  const room = Math.max(160, screen * 0.82 - ROOM);
+  const room = Math.max(160, screen * SHEET - ROOM);
   const scale =
     width > 0 ? Math.min(1, width / CARD_WIDTH, room / CARD_HEIGHT) : 0;
 
   return (
     <View
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      style={{ marginTop: 16, alignItems: 'center' }}>
+      style={{ marginTop: 14, alignItems: 'center' }}>
       {scale > 0 && (
         <View
           style={{
@@ -185,7 +187,7 @@ function ShareCard({
   accent: string;
 }) {
   const art = item.art;
-  const cover = Math.round(CARD_WIDTH * 0.68);
+  const cover = Math.round(CARD_WIDTH * 0.6);
 
   return (
     <View
@@ -195,10 +197,14 @@ function ShareCard({
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
         backgroundColor: art.c,
-        paddingHorizontal: 34,
-        paddingTop: 54,
-        paddingBottom: 38,
-        justifyContent: 'space-between',
+        paddingHorizontal: 30,
+        // Um bloco só, centrado, e a assinatura solta no pé. Antes eram três filhos em
+        // `space-between`, e a etiqueta do tipo no topo abria dois vãos enormes em volta
+        // da capa — o card ficava esparramado num formato que já é alto.
+        justifyContent: 'center',
+        // A faixa da assinatura sai da conta da centralização: sem isto o bloco centrava
+        // no card inteiro e a tinta toda ficava embaixo, com o vão sobrando em cima.
+        paddingBottom: 56,
       }}>
       {/* A mesma linguagem de gradiente das capas, no tamanho do card. */}
       <View
@@ -222,43 +228,43 @@ function ShareCard({
       />
 
       <View style={{ alignItems: 'center' }}>
-        <Mono size={9.5} weight={500} tracking={0.2} caps color={T.t62}>
-          {item.kind}
-        </Mono>
-      </View>
-
-      <View style={{ alignItems: 'center' }}>
-        <AlbumArt art={art} size={cover} radius={26} cover={item.cover} />
-        <Display size={27} tracking={-0.035} align="center" numberOfLines={2} style={{ marginTop: 30 }}>
+        <AlbumArt art={art} size={cover} radius={22} cover={item.cover} />
+        <Display
+          size={24}
+          tracking={-0.035}
+          align="center"
+          numberOfLines={2}
+          style={{ marginTop: 22 }}>
           {item.title}
         </Display>
         <Body
-          size={15}
+          size={14}
           weight={500}
           color={T.t72}
           align="center"
           numberOfLines={1}
-          style={{ marginTop: 9 }}>
+          style={{ marginTop: 6 }}>
           {item.subtitle}
         </Body>
         {item.detail ? (
           <Mono
-            size={9.5}
+            size={9}
             weight={500}
             tracking={0.16}
             caps
             color={T.t42}
             align="center"
             numberOfLines={1}
-            style={{ marginTop: 13 }}>
+            style={{ marginTop: 10 }}>
             {item.detail}
           </Mono>
         ) : null}
       </View>
 
-      {/* Assinatura: o logotipo, e não o nome escrito — é o card que sai do app. */}
-      <View style={{ alignItems: 'center' }}>
-        <Wordmark size={19} />
+      {/* Assinatura: o logotipo, e não o nome escrito — é o card que sai do app.
+          Absoluta para não entrar na centralização do bloco. */}
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 30, alignItems: 'center' }}>
+        <Wordmark size={17} />
       </View>
     </View>
   );

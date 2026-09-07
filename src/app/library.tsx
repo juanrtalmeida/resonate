@@ -183,7 +183,12 @@ export default function LibraryScreen() {
       */}
       <Animated.View key={tab} entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
       {tab === 'albums' && albums.length > 0 && (
-        <AlbumStrip title="Recém-encontrados" albums={albums.slice(0, 8)} badge="NOVO" />
+        <AlbumStrip
+          title="Recém-encontrados"
+          albums={albums.slice(0, 8)}
+          badge="NOVO"
+          onHold={(album) => openMenu({ kind: 'album', album })}
+        />
       )}
 
       {tab === 'albums' && (
@@ -195,7 +200,11 @@ export default function LibraryScreen() {
       )}
 
       {tab === 'liked' && favoriteAlbums.length > 0 && (
-        <AlbumStrip title="Álbuns curtidos" albums={favoriteAlbums} />
+        <AlbumStrip
+          title="Álbuns curtidos"
+          albums={favoriteAlbums}
+          onHold={(album) => openMenu({ kind: 'album', album })}
+        />
       )}
 
       {tab === 'liked' && likedTracks.length > 0 && (
@@ -288,7 +297,10 @@ export default function LibraryScreen() {
                   entering={FadeIn.duration(260)}
                   exiting={FadeOut.duration(160)}
                   style={{ marginHorizontal: -PADDING }}>
-                  <AlbumCarousel albums={albums} />
+                  <AlbumCarousel
+                    albums={albums}
+                    onHold={(album) => openMenu({ kind: 'album', album })}
+                  />
                 </Animated.View>
               ) : (
                 empty
@@ -527,11 +539,14 @@ function AlbumStrip({
   title,
   albums,
   badge,
+  onHold,
 }: {
   title: string;
   albums: Album[];
   /** Selo no canto da capa. Sem ele a capa vai limpa. */
   badge?: string;
+  /** Toque longo numa capa. Igual ao da grade: segurar um álbum abre as ações dele. */
+  onHold?: (album: Album) => void;
 }) {
   return (
     <View style={{ marginTop: 24 }}>
@@ -542,14 +557,27 @@ function AlbumStrip({
         style={{ marginHorizontal: -PADDING }}
         contentContainerStyle={{ gap: 12, paddingHorizontal: PADDING }}>
         {albums.map((album) => (
-          <StripCell key={album.id} album={album} badge={badge} />
+          <StripCell
+            key={album.id}
+            album={album}
+            badge={badge}
+            onLongPress={onHold && (() => onHold(album))}
+          />
         ))}
       </ScrollView>
     </View>
   );
 }
 
-function StripCell({ album, badge }: { album: Album; badge?: string }) {
+function StripCell({
+  album,
+  badge,
+  onLongPress,
+}: {
+  album: Album;
+  badge?: string;
+  onLongPress?: () => void;
+}) {
   const router = useRouter();
   const art = artworkFor(album.artist, album.title);
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
@@ -557,6 +585,8 @@ function StripCell({ album, badge }: { album: Album; badge?: string }) {
   return (
     <Pressable
       onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onLongPress={onLongPress}
+      delayLongPress={280}
       style={{ width: 112 }}>
       <View ref={ref} collapsable={false} style={originStyle}>
         <AlbumArt art={art} size={112} radius={R.r15} detail="ring" cover={album.cover} />
@@ -716,7 +746,13 @@ function ViewToggle({
  * A rolagem dirige tudo por um shared value — o giro e a escala de cada capa saem de um
  * worklet, sem passar pelo React a cada quadro.
  */
-function AlbumCarousel({ albums }: { albums: Album[] }) {
+function AlbumCarousel({
+  albums,
+  onHold,
+}: {
+  albums: Album[];
+  onHold?: (album: Album) => void;
+}) {
   const { width } = useWindowDimensions();
   const size = Math.round(width * 0.66);
   const step = size + CAROUSEL_GAP;
@@ -742,7 +778,15 @@ function AlbumCarousel({ albums }: { albums: Album[] }) {
         paddingBottom: 12,
       }}>
       {albums.map((album, index) => (
-        <CarouselCard key={album.id} album={album} index={index} size={size} step={step} x={x} />
+        <CarouselCard
+          key={album.id}
+          album={album}
+          index={index}
+          size={size}
+          step={step}
+          x={x}
+          onLongPress={onHold && (() => onHold(album))}
+        />
       ))}
     </Animated.ScrollView>
   );
@@ -756,12 +800,14 @@ function CarouselCard({
   size,
   step,
   x,
+  onLongPress,
 }: {
   album: Album;
   index: number;
   size: number;
   step: number;
   x: SharedValue<number>;
+  onLongPress?: () => void;
 }) {
   const router = useRouter();
   // A moldura é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
@@ -793,7 +839,10 @@ function CarouselCard({
 
   return (
     <Animated.View style={[{ width: size }, card]}>
-      <Pressable onPress={() => launch(() => router.push(`/album/${album.id}`))}>
+      <Pressable
+        onPress={() => launch(() => router.push(`/album/${album.id}`))}
+        onLongPress={onLongPress}
+        delayLongPress={280}>
         <View
           ref={ref}
           collapsable={false}

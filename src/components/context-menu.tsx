@@ -39,8 +39,10 @@ export type MenuAction = {
   icon: ReactNode;
   /** Fica no acento e passa pela confirmação antes de correr. */
   destructive?: boolean;
-  /** Texto da confirmação. Obrigatório quando `destructive`. */
+  /** Pergunta da confirmação. Obrigatória quando `destructive`. */
   confirm?: string;
+  /** A linha que diz o que a ação faz de irreversível. Obrigatória quando `destructive`. */
+  warning?: string;
   onPress: () => void;
 };
 
@@ -158,7 +160,7 @@ export function ContextMenu({
                 {confirming.confirm}
               </Body>
               <Body size={12} color={T.t5} align="center" style={{ marginTop: 8 }}>
-                Isto apaga o arquivo do aparelho e não tem volta.
+                {confirming.warning}
               </Body>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
                 <Pressable
@@ -369,6 +371,8 @@ export function useItemMenu() {
         icon: <Trash size={16} color={T.full} />,
         destructive: true,
         confirm: `Apagar “${menu.playlist.name}”?`,
+        // A lista é só um registro nosso: os arquivos dela continuam no aparelho.
+        warning: 'A lista sai do app. As faixas continuam no aparelho.',
         onPress: () => removePlaylist(menu.playlist.id),
       });
     } else if (tracks.length) {
@@ -383,6 +387,10 @@ export function useItemMenu() {
           tracks.length === 1
             ? `Apagar “${tracks[0].title}” do aparelho?`
             : `Apagar ${tracks.length} arquivos do aparelho?`,
+        warning:
+          tracks.length === 1
+            ? 'Isto apaga o arquivo do aparelho e não tem volta.'
+            : 'Isto apaga os arquivos do aparelho e não tem volta.',
         onPress: () => {
           void removeFromDevice(tracks).then(({ removed }) => {
             if (removed.length) removeTracks(removed);
@@ -454,16 +462,7 @@ function headerFor(item: MenuItem, count: number, trackCover: string | null): He
 
 function shareableFor(item: MenuItem, count: number, trackCover: string | null): Shareable {
   const header = headerFor(item, count, trackCover);
-  const kind =
-    item.kind === 'track'
-      ? 'Faixa'
-      : item.kind === 'album'
-        ? 'Álbum'
-        : item.kind === 'artist'
-          ? 'Artista'
-          : 'Lista';
   return {
-    kind,
     title: header.title,
     subtitle: header.subtitle,
     detail: header.detail,

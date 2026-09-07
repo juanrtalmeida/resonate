@@ -382,7 +382,6 @@ export default function PlayerScreen() {
             <Pill
               onPress={() =>
                 setSharing({
-                  kind: 'Faixa',
                   title: track.title,
                   subtitle: track.artist,
                   detail: track.album,
