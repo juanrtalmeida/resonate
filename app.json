@@ -70,7 +70,21 @@
         }
       ],
       "expo-asset",
-      "./modules/live-activity/plugin/withLiveActivity"
+      "./modules/live-activity/plugin/withLiveActivity",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "buildArchs": [
+              "arm64-v8a"
+            ],
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableBundleCompression": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

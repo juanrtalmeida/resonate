@@ -10,8 +10,10 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, {
+  FadeIn,
   FadeInLeft,
   FadeInRight,
+  FadeOut,
   interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -182,39 +184,46 @@ export default function LibraryScreen() {
    */
   let content: ReactNode;
 
-  if (tab === 'albums' && albumView === 'carousel') {
-    /*
-      No carrossel a lista não é vertical: o cabeçalho fica numa ScrollView normal e as
-      capas correm de lado, uma de cada vez.
-    */
-    content = (
-      <ScrollView
-        {...chromeScroll}
-        key="albums-carousel"
-        contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: bottom }}>
-        <View style={{ paddingHorizontal: PADDING }}>{header}</View>
-        {albums.length > 0 ? (
-          <AlbumCarousel albums={albums} />
-        ) : (
-          <View style={{ paddingHorizontal: PADDING }}>
-            <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
-              Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
-            </EmptyState>
-          </View>
-        )}
-      </ScrollView>
+  if (tab === 'albums') {
+    const carousel = albumView === 'carousel';
+    const empty = (
+      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
+        Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
+      </EmptyState>
     );
-  }
 
-  if (!content && tab === 'albums') {
+    /*
+      Uma lista só para os dois modos, com `numColumns` fixo e a mesma `key`.
+
+      Trocar de modo não pode trocar de container: com uma ScrollView de um lado e uma
+      FlatList do outro, o React remontava a tela inteira e a animação de entrada do
+      cabeçalho — que é da troca de *aba* — corria de novo, fazendo a página andar toda.
+      No carrossel a lista fica sem dados e as capas vão no cabeçalho: quem entra e sai é
+      só o bloco dos álbuns.
+    */
     content = (
       <FlatList
         {...chromeScroll}
         key="albums"
-        data={albums}
+        data={carousel ? NO_ALBUMS : albums}
         keyExtractor={(a) => a.id}
         numColumns={2}
-        ListHeaderComponent={header}
+        ListHeaderComponent={
+          <>
+            {header}
+            {carousel &&
+              (albums.length > 0 ? (
+                <Animated.View
+                  entering={FadeIn.duration(260)}
+                  exiting={FadeOut.duration(160)}
+                  style={{ marginHorizontal: -PADDING }}>
+                  <AlbumCarousel albums={albums} />
+                </Animated.View>
+              ) : (
+                empty
+              ))}
+          </>
+        }
         columnWrapperStyle={{ gap: GAP }}
         contentContainerStyle={{
           paddingTop: insets.top + 24,
@@ -222,11 +231,8 @@ export default function LibraryScreen() {
           paddingHorizontal: PADDING,
           gap: 16,
         }}
-        ListEmptyComponent={
-          <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
-            Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
-          </EmptyState>
-        }
+        // No carrossel a lista está vazia de propósito: o vazio de verdade vai no cabeçalho.
+        ListEmptyComponent={carousel ? null : empty}
         renderItem={({ item, index }) => (
           <Animated.View entering={enter(index)}>
             <AlbumCell album={item} size={cell} count={item.trackIds.length} />
@@ -661,27 +667,48 @@ function CarouselCard({
   x: SharedValue<number>;
 }) {
   const router = useRouter();
-  // A capa é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
+  // A moldura é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
   const { ref, launch } = useZoomLaunch(R.r21);
 
-  const card = useAnimatedStyle(() => {
-    // Distância do centro, em cartões: 0 é o que está na frente.
-    const away = (x.value - index * step) / step;
-    return {
-      opacity: interpolate(away, [-1.4, 0, 1.4], [0.38, 1, 0.38], 'clamp'),
-      transform: [
-        { perspective: 1000 },
-        { rotateY: `${interpolate(away, [-1, 0, 1], [16, 0, -16], 'clamp')}deg` },
-        { scale: interpolate(away, [-1, 0, 1], [0.84, 1, 0.84], 'clamp') },
-      ],
-    };
-  });
+  // A arte é maior que a moldura; a sobra é o curso que ela tem para deslizar dentro.
+  const inner = Math.round(size * OVERSCAN);
+  const drift = (inner - size) / 2;
+
+  /** Distância do centro, em cartões: 0 é a capa que está na frente. */
+  const away = (offset: number) => {
+    'worklet';
+    return (offset - index * step) / step;
+  };
+
+  const card = useAnimatedStyle(() => ({
+    opacity: interpolate(away(x.value), [-1.6, 0, 1.6], [0.45, 1, 0.45], 'clamp'),
+    transform: [{ scale: interpolate(away(x.value), [-1, 0, 1], [0.9, 1, 0.9], 'clamp') }],
+  }));
+
+  /**
+   * O parallax do carrossel da Apple: a arte anda mais devagar que a moldura, sem parar
+   * entre uma capa e outra. Vem do deslocamento cru da rolagem, então é contínuo — não
+   * um estado por cartão que troca no snap.
+   */
+  const pan = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(away(x.value), [-2, 2], [-drift, drift], 'clamp') }],
+  }));
 
   return (
     <Animated.View style={[{ width: size }, card]}>
       <Pressable onPress={() => launch(() => router.push(`/album/${album.id}`))}>
-        <View ref={ref} collapsable={false}>
-          <AlbumArt art={artworkFor(album.artist, album.title)} size={size} radius={R.r21} cover={album.cover} scrim />
+        <View
+          ref={ref}
+          collapsable={false}
+          style={{ width: size, height: size, borderRadius: R.r21, overflow: 'hidden' }}>
+          <Animated.View style={[{ marginLeft: -drift, marginTop: -drift }, pan]}>
+            <AlbumArt
+              art={artworkFor(album.artist, album.title)}
+              size={inner}
+              radius={0}
+              cover={album.cover}
+            />
+          </Animated.View>
         </View>
         <Display size={19} tracking={-0.03} numberOfLines={1} style={{ marginTop: 14 }}>
           {album.title}
@@ -693,6 +720,9 @@ function CarouselCard({
     </Animated.View>
   );
 }
+
+/** Quanto a arte passa da moldura. A diferença é o curso do parallax. */
+const OVERSCAN = 1.3;
 
 function GroupRow({
   title,
