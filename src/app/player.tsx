@@ -55,6 +55,13 @@ import { importLrc, readLyrics } from '@/lib/scan';
 import { useLibrary } from '@/lib/library';
 import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
+/**
+ * Altura reservada ao que não é a capa, em dp: fechar (38), título grande (70), fita (44),
+ * tempo (32), transporte (92), fileira secundária (60), recuos da tela (20), respiro no
+ * topo (24), e as margens entre eles.
+ */
+const ROOM = 394;
+
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
   const { height: screen } = useWindowDimensions();
@@ -105,13 +112,26 @@ export default function PlayerScreen() {
    * anteriores. Com o tamanho real, a capa é o que o layout diz que ela é, e
    * `LinearTransition` anima a caixa entre os dois estados.
    */
+  /*
+    A capa mede pelo espaço que sobra, não por um número fixo.
+
+    Com 286 cravado, tela mais curta não tinha para onde encolher: a área da arte é
+    `flex: 1` e apertava, mas a capa é uma View de tamanho fixo — o que cedia era o vão em
+    volta dela, e ela encostava na barra do topo. Foi o que apareceu no iPhone.
+
+    `ROOM` é a soma do que não é capa: botão de fechar, título grande, fita, tempo,
+    transporte, a fileira secundária e os recuos da tela — mais 24 de respiro no topo, que
+    é a margem pedida. O que sobra disso é o teto da capa; o piso impede que ela vire uma
+    miniatura numa tela muito curta.
+  */
+  const artRoom = screen - insets.top - Math.max(insets.bottom, 18) - ROOM;
   const artSize = showQueue
     ? ART_MINI
     : treatment === 'vinyl'
-      ? 310
+      ? Math.max(180, Math.min(310, artRoom))
       : treatment === 'wave'
         ? 96
-        : 286;
+        : Math.max(170, Math.min(286, artRoom));
 
 
   if (!track) {
@@ -309,6 +329,55 @@ export default function PlayerScreen() {
             )}
             </Animated.View>
 
+            {/*
+              Fileira secundária, logo abaixo da arte — e não no pé da tela.
+
+              No rodapé ela virava a última coisa de uma pilha que já tinha tempo,
+              transporte e fita: três pílulas empurradas para baixo, lendo como sobra.
+              Aqui elas encostam no que descrevem, e o pé da tela fica só com o que é
+              reprodução.
+
+              Compartilhar não vai na fileira do transporte: ali são cinco alvos de toque
+              já colados, e um sexto deixaria todos pequenos demais para a mão.
+
+              Distribuída na largura, com o mesmo recuo do resto do conteúdo: centrada,
+              ela lia como um aglomerado solto.
+
+              Fora com a fila aberta, como o título grande e a fita: o espaço é da lista.
+            */}
+            {!showQueue && (
+              <ZoomFade
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  alignSelf: 'center',
+                  // Presa à largura do card. No modo onda não existe card grande, e o
+                  // bloco inteiro já é de largura cheia.
+                  width: treatment === 'wave' ? '100%' : artSize,
+                  marginTop: 26,
+                }}>
+                {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
+                    para a nossa reprodução. */}
+                {canPickOutput && (
+                  <Pill
+                    onPress={() => {
+                      void pickAudioOutput();
+                    }}>
+                    <Output size={16} color={T.t72} />
+                  </Pill>
+                )}
+                {canShareToStories && (
+                  <Pill onPress={() => share(nowPlaying(), 'stories')}>
+                    <Instagram size={16} color={T.t72} />
+                  </Pill>
+                )}
+                <Pill onPress={() => share(nowPlaying(), 'sheet')}>
+                  <ShareIcon size={15} color={T.t72} />
+                </Pill>
+              </ZoomFade>
+            )}
+
             {showQueue && (
               <Animated.View
                 entering={FadeInDown.duration(280)}
@@ -321,15 +390,8 @@ export default function PlayerScreen() {
         </GestureDetector>
         )}
 
-        {/*
-          rodapé
-
-          A área da arte é `flex: 1` e comia toda a folga: tempo, transporte e pílulas
-          ficavam grudados nos últimos 200 px com um vão enorme acima. O `flexGrow` dá ao
-          rodapé um pedaço dessa folga, e `space-evenly` reparte esse pedaço em quatro
-          vãos iguais — o cluster sobe e respira, sem virar três fileiras soltas na tela.
-        */}
-        <ZoomFade style={{ marginTop: 14, flexGrow: 0.45, justifyContent: 'space-evenly' }}>
+        {/* rodapé */}
+        <ZoomFade style={{ marginTop: 14 }}>
           {bigTitle && (
             <View style={{ alignItems: 'center', marginBottom: 20 }}>
               <Display size={26} tracking={-0.035} align="center" numberOfLines={2}>
@@ -398,42 +460,6 @@ export default function PlayerScreen() {
             <Pressable onPress={() => setShowQueue((on) => !on)} hitSlop={8} style={round(44)}>
               <Queue size={20} color={showQueue ? accent : T.t72} />
             </Pressable>
-          </View>
-
-          {/*
-            Fileira secundária. Compartilhar mora aqui, e não na fileira do transporte:
-            ali são cinco alvos de toque já colados, e um sexto deixaria todos pequenos
-            demais para a mão. É o mesmo peso que Spotify e Apple Music dão a ele.
-          */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignSelf: 'center',
-              alignItems: 'center',
-              gap: 8,
-              marginTop: 16,
-            }}>
-            {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
-                para a nossa reprodução. */}
-            {canPickOutput && (
-              <Pill
-                onPress={() => {
-                  void pickAudioOutput();
-                }}
-                label="Saída de áudio">
-                <Output size={16} color={T.t72} />
-              </Pill>
-            )}
-            {/* Stories só como ícone: com a saída de áudio ao lado, três pílulas com
-                rótulo não cabem na largura de um telefone. */}
-            {canShareToStories && (
-              <Pill onPress={() => share(nowPlaying(), 'stories')}>
-                <Instagram size={16} color={T.t72} />
-              </Pill>
-            )}
-            <Pill onPress={() => share(nowPlaying(), 'sheet')} label="Compartilhar">
-              <ShareIcon size={15} color={T.t72} />
-            </Pill>
           </View>
 
         </ZoomFade>

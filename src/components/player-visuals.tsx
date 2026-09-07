@@ -72,7 +72,10 @@ export function Ribbon({
    *
    * Matriz 2D do SVG: [a, b, c, d, tx, ty].
    */
-  const matrix = () => ({ matrix: [1, 0, 0, 1, x.value, 0] }) as unknown as Record<string, unknown>;
+  /** O que o dedo somou por cima da posição da fita, enquanto arrasta. */
+  const drag = useSharedValue(0);
+  const matrix = () =>
+    ({ matrix: [1, 0, 0, 1, x.value + drag.value, 0] }) as unknown as Record<string, unknown>;
   const slide = useAnimatedProps(matrix);
   // A cópia no acento desliza junto: dois `animatedProps` do mesmo `x`, porque um só não
   // pode alimentar dois componentes.
@@ -91,11 +94,32 @@ export function Ribbon({
     runOnJS(onSeek)((e.x - width / 2) / SPAN);
   });
 
+  /**
+   * Arrastar a fita para buscar — o gesto que faltava. Só havia o toque, e a agulha era
+   * um alvo de 2 px de largura.
+   *
+   * A fita anda com o dedo em vez de esperar o `seekTo`: sem isso o arrasto não devolvia
+   * nada até soltar. O `withTiming` na volta a zero casa com os 220 ms que a reação do
+   * `progress` usa, então o dedo entrega a fita já no lugar em que ela vai parar.
+   *
+   * Arrastar para a esquerda avança, que é o sentido de puxar a fita sob a agulha — daí
+   * o sinal negativo.
+   */
+  const scrub = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .onUpdate((e) => {
+      drag.value = e.translationX;
+    })
+    .onEnd((e) => {
+      runOnJS(onSeek)(-e.translationX / SPAN);
+      drag.value = withTiming(0, { duration: 220, easing: Easing.linear });
+    });
+
   return (
     <View
       style={{ height: RIBBON_H }}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
-      <GestureDetector gesture={tap}>
+      <GestureDetector gesture={Gesture.Race(scrub, tap)}>
         <View style={{ position: 'absolute', inset: 0 }}>
           {width > 0 && (
             <Svg width={width} height={RIBBON_H}>
@@ -224,13 +248,33 @@ export function Waveform({
   });
 
   /**
+   * Arrastar a onda para buscar, com prévia.
+   *
+   * `scrub` em -1 quer dizer "sem arrasto"; qualquer valor de 0 a 1 assume o lugar do
+   * `progress` no recorte, então a parte no acento acompanha o dedo antes de o `seekTo`
+   * acontecer. Sem isso a onda só reagia depois de soltar.
+   */
+  const scrub = useSharedValue(-1);
+  const drag = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .onUpdate((e) => {
+      scrub.value = Math.min(1, Math.max(0, e.x / Math.max(1, width)));
+    })
+    .onEnd((e) => {
+      runOnJS(onSeek)(Math.min(1, Math.max(0, e.x / Math.max(1, width))));
+      scrub.value = -1;
+    });
+
+  /**
    * A parte tocada é a mesma onda no acento, dentro de uma janela que cresce.
    *
    * Colorir barra a barra custava um `backgroundColor` recalculado em JavaScript para 52
    * views a cada tique do tempo. Uma janela com `overflow: hidden` é um estilo animado
    * só, e o React não é acordado.
    */
-  const played = useAnimatedStyle(() => ({ width: progress.value * width }));
+  const played = useAnimatedStyle(() => ({
+    width: (scrub.value >= 0 ? scrub.value : progress.value) * width,
+  }));
 
   const row = (color: string) =>
     heights.map((h, i) => (
@@ -248,7 +292,7 @@ export function Waveform({
     ));
 
   return (
-    <GestureDetector gesture={tap}>
+    <GestureDetector gesture={Gesture.Race(drag, tap)}>
       <View
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
         style={{ height: WAVE_H, flexDirection: 'row', alignItems: 'center', gap: 2 }}>

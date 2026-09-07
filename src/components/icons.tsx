@@ -4,9 +4,21 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 type IconProps = { size?: number; color?: string };
 
+/**
+ * O triângulo de play, com a correção óptica embutida no viewBox.
+ *
+ * Centrar um triângulo pela caixa põe a massa dele fora do centro: o centroide fica a um
+ * terço da base, não na metade. Medido no botão grande do player, a caixa estava centrada
+ * a menos de 1 px e o centroide 7,3 px à esquerda do centro do círculo — e é o centroide
+ * que o olho segue. O `minX` negativo desloca o glifo para a direita em toda parte onde
+ * este ícone aparece, e não só ali.
+ *
+ * 1,3 de 14 é dois terços da correção completa (`largura/6` ≈ 1,9). A correção inteira
+ * encosta o ápice na borda direita e passa a parecer empurrado.
+ */
 export function Play({ size = 16, color = '#F6F1EA' }: IconProps) {
   return (
-    <Svg width={size} height={size * (16 / 14)} viewBox="0 0 14 16">
+    <Svg width={size} height={size * (16 / 14)} viewBox="-1.3 0 14 16">
       <Path
         d="M1 1.6c0-.9 1-1.4 1.7-.9l9.6 6.4c.7.5.7 1.5 0 1.9l-9.6 6.4c-.8.5-1.7-.1-1.7-.9V1.6z"
         fill={color}
