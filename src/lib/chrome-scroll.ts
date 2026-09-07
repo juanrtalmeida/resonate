@@ -46,6 +46,9 @@ export function chromeExpand() {
 export const chromeScroll = {
   // 30 Hz basta para decidir mostrar ou esconder; 60 acordava a thread de JS o dobro.
   scrollEventThrottle: 32,
+  // A barra de rolagem do sistema não combina com nada aqui, e some das listas todas de
+  // uma vez porque todas passam por estas props.
+  showsVerticalScrollIndicator: false,
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
     chromeScrollTo(e.nativeEvent.contentOffset.y),
 };

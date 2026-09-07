@@ -42,13 +42,13 @@ function AlbumDetail({ album }: { album: Album }) {
   const insets = useSafeAreaInsets();
   const { tracksOf } = useLibrary();
   const { play, enqueueLast } = usePlayer();
-  const { accent, isLiked, toggleLike } = usePrefs();
+  const { accent, isAlbumLiked, toggleAlbumLike } = usePrefs();
   const { open, sheet } = usePlaylistSheet();
 
   const tracks = tracksOf(album);
   const art = artworkFor(album.artist, album.title);
   const total = tracks.reduce((n, t) => n + (t.duration ?? 0), 0);
-  const liked = isLiked(album.id);
+  const liked = isAlbumLiked(album.id);
 
   const header = (
     <View>
@@ -58,7 +58,7 @@ function AlbumDetail({ album }: { album: Album }) {
 
       {/* A capa não entra em fade: ela é o objeto que veio da grade. */}
       <View style={{ alignItems: 'center', marginTop: 18 }}>
-        <ZoomTarget>
+        <ZoomTarget radius={24}>
           <AlbumArt art={art} size={218} radius={24} cover={album.cover} />
         </ZoomTarget>
       </View>
@@ -102,7 +102,7 @@ function AlbumDetail({ album }: { album: Album }) {
           <Shuffle />
         </SquareButton>
         <QueueButton onPress={() => enqueueLast(tracks)} accent={accent} />
-        <SquareButton onPress={() => toggleLike(album.id)}>
+        <SquareButton onPress={() => toggleAlbumLike(album.id)}>
           <Heart color={accent} filled={liked} />
         </SquareButton>
       </ZoomFade>

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { lineAt, lineProgress, parseLrc } from './lrc.ts';
+import { lineAt, lineProgress, parseLrc, wordAt } from './lrc.ts';
 
 test('LRC sincronizado', () => {
   const { synced, lines } = parseLrc(
@@ -77,4 +77,50 @@ test('lineProgress', () => {
 test('sem letra, sem linhas', () => {
   assert.deepEqual(parseLrc('').lines, []);
   assert.deepEqual(parseLrc('   \n  ').lines, []);
+});
+
+test('carimbo por palavra sai do texto e vira trechos cronometrados', () => {
+  const { synced, lines } = parseLrc('[00:10.00]<00:10.00>um <00:10.50>dois <00:11.20>três');
+  assert.equal(synced, true);
+  assert.equal(lines[0].time, 10);
+  assert.equal(lines[0].text, 'um dois três', 'nenhum carimbo sobra na letra');
+  assert.deepEqual(lines[0].words, [
+    { time: 10, text: 'um' },
+    { time: 10.5, text: 'dois' },
+    { time: 11.2, text: 'três' },
+  ]);
+});
+
+test('linha só com carimbo por palavra começa na primeira delas', () => {
+  const { synced, lines } = parseLrc('<00:04.00>um <00:04.80>dois');
+  assert.equal(synced, true);
+  assert.equal(lines[0].time, 4);
+  assert.equal(lines[0].text, 'um dois');
+});
+
+test('texto antes do primeiro carimbo por palavra fica com o tempo da linha', () => {
+  const { lines } = parseLrc('[00:20.00]um <00:21.00>dois');
+  assert.deepEqual(lines[0].words, [
+    { time: 20, text: 'um' },
+    { time: 21, text: 'dois' },
+  ]);
+});
+
+test('refrão repetido não leva os carimbos por palavra junto', () => {
+  const { lines } = parseLrc('[00:30.00][00:10.00]<00:10.00>um <00:10.50>dois');
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0].text, 'um dois');
+  assert.equal(lines[0].words, null, 'os tempos por palavra só valeriam na primeira vez');
+});
+
+test('linha sem carimbo por palavra continua sem trechos', () => {
+  assert.equal(parseLrc('[00:12.00]uma frase inteira').lines[0].words, null);
+});
+
+test('wordAt', () => {
+  const words = parseLrc('[00:10.00]<00:10.00>um <00:12.00>dois').lines[0].words!;
+  assert.equal(wordAt(words, 9), -1, 'antes da primeira');
+  assert.equal(wordAt(words, 10), 0, 'exatamente no carimbo');
+  assert.equal(wordAt(words, 11.9), 0);
+  assert.equal(wordAt(words, 99), 1, 'depois da última');
 });

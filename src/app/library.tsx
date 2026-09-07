@@ -1,16 +1,28 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Dimensions, FlatList, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  Dimensions,
+  FlatList,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import Animated, {
   FadeInLeft,
   FadeInRight,
+  interpolate,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
+  useSharedValue,
   withSpring,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
-import { LibraryIcon, Search } from '@/components/icons';
+import { Carousel, Grid, LibraryIcon, Search } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { SectionLabel } from '@/components/section-label';
 import { Body, Display, Mono } from '@/components/text';
@@ -21,8 +33,9 @@ import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
+import { Sheet } from '@/components/sheet';
 import { usePlaylists } from '@/lib/playlists';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, type AlbumView } from '@/lib/prefs';
 import { useZoomLaunch } from '@/lib/zoom';
 import type { Album, Track } from '@/lib/scan';
 
@@ -44,7 +57,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { library, artists } = useLibrary();
-  const { accent } = usePrefs();
+  const { accent, albumView, setAlbumView } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
@@ -119,7 +132,11 @@ export default function LibraryScreen() {
       {tab === 'albums' && albums.length > 0 && <Fresh albums={albums.slice(0, 8)} />}
 
       {tab === 'albums' && (
-        <SectionLabel title="Todos os álbuns" trailing={`${albums.length} álbuns`} />
+        <SectionLabel
+          title="Todos os álbuns"
+          trailing={`${albums.length}`}
+          action={<ViewToggle value={albumView} onPick={setAlbumView} accent={accent} />}
+        />
       )}
 
       {tab === 'playlists' && (
@@ -165,7 +182,31 @@ export default function LibraryScreen() {
    */
   let content: ReactNode;
 
-  if (tab === 'albums') {
+  if (tab === 'albums' && albumView === 'carousel') {
+    /*
+      No carrossel a lista não é vertical: o cabeçalho fica numa ScrollView normal e as
+      capas correm de lado, uma de cada vez.
+    */
+    content = (
+      <ScrollView
+        {...chromeScroll}
+        key="albums-carousel"
+        contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: bottom }}>
+        <View style={{ paddingHorizontal: PADDING }}>{header}</View>
+        {albums.length > 0 ? (
+          <AlbumCarousel albums={albums} />
+        ) : (
+          <View style={{ paddingHorizontal: PADDING }}>
+            <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
+              Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
+            </EmptyState>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  if (!content && tab === 'albums') {
     content = (
       <FlatList
         {...chromeScroll}
@@ -313,59 +354,50 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(6,5,4,.6)' }} onPress={onClose} />
-      <View
+    <Sheet visible={visible} onClose={onClose} title="Nova lista">
+      <TextInput
+        value={name}
+        onChangeText={setName}
+        autoFocus
+        placeholder="Nome da lista"
+        placeholderTextColor={T.t34}
+        selectionColor={accent}
+        returnKeyType="done"
+        onSubmitEditing={confirm}
         style={{
-          position: 'absolute',
-          left: PADDING,
-          right: PADDING,
-          top: '34%',
-          backgroundColor: C.surface,
-          borderRadius: R.r21,
+          marginTop: 14,
+          height: 48,
+          paddingHorizontal: 14,
+          borderRadius: R.r15,
+          backgroundColor: C.card,
           borderWidth: 1,
-          borderColor: T.t1,
-          padding: 20,
-        }}>
-        <Display size={20} tracking={-0.03}>
-          Nova lista
-        </Display>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          autoFocus
-          placeholder="Nome da lista"
-          placeholderTextColor={T.t34}
-          selectionColor={accent}
-          returnKeyType="done"
-          onSubmitEditing={confirm}
+          borderColor: name.trim() ? alpha(accent, 0.5) : T.t07,
+          color: T.full,
+          fontFamily: 'FamiljenGrotesk_500Medium',
+          fontSize: 15,
+        }}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18, marginTop: 16 }}>
+        <Pressable onPress={onClose} hitSlop={8} style={{ paddingVertical: 8 }}>
+          <Body size={13.5} weight={600} color={T.t5}>
+            Cancelar
+          </Body>
+        </Pressable>
+        <Pressable
+          onPress={confirm}
+          disabled={!name.trim()}
           style={{
-            marginTop: 14,
-            height: 46,
-            paddingHorizontal: 14,
+            paddingVertical: 8,
+            paddingHorizontal: 18,
             borderRadius: R.r13,
-            backgroundColor: C.card,
-            borderWidth: 1,
-            borderColor: name.trim() ? T.t14 : T.t07,
-            color: T.full,
-            fontFamily: 'FamiljenGrotesk_500Medium',
-            fontSize: 15,
-          }}
-        />
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18, marginTop: 16 }}>
-          <Pressable onPress={onClose} hitSlop={8}>
-            <Body size={13.5} weight={600} color={T.t5}>
-              Cancelar
-            </Body>
-          </Pressable>
-          <Pressable onPress={confirm} disabled={!name.trim()} hitSlop={8}>
-            <Body size={13.5} weight={600} color={name.trim() ? accent : T.t24}>
-              Criar
-            </Body>
-          </Pressable>
-        </View>
+            backgroundColor: name.trim() ? accent : T.t06,
+          }}>
+          <Body size={13.5} weight={600} color={name.trim() ? C.onAccent : T.t24}>
+            Criar
+          </Body>
+        </Pressable>
       </View>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -533,6 +565,132 @@ function ArtistRow({ artist }: { artist: ReturnType<typeof useLibrary>['artists'
         </Body>
       </View>
     </Pressable>
+  );
+}
+
+/** Seletor de visualização da aba de álbuns. A escolha fica salva nas preferências. */
+function ViewToggle({
+  value,
+  onPick,
+  accent,
+}: {
+  value: AlbumView;
+  onPick: (v: AlbumView) => void;
+  accent: string;
+}) {
+  const slot = (on: boolean) => ({
+    width: 30,
+    height: 24,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: on ? alpha(accent, 0.2) : 'transparent',
+  });
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        gap: 2,
+        padding: 3,
+        borderRadius: R.r13,
+        backgroundColor: C.card,
+      }}>
+      <Pressable onPress={() => onPick('grid')} hitSlop={4} style={slot(value === 'grid')}>
+        <Grid size={13} color={value === 'grid' ? T.full : T.t34} />
+      </Pressable>
+      <Pressable onPress={() => onPick('carousel')} hitSlop={4} style={slot(value === 'carousel')}>
+        <Carousel size={13} color={value === 'carousel' ? T.full : T.t34} />
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Carrossel de capas, no espírito da Apple TV: uma capa grande no centro, as vizinhas
+ * recuadas e giradas, e o dedo passando de uma em uma.
+ *
+ * A rolagem dirige tudo por um shared value — o giro e a escala de cada capa saem de um
+ * worklet, sem passar pelo React a cada quadro.
+ */
+function AlbumCarousel({ albums }: { albums: Album[] }) {
+  const { width } = useWindowDimensions();
+  const size = Math.round(width * 0.66);
+  const step = size + CAROUSEL_GAP;
+
+  const x = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    x.value = e.contentOffset.x;
+  });
+
+  return (
+    <Animated.ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={step}
+      disableIntervalMomentum
+      decelerationRate="fast"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      contentContainerStyle={{
+        paddingHorizontal: (width - size) / 2,
+        gap: CAROUSEL_GAP,
+        paddingTop: 8,
+        paddingBottom: 12,
+      }}>
+      {albums.map((album, index) => (
+        <CarouselCard key={album.id} album={album} index={index} size={size} step={step} x={x} />
+      ))}
+    </Animated.ScrollView>
+  );
+}
+
+const CAROUSEL_GAP = 18;
+
+function CarouselCard({
+  album,
+  index,
+  size,
+  step,
+  x,
+}: {
+  album: Album;
+  index: number;
+  size: number;
+  step: number;
+  x: SharedValue<number>;
+}) {
+  const router = useRouter();
+  // A capa é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
+  const { ref, launch } = useZoomLaunch(R.r21);
+
+  const card = useAnimatedStyle(() => {
+    // Distância do centro, em cartões: 0 é o que está na frente.
+    const away = (x.value - index * step) / step;
+    return {
+      opacity: interpolate(away, [-1.4, 0, 1.4], [0.38, 1, 0.38], 'clamp'),
+      transform: [
+        { perspective: 1000 },
+        { rotateY: `${interpolate(away, [-1, 0, 1], [16, 0, -16], 'clamp')}deg` },
+        { scale: interpolate(away, [-1, 0, 1], [0.84, 1, 0.84], 'clamp') },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View style={[{ width: size }, card]}>
+      <Pressable onPress={() => launch(() => router.push(`/album/${album.id}`))}>
+        <View ref={ref} collapsable={false}>
+          <AlbumArt art={artworkFor(album.artist, album.title)} size={size} radius={R.r21} cover={album.cover} scrim />
+        </View>
+        <Display size={19} tracking={-0.03} numberOfLines={1} style={{ marginTop: 14 }}>
+          {album.title}
+        </Display>
+        <Body size={12.5} color={T.t42} numberOfLines={1} style={{ marginTop: 3 }}>
+          {album.artist} · {album.trackIds.length} faixas
+        </Body>
+      </Pressable>
+    </Animated.View>
   );
 }
 

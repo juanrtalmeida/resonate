@@ -134,8 +134,45 @@ function Artist({
 
   const header = (
     <>
-      {/* Vão transparente do tamanho do hero: é por aqui que a foto aparece. */}
-      <View style={{ height: HERO }} pointerEvents="none" />
+      {/*
+        Nome, números e ações vivem aqui, dentro do cabeçalho da lista — e não na camada
+        da foto. Lá eles ficavam debaixo da própria lista, que cobre a tela inteira, e
+        nenhum dos três botões chegava a receber o toque.
+      */}
+      <Animated.View
+        style={[
+          {
+            height: HERO,
+            justifyContent: 'flex-end',
+            paddingHorizontal: PADDING,
+            paddingBottom: 22,
+            flexDirection: 'row',
+            alignItems: 'flex-end',
+            gap: 14,
+          },
+          heroContent,
+        ]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Display size={38} weight={800} tracking={-0.04} numberOfLines={2}>
+            {name}
+          </Display>
+          <Mono size={10.5} tracking={0.14} caps color={T.t72} style={{ marginTop: 8 }}>
+            {albums.length} {albums.length === 1 ? 'álbum' : 'álbuns'} · {tracks.length} faixas ·{' '}
+            {hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`}
+          </Mono>
+        </View>
+
+        {/* Ações no canto inferior direito, como no Music. */}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <QueueRound onPress={() => enqueueLast(tracks)} accent={accent} />
+          <Round onPress={() => play(shuffled(tracks), 0)} border>
+            <Shuffle size={19} />
+          </Round>
+          <Round onPress={() => play(tracks, 0)} background={accent}>
+            <Play size={16} color={C.onAccent} />
+          </Round>
+        </View>
+      </Animated.View>
       <View style={{ paddingHorizontal: PADDING, backgroundColor: C.bg }}>
         {top.length > 0 && (
           <>
@@ -201,7 +238,8 @@ function Artist({
       <ZoomTarget
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: HERO, zIndex: 0 }}>
       <Animated.View
-        pointerEvents="box-none"
+        // Nada aqui recebe toque: o conteúdo do hero mora no cabeçalho da lista.
+        pointerEvents="none"
         style={[
           {
             position: 'absolute',
@@ -228,46 +266,12 @@ function Artist({
             experimental_backgroundImage: `linear-gradient(180deg, rgba(11,10,9,.25) 0%, transparent 32%, rgba(11,10,9,.72) 78%, ${C.bg} 100%)`,
           }}
         />
-
-        <Animated.View
-          style={[
-            {
-              position: 'absolute',
-              left: PADDING,
-              right: PADDING,
-              bottom: 22,
-              flexDirection: 'row',
-              alignItems: 'flex-end',
-              gap: 14,
-            },
-            heroContent,
-          ]}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Display size={38} weight={800} tracking={-0.04} numberOfLines={2}>
-              {name}
-            </Display>
-            <Mono size={10.5} tracking={0.14} caps color={T.t72} style={{ marginTop: 8 }}>
-              {albums.length} {albums.length === 1 ? 'álbum' : 'álbuns'} · {tracks.length} faixas ·{' '}
-              {hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`}
-            </Mono>
-          </View>
-
-          {/* Ações no canto inferior direito, como no Music. */}
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <QueueRound onPress={() => enqueueLast(tracks)} accent={accent} />
-            <Round onPress={() => play(shuffled(tracks), 0)} border>
-              <Shuffle size={19} />
-            </Round>
-            <Round onPress={() => play(tracks, 0)} background={accent}>
-              <Play size={16} color={C.onAccent} />
-            </Round>
-          </View>
-        </Animated.View>
       </Animated.View>
       </ZoomTarget>
 
       <ZoomFade style={{ flex: 1 }}>
       <Animated.FlatList
+        showsVerticalScrollIndicator={false}
         data={shown}
         keyExtractor={(t) => (t as Track).id}
         onScroll={onScroll}

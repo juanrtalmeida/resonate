@@ -1,5 +1,6 @@
 /** O rótulo de seção do design: mono em caixa alta, filete esmaecido e um valor à direita. */
 
+import type { ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { T } from '@/constants/theme';
@@ -8,10 +9,13 @@ import { Body, Mono } from './text';
 export function SectionLabel({
   title,
   trailing,
+  action,
   style,
 }: {
   title: string;
   trailing?: string;
+  /** Controle no fim da linha — o seletor de visualização, por exemplo. */
+  action?: ReactNode;
   style?: { marginTop?: number; marginBottom?: number; paddingHorizontal?: number };
 }) {
   return (
@@ -35,6 +39,7 @@ export function SectionLabel({
           {trailing}
         </Body>
       ) : null}
+      {action}
     </View>
   );
 }

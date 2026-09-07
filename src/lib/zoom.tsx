@@ -90,6 +90,11 @@ type Zoom = {
   progress: SharedValue<number>;
   from: Rect | null;
   close: () => void;
+  /**
+   * Contador de invalidação da medida de destino. Sobe quando o fechamento começa, e é
+   * o sinal para o ZoomTarget medir de novo onde ele está *agora*.
+   */
+  stale: SharedValue<number>;
 };
 
 const Ctx = createContext<Zoom | null>(null);
@@ -128,6 +133,7 @@ export function ZoomScreen({
   const { height, width } = useWindowDimensions();
   const [from] = useState(takeOrigin);
   const progress = useSharedValue(0);
+  const stale = useSharedValue(0);
 
   useEffect(() => {
     progress.value = withTiming(1, OPEN);
@@ -143,10 +149,13 @@ export function ZoomScreen({
   const close = useCallback(() => {
     if (closing.value) return;
     closing.value = true;
+    // Mede de novo antes de descer: entre abrir e fechar a lista rolou, o parallax andou,
+    // e a capa precisa voltar do lugar onde ela está agora.
+    stale.value += 1;
     progress.value = withTiming(0, CLOSE, (done) => {
       if (done) runOnJS(finish)();
     });
-  }, [progress, closing, finish]);
+  }, [progress, closing, finish, stale]);
 
   /**
    * O botão de voltar do Android fecha pela mesma animação. Sem isto ele desmontava a
@@ -163,6 +172,9 @@ export function ZoomScreen({
   /** Arrasto da borda esquerda. Mesmo `progress`, dirigido pela distância horizontal. */
   const edge = Gesture.Pan()
     .activeOffsetX([-9999, 12])
+    .onBegin(() => {
+      stale.value += 1;
+    })
     .onUpdate((e) => {
       if (closing.value || e.translationX <= 0) return;
       progress.value = Math.max(0, 1 - e.translationX / (width * 0.6));
@@ -190,6 +202,9 @@ export function ZoomScreen({
     // que é o gesto de trocar de faixa na capa.
     .activeOffsetY([-9999, 24])
     .failOffsetX([-24, 24])
+    .onBegin(() => {
+      stale.value += 1;
+    })
     .onUpdate((e) => {
       if (closing.value || e.translationY <= 0) return;
       progress.value = Math.max(0, 1 - e.translationY / height);
@@ -228,7 +243,7 @@ export function ZoomScreen({
   );
 
   return (
-    <Ctx value={{ progress, from, close }}>
+    <Ctx value={{ progress, from, close, stale }}>
       {dismissable ? <GestureDetector gesture={drag}>{body}</GestureDetector> : body}
     </Ctx>
   );
@@ -280,9 +295,16 @@ export function ZoomFade({
 export function ZoomTarget({
   children,
   style,
+  radius = 0,
 }: {
   children: ReactNode;
   style?: ViewStyle;
+  /**
+   * Cantos que a capa tem aqui, no destino. A origem traz os dela em `from.radius`, e a
+   * forma é interpolada entre as duas: sem isto, a bolinha do artista virava um quadrado
+   * no primeiro quadro do voo, e voltava quadrada para o lugar de uma bola.
+   */
+  radius?: number;
 }) {
   const zoom = use(Ctx);
   const ref = useAnimatedRef<View>();
@@ -304,9 +326,20 @@ export function ZoomTarget({
 
   const from = zoom?.from ?? null;
   const progress = zoom?.progress;
+  const stale = zoom?.stale;
+  /** Qual invalidação já foi atendida. */
+  const seen = useSharedValue(0);
 
   const flight = useAnimatedStyle(() => {
     if (!from || !progress) return { opacity: 1 };
+
+    // O destino não fica parado: a lista rola, o hero do artista tem parallax. Quando o
+    // fechamento pede, a medida é refeita — e é refeita com a tela ainda aberta, quando a
+    // transformação é a identidade e o que se mede é o lugar de verdade.
+    if (stale && seen.value !== stale.value) {
+      seen.value = stale.value;
+      to.value = null;
+    }
 
     if (!to.value) {
       const m = measure(ref);
@@ -320,11 +353,14 @@ export function ZoomTarget({
 
     const p = progress.value;
     const scale = from.width / dest.width;
-    // Alinha os centros: a capa não muda de forma, só de tamanho e de lugar.
+    // Alinha os centros: a capa muda de tamanho, de lugar e de forma.
     const dx = from.x + from.width / 2 - (dest.x + dest.width / 2);
     const dy = from.y + from.height / 2 - (dest.y + dest.height / 2);
     return {
       opacity: 1,
+      // Dividido pela escala porque o raio é desenhado antes de a view ser escalada:
+      // para *parecer* o raio da origem, o valor aqui precisa ser maior na mesma medida.
+      borderRadius: interpolate(p, [0, 1], [from.radius / scale, radius]),
       transform: [
         { translateX: interpolate(p, [0, 1], [dx, 0]) },
         { translateY: interpolate(p, [0, 1], [dy, 0]) },
@@ -338,7 +374,8 @@ export function ZoomTarget({
       ref={ref}
       collapsable={false}
       // Acima do resto: enquanto viaja, a capa passa por cima do conteúdo da tela nova.
-      style={[{ zIndex: 10 }, style, flight]}>
+      // `overflow: hidden` é o que faz o raio animado recortar o que está dentro.
+      style={[{ zIndex: 10, overflow: 'hidden' }, style, flight]}>
       {children}
     </Animated.View>
   );

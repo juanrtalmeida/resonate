@@ -228,6 +228,43 @@ export function Check({ size = 18, color = '#F6F1EA' }: IconProps) {
   );
 }
 
+export function Grid({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Rect x={1.4} y={1.4} width={5.6} height={5.6} rx={1.6} fill={color} />
+      <Rect x={9} y={1.4} width={5.6} height={5.6} rx={1.6} fill={color} />
+      <Rect x={1.4} y={9} width={5.6} height={5.6} rx={1.6} fill={color} />
+      <Rect x={9} y={9} width={5.6} height={5.6} rx={1.6} fill={color} />
+    </Svg>
+  );
+}
+
+export function Carousel({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      {/* Uma capa grande no meio e as vizinhas espiando dos lados. */}
+      <Rect x={5} y={2.4} width={6} height={11.2} rx={1.8} fill={color} />
+      <Rect x={0.8} y={4.6} width={2.8} height={6.8} rx={1.2} fill={color} opacity={0.42} />
+      <Rect x={12.4} y={4.6} width={2.8} height={6.8} rx={1.2} fill={color} opacity={0.42} />
+    </Svg>
+  );
+}
+
+export function Output({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      {/* Alto-falante e duas ondas: o mesmo desenho do painel de saída do sistema. */}
+      <Path d="M3.4 8h2.4L9.2 5.2v9.6L5.8 12H3.4z" fill={color} />
+      <Path
+        d="M12.4 7.6a3.6 3.6 0 010 4.8M15 5.2a7.2 7.2 0 010 9.6"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 export function Repeat({ size = 19, color = '#F6F1EA', one = false }: IconProps & { one?: boolean }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">

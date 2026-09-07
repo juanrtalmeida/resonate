@@ -103,6 +103,7 @@ export default function Onboarding() {
     <View style={{ flex: 1, backgroundColor: C.surface }}>
       <Glow accent={accent} />
       <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingTop: insets.top + 34,
           paddingHorizontal: 26,

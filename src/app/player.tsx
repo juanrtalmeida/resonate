@@ -25,6 +25,7 @@ import {
   Heart,
   Lyrics as LyricsIcon,
   Next,
+  Output,
   Pause,
   Play,
   Previous,
@@ -37,6 +38,7 @@ import { QueueRow } from '@/components/queue-row';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
+import { canPickOutput, pickAudioOutput } from '@/lib/audio-output';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
@@ -206,7 +208,7 @@ export default function PlayerScreen() {
                     experimental_backgroundImage: `radial-gradient(circle at 50% 50%, ${art.a} 0%, transparent 68%)`,
                   }}
                 />
-                <ZoomTarget>
+                <ZoomTarget radius={30}>
                   <AlbumArt art={art} size={artSize} radius={30} cover={cover} />
                 </ZoomTarget>
               </Animated.View>
@@ -214,7 +216,8 @@ export default function PlayerScreen() {
 
             {treatment === 'vinyl' && (
               <Animated.View style={[{ alignSelf: 'center', alignItems: 'center' }, slideOnly]}>
-                <ZoomTarget>
+                {/* O vinil é redondo: o raio de destino é o do próprio disco. */}
+                <ZoomTarget radius={artSize / 2}>
                   <Vinyl art={art} size={artSize} playing={playing} cover={cover} />
                 </ZoomTarget>
                 <ZoomFade style={{ marginTop: 26 }}>
@@ -229,7 +232,7 @@ export default function PlayerScreen() {
               <View>
                 <Animated.View
                   style={[{ flexDirection: 'row', alignItems: 'center', gap: 16 }, slideOnly]}>
-                  <ZoomTarget>
+                  <ZoomTarget radius={20}>
                     <AlbumArt art={art} size={artSize} radius={20} detail="ring" cover={cover} />
                   </ZoomTarget>
                   <ZoomFade style={{ flex: 1, minWidth: 0 }}>
@@ -349,7 +352,34 @@ export default function PlayerScreen() {
             </Pressable>
           </View>
 
-          <Body size={11} color={T.t24} align="center" style={{ marginTop: 14 }}>
+          {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
+              para a nossa reprodução. */}
+          {canPickOutput && (
+            <Pressable
+              onPress={() => {
+                void pickAudioOutput();
+              }}
+              style={{
+                alignSelf: 'center',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 16,
+                paddingHorizontal: 14,
+                height: 34,
+                borderRadius: 17,
+                borderWidth: 1,
+                borderColor: T.t12,
+                backgroundColor: T.t06,
+              }}>
+              <Output size={16} color={T.t72} />
+              <Body size={12} weight={600} color={T.t72}>
+                Saída de áudio
+              </Body>
+            </Pressable>
+          )}
+
+          <Body size={11} color={T.t24} align="center" style={{ marginTop: 12 }}>
             Arraste a capa · {treatment === 'wave' ? 'toque na onda para buscar' : 'toque na fita para buscar'}
           </Body>
         </ZoomFade>
@@ -550,47 +580,53 @@ function QueuePanel() {
           />
         ))}
 
-        {preview.length > 0 && (
-          <>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
-              <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
-                Depois · {current?.blurb}
-              </Mono>
-              <View
-                style={{
-                  flex: 1,
-                  height: 1,
-                  experimental_backgroundImage: `linear-gradient(90deg, ${T.t14} 0%, transparent 100%)`,
-                }}
-              />
-            </View>
-            {preview.map((item) => (
-              <View
-                key={item.id}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, opacity: 0.6 }}>
-                <View style={{ width: 20, alignItems: 'center' }}>
-                  <View
-                    style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: accent }}
-                  />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Body size={13.5} weight={500} tracking={-0.01} numberOfLines={1}>
-                    {item.title}
-                  </Body>
-                  <Body size={11} color={T.t42} numberOfLines={1}>
-                    {item.artist}
-                  </Body>
-                </View>
-              </View>
-            ))}
-          </>
+        {upcoming.length === 0 && (
+          <Body size={12.5} color={T.t42} style={{ paddingVertical: 12 }}>
+            Nada na fila depois desta faixa.
+          </Body>
         )}
 
-        {upcoming.length === 0 && preview.length === 0 && (
-          <Body size={12.5} color={T.t42} align="center" style={{ marginTop: 26, paddingHorizontal: 20 }}>
+        {/*
+          A seção da continuação aparece sempre, com ou sem candidato: era ela que
+          respondia às abas, e escondê-la quando o modo não achava nada fazia o toque
+          parecer não ter efeito nenhum sobre a lista.
+        */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
+          <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
+            Depois · {current?.blurb}
+          </Mono>
+          <View
+            style={{
+              flex: 1,
+              height: 1,
+              experimental_backgroundImage: `linear-gradient(90deg, ${T.t14} 0%, transparent 100%)`,
+            }}
+          />
+        </View>
+        {preview.map((item) => (
+          <View
+            key={item.id}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, opacity: 0.6 }}>
+            <View style={{ width: 20, alignItems: 'center' }}>
+              <View
+                style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: accent }}
+              />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Body size={13.5} weight={500} tracking={-0.01} numberOfLines={1}>
+                {item.title}
+              </Body>
+              <Body size={11} color={T.t42} numberOfLines={1}>
+                {item.artist}
+              </Body>
+            </View>
+          </View>
+        ))}
+        {preview.length === 0 && (
+          <Body size={12.5} color={T.t42} style={{ paddingVertical: 10 }}>
             {continuation === 'off'
-              ? 'Nada depois desta faixa.'
-              : 'Nada encontrado para continuar com esta escolha.'}
+              ? 'A fila termina aqui e o áudio para.'
+              : 'Nada na biblioteca se encaixa nesta escolha.'}
           </Body>
         )}
       </ScrollView>

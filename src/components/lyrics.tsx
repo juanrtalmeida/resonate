@@ -8,14 +8,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, type LayoutChangeEvent } from 'react-native';
+import { Pressable, ScrollView, Text, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { T } from '@/constants/theme';
-import { lineAt, type Lyrics } from '@/lib/lrc';
+import { lineAt, wordAt, type LyricWord, type Lyrics } from '@/lib/lrc';
 import { EmptyState } from './empty-state';
 import { Lyrics as LyricsIcon } from './icons';
 import { Display } from './text';
@@ -77,6 +77,8 @@ export function LyricsView({
         <Line
           key={index}
           text={line.text}
+          words={line.words}
+          elapsed={elapsed}
           active={index === at}
           dimmed={lyrics.synced}
           onLayout={(e: LayoutChangeEvent) => measure(index, e.nativeEvent.layout.y)}
@@ -89,12 +91,17 @@ export function LyricsView({
 
 function Line({
   text,
+  words,
+  elapsed,
   active,
   dimmed,
   onLayout,
   onPress,
 }: {
   text: string;
+  /** Trechos cronometrados, quando o arquivo é do formato por palavra. */
+  words: LyricWord[] | null;
+  elapsed: number;
   active: boolean;
   /** Letra sem sincronia não tem linha "atual": todas ficam legíveis. */
   dimmed: boolean;
@@ -111,13 +118,25 @@ function Line({
     transform: [{ scale: 0.975 + on.value * 0.025 }],
   }));
 
+  // Palavra a palavra só na linha do momento: nas outras não há o que acompanhar, e
+  // colorir cada trecho custaria um Text por palavra em toda a letra.
+  const sung = active && words ? wordAt(words, elapsed) : -1;
+
   return (
     <Animated.View style={[{ transformOrigin: 'left center' }, style]} onLayout={onLayout}>
       <Pressable onPress={onPress} disabled={!onPress}>
-        {/* A cor é sempre a mesma: quem separa a linha do momento das outras é a
-            opacidade, como no Music da Apple. */}
+        {/* Quem separa a linha do momento das outras é a opacidade, como no Music da
+            Apple. Dentro dela, a cor avança palavra a palavra quando o arquivo traz o
+            tempo de cada uma. */}
         <Display size={SIZE} weight={800} tracking={-0.03} style={{ lineHeight: SIZE * 1.22 }}>
-          {text}
+          {active && words
+            ? words.map((word, index) => (
+                <Text key={index} style={{ color: index <= sung ? T.full : T.t46 }}>
+                  {index > 0 ? ' ' : ''}
+                  {word.text}
+                </Text>
+              ))
+            : text}
         </Display>
       </Pressable>
     </Animated.View>

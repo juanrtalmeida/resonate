@@ -357,14 +357,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       duration: loadedDuration || track?.duration || 0,
       player,
       play: (next, at = 0) => load(next, at, true),
+      /**
+       * Enfileirar com a fila vazia precisa apontar o player para a primeira faixa.
+       * Só empurrar o estado deixava o mini player montado com uma faixa que o player
+       * nunca carregou: apertar play não tocava nada.
+       */
       enqueueNext: (extra) => {
         const fresh = extra.filter((t) => !queue.some((q) => q.id === t.id));
         if (!fresh.length) return;
+        if (!queue.length) return load(fresh, 0, false);
         setQueue([...queue.slice(0, index + 1), ...fresh, ...queue.slice(index + 1)]);
       },
       enqueueLast: (extra) => {
         const fresh = extra.filter((t) => !queue.some((q) => q.id === t.id));
-        if (fresh.length) setQueue([...queue, ...fresh]);
+        if (!fresh.length) return;
+        if (!queue.length) return load(fresh, 0, false);
+        setQueue([...queue, ...fresh]);
       },
       removeAt: (at) => {
         if (at === index || at < 0 || at >= queue.length) return;
