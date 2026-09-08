@@ -154,6 +154,7 @@ export function ZoomScreen({
   style,
   onClosed,
   dismissable = false,
+  dragBlocked,
   edgeBack = false,
 }: {
   children: ReactNode;
@@ -168,6 +169,15 @@ export function ZoomScreen({
   onClosed?: () => void;
   /** Permite arrastar para baixo para minimizar, como no Music. */
   dismissable?: boolean;
+  /**
+   * Trava o arrasto para baixo sem trocar de prop.
+   *
+   * O player desliga o arrasto quando a letra está aberta — lá o vertical pertence à
+   * rolagem do texto. Como prop booleana isso reconstruía o gesto a cada troca, e a troca
+   * passava a re-renderizar o player inteiro. Um shared value é lido de dentro do worklet
+   * e a troca não acorda o React.
+   */
+  dragBlocked?: SharedValue<number>;
   /**
    * Arrastar da borda esquerda para a direita volta.
    *
@@ -280,6 +290,12 @@ export function ZoomScreen({
       });
     });
 
+  /** Lido de dentro dos worklets do gesto: metade já conta como travado. */
+  const blocked = () => {
+    'worklet';
+    return (dragBlocked?.value ?? 0) > 0.5;
+  };
+
   /**
    * Arrastar para baixo controla a animação com o dedo: o mesmo `progress` que a abertura
    * usa, agora dirigido pela distância percorrida. Soltar decide entre completar o
@@ -293,12 +309,20 @@ export function ZoomScreen({
     .onBegin(() => {
       stale.value += 1;
     })
+    /*
+      Travado quer dizer "este toque não é meu": falhar cedo devolve o gesto a quem está
+      embaixo — com a letra aberta, o ScrollView dela. Ignorar só o `onUpdate` não
+      bastava, porque o Pan ainda ativava aos 24 px e a rolagem parava no meio do dedo.
+    */
+    .onTouchesMove((_e, manager) => {
+      if (blocked()) manager.fail();
+    })
     .onUpdate((e) => {
-      if (closing.value || e.translationY <= 0) return;
+      if (closing.value || blocked() || e.translationY <= 0) return;
       progress.value = Math.max(0, 1 - e.translationY / height);
     })
     .onEnd((e) => {
-      if (closing.value) return;
+      if (closing.value || blocked()) return;
       const leave = e.translationY > height * 0.2 || e.velocityY > 900;
       if (!leave) {
           progress.value = withTiming(1, OPEN);

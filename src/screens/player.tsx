@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   FadeInDown,
   FadeOut,
   LinearTransition,
   SensorType,
+  type SharedValue,
   runOnJS,
   useAnimatedReaction,
   useAnimatedSensor,
@@ -79,6 +81,9 @@ const ART_TOP = 22;
  */
 const ROOM = 400 + ART_TOP;
 
+/** A troca entre capa e letra. Curta de propósito: é uma aba, não uma transição de tela. */
+const PANE = { duration: 240, easing: Easing.out(Easing.cubic) } as const;
+
 /**
  * O Now Playing, como camada. Não é rota — ver `lib/detail.tsx`.
  */
@@ -90,7 +95,18 @@ export function PlayerScreen() {
     usePlayer();
   const { accent, treatment, isLiked, toggleLike } = usePrefs();
   const { albumById } = useLibrary();
-  const [showLyrics, setShowLyrics] = useState(false);
+  /**
+   * 0 = capa, 1 = letra. Shared value, e não estado: a troca anima na thread de UI sem
+   * acordar o React.
+   *
+   * Como estado, tocar na aba re-renderizava o Now Playing inteiro e trocava um painel
+   * pelo outro na árvore: a capa desmontava e a imagem recarregava, o vinil voltava a
+   * zero, a letra remontava linha por linha. Era o piscar com travada de carregamento —
+   * e, entre um painel e outro, não havia animação nenhuma para ver.
+   */
+  const lyricsOn = useSharedValue(0);
+  /** `1 - lyricsOn`, para quem esmaece no sentido contrário (a fita no modo onda). */
+  const lyricsOff = useDerivedValue(() => 1 - lyricsOn.value);
   const [showQueue, setShowQueue] = useState(false);
   const { share, card: shareCardView } = useShareCard();
 
@@ -196,12 +212,16 @@ export function PlayerScreen() {
       dragX.value = withSpring(0, { damping: 16, stiffness: 180 });
     });
 
-  // Com a letra aberta, o título grande sai de cena: o espaço é dela, como no Music.
-  // Com a fila aberta, título grande e fita saem: o espaço é da lista.
-  const bigTitle = treatment !== 'wave' && !showLyrics && !showQueue;
-  const ribbon = (treatment !== 'wave' || showLyrics) && !showQueue;
+  /*
+    Com a letra aberta o título grande sai de cena, como no Music; com a fila aberta saem
+    título e fita, que o espaço é da lista.
 
-  // dismissable só fora das letras: lá o arraste vertical pertence à rolagem do texto.
+    A fila desmonta os dois — ela reorganiza a tela de verdade. A letra só os esmaece, por
+    `Fade`, e o lugar deles fica: era um `&&` de `showLyrics`, o bloco sumia de um quadro
+    para o outro e o rodapé saltava para cima.
+  */
+  const bigTitle = treatment !== 'wave' && !showQueue;
+  const ribbon = !showQueue;
   /** O que o card leva quando se compartilha do Now Playing. */
   const nowPlaying = () => ({
     title: track.title,
@@ -212,7 +232,13 @@ export function PlayerScreen() {
   });
 
   return (
-    <ZoomScreen background={C.surface} dismissable={!showLyrics} onClosed={closePlayer}>
+    <ZoomScreen
+      background={C.surface}
+      dismissable
+      /* Arrastar para baixo fecha, menos com a letra aberta: lá o vertical pertence à
+         rolagem do texto. Por shared value para a troca não reconstruir o gesto. */
+      dragBlocked={lyricsOn}
+      onClosed={closePlayer}>
       <ChromeReveal />
       {/*
         O fundo é a própria capa, borrada — o mesmo `Backdrop` das telas de álbum e de
@@ -246,7 +272,7 @@ export function PlayerScreen() {
         */}
         <ZoomFade style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <CloseButton />
-          <ArtLyricsTabs showLyrics={showLyrics} onChange={setShowLyrics} />
+          <ArtLyricsTabs on={lyricsOn} />
           <View
             pointerEvents="none"
             style={{
@@ -265,12 +291,14 @@ export function PlayerScreen() {
           </View>
         </ZoomFade>
 
-        {/* área da arte, ou a letra no lugar dela */}
-        {showLyrics ? (
-          <ZoomFade style={{ flex: 1 }}>
-            <LyricsPane track={track} lyrics={lyrics} onSeek={seekTo} />
-          </ZoomFade>
-        ) : (
+        {/* área da arte, com a letra na mesma caixa */}
+        <Stage
+          on={lyricsOn}
+          lyrics={
+            <ZoomFade style={{ flex: 1 }}>
+              <LyricsPane track={track} lyrics={lyrics} onSeek={seekTo} />
+            </ZoomFade>
+          }>
         <GestureDetector gesture={swipe}>
           <View style={{ flex: 1, justifyContent: showQueue ? 'flex-start' : 'center' }}>
             <Animated.View
@@ -442,28 +470,32 @@ export function PlayerScreen() {
             )}
           </View>
         </GestureDetector>
-        )}
+        </Stage>
 
         {/* rodapé */}
         <ZoomFade style={{ marginTop: 14 }}>
           {bigTitle && (
-            <View style={{ alignItems: 'center', marginBottom: 20 }}>
+            <Fade on={lyricsOn} style={{ alignItems: 'center', marginBottom: 20 }}>
               <Display size={26} tracking={-0.035} align="center" numberOfLines={2}>
                 {track.title}
               </Display>
               <Body size={14} color={T.t62} style={{ marginTop: 5 }}>
                 {track.artist}
               </Body>
-            </View>
+            </Fade>
           )}
 
           {ribbon && (
-            <Ribbon
-              seed={track.id}
-              progress={progress}
-              accent={accent}
-              onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
-            />
+            /* No modo onda a fita só aparece com a letra aberta: fora dela quem busca é
+               a própria forma de onda. Nos outros dois ela nunca esmaece. */
+            <Fade on={treatment === 'wave' ? lyricsOff : undefined}>
+              <Ribbon
+                seed={track.id}
+                progress={progress}
+                accent={accent}
+                onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
+              />
+            </Fade>
           )}
 
           <View
@@ -938,21 +970,28 @@ function PlayButton({
 }
 
 /** As abas arte/letras da barra superior. */
-function ArtLyricsTabs({
-  showLyrics,
-  onChange,
-}: {
-  showLyrics: boolean;
-  onChange: (on: boolean) => void;
-}) {
-  const tab = (on: boolean) => ({
+function ArtLyricsTabs({ on }: { on: SharedValue<number> }) {
+  /** A pílula viaja a largura de uma aba mais o vão entre as duas. */
+  const pill = useAnimatedStyle(() => ({ transform: [{ translateX: on.value * 36 }] }));
+  /*
+    Os dois ícones são o mesmo branco em opacidades diferentes — `T.t46` é `T.full` a 46%.
+    Interpolar a opacidade da View que os envolve dispensa levar a cor até dentro do SVG
+    por `animatedProps`, e é o que faz o realce atravessar junto com a pílula em vez de
+    trocar de valor num quadro.
+  */
+  const art = useAnimatedStyle(() => ({ opacity: 1 - on.value * 0.54 }));
+  const text = useAnimatedStyle(() => ({ opacity: 0.46 + on.value * 0.54 }));
+
+  const go = (to: number) => () => {
+    on.value = withTiming(to, PANE);
+  };
+
+  const tab = {
     width: 34,
     height: 28,
-    borderRadius: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: on ? T.t14 : 'transparent',
-  });
+  };
 
   return (
     <View
@@ -963,13 +1002,142 @@ function ArtLyricsTabs({
         borderRadius: R.r17,
         backgroundColor: T.t08,
       }}>
-      <Pressable onPress={() => onChange(false)} style={tab(!showLyrics)}>
-        <Disc color={showLyrics ? T.t46 : T.full} />
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            left: 3,
+            top: 3,
+            width: 34,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: T.t14,
+          },
+          pill,
+        ]}
+      />
+      <Pressable onPress={go(0)} style={tab}>
+        <Animated.View style={art}>
+          <Disc color={T.full} />
+        </Animated.View>
       </Pressable>
-      <Pressable onPress={() => onChange(true)} style={tab(showLyrics)}>
-        <LyricsIcon color={showLyrics ? T.full : T.t46} />
+      <Pressable onPress={go(1)} style={tab}>
+        <Animated.View style={text}>
+          <LyricsIcon color={T.full} />
+        </Animated.View>
       </Pressable>
     </View>
+  );
+}
+
+/**
+ * A caixa onde a capa e a letra convivem.
+ *
+ * Os dois painéis ficam montados, um sobre o outro, e a troca é opacidade com um fio de
+ * escala. Desmontar era o problema inteiro: a capa recarregava a imagem, o vinil voltava
+ * a zero e a letra remontava linha por linha a cada toque na aba.
+ *
+ * A capa entra por `children` e a letra por prop — elementos já criados pelo
+ * PlayerScreen. Assim o `useState` daqui não desce até eles: o React reencontra o mesmo
+ * elemento e para ali.
+ */
+function Stage({
+  on,
+  lyrics,
+  children,
+}: {
+  on: SharedValue<number>;
+  lyrics: ReactNode;
+  children: ReactNode;
+}) {
+  const zoom = useZoomProgress();
+  /** Quem recebe o toque. É o único motivo de ainda haver estado aqui. */
+  const [shown, setShown] = useState(false);
+  /**
+   * A letra só monta depois que o player pousa.
+   *
+   * Montá-la junto com a tela punha dezenas de nós no mesmo quadro do voo de abertura —
+   * a letra que já está em cache chega sem esperar o disco. Depois disso ela fica: é o
+   * que faz a troca de aba não custar nada.
+   */
+  const [ready, setReady] = useState(false);
+
+  useAnimatedReaction(
+    // `on.value > 0` também monta: tocar na aba antes de o voo terminar não pode deixar a
+    // capa esmaecer para uma caixa vazia.
+    () => ({ mount: (zoom?.value ?? 1) >= 1 || on.value > 0, lyrics: on.value > 0.5 }),
+    (now, prev) => {
+      if (now.lyrics !== prev?.lyrics) runOnJS(setShown)(now.lyrics);
+      if (now.mount && !prev?.mount) runOnJS(setReady)(true);
+    },
+    [zoom]
+  );
+
+  const art = useAnimatedStyle(() => ({
+    opacity: 1 - on.value,
+    transform: [{ scale: 1 - on.value * 0.03 }],
+  }));
+  const text = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ scale: 0.97 + on.value * 0.03 }],
+  }));
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Animated.View
+        pointerEvents={shown ? 'none' : 'auto'}
+        style={[{ position: 'absolute', inset: 0 }, art]}>
+        {children}
+      </Animated.View>
+      {ready && (
+        <Animated.View
+          pointerEvents={shown ? 'auto' : 'none'}
+          style={[{ position: 'absolute', inset: 0 }, text]}>
+          {lyrics}
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Esmaece o filho quando `on` sobe, **mantendo o lugar dele**.
+ *
+ * Antes era um `&&` de `showLyrics`: o bloco saía da árvore e o rodapé saltava de um
+ * quadro para o outro. Recolher a altura de verdade seria a outra saída óbvia, e é pior:
+ * cada quadro da animação re-mede a caixa da letra, o `onLayout` do ScrollView dela vira
+ * estado, e a letra inteira re-renderiza dezenas de vezes no meio da transição — de novo
+ * a travada que se quer tirar.
+ *
+ * Com o lugar mantido, nada no rodapé se move ao trocar de aba: fica a mudança pequena
+ * que a troca deveria ser, e a caixa da letra tem a mesma altura nos dois estados.
+ *
+ * `on` ausente quer dizer "nunca esmaece".
+ */
+function Fade({
+  on,
+  style,
+  children,
+}: {
+  on?: SharedValue<number>;
+  style?: ViewStyle;
+  children: ReactNode;
+}) {
+  const dim = useAnimatedStyle(() => ({ opacity: on ? 1 - on.value : 1 }));
+  // Esmaecido não pode seguir recebendo toque: a fita do modo onda ficaria sob o dedo.
+  const [gone, setGone] = useState(false);
+  useAnimatedReaction(
+    () => (on?.value ?? 0) > 0.5,
+    (off, prev) => {
+      if (off !== prev) runOnJS(setGone)(off);
+    },
+    [on]
+  );
+
+  return (
+    <Animated.View pointerEvents={gone ? 'none' : 'auto'} style={[style, dim]}>
+      {children}
+    </Animated.View>
   );
 }
 

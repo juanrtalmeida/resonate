@@ -9,6 +9,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, {
+  FadeIn,
+  FadeInDown,
+  LinearTransition,
   interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -23,6 +26,7 @@ import { ChevronLeft, LibraryIcon, Play, Queue as QueueIcon, Shuffle } from '@/c
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { SectionLabel } from '@/components/section-label';
+import { TrackSkeleton } from '@/components/skeleton';
 import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
@@ -57,6 +61,15 @@ const PER_PAGE = 6;
 const ROW = 54;
 
 const NO_TRACKS: Track[] = [];
+
+/**
+ * O rearranjo do cabeçalho quando "Mais tocadas" aparece.
+ *
+ * Tocar uma faixa do artista faz a seção nascer entre o hero e os álbuns — antes ela
+ * simplesmente estava lá no quadro seguinte, e o resto do cabeçalho pulava para baixo.
+ * `layout` nos irmãos é o que os faz abrir espaço em vez de saltar.
+ */
+const SHIFT = LinearTransition.duration(300);
 
 const { height: SCREEN } = Dimensions.get('window');
 /** Altura do hero, como no Music: pouco menos da metade da tela. */
@@ -218,27 +231,34 @@ function Artist({
         </View>
       </Animated.View>
       <View style={{ paddingHorizontal: PADDING, backgroundColor: C.bg }}>
-        {ready && top.length > 0 && (
-          <>
+        {top.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(320)} layout={SHIFT}>
             <SectionLabel title="Mais tocadas" />
-            {top.map((track, index) => (
-              <TrackRow
-                key={track.id}
-                track={track}
-                position={index + 1}
-                accent={accent}
-                onPress={() => play(top, index)}
-                onLongPress={() => openMenu({ kind: 'track', track })}
-                onQueue={() => enqueueLast([track])}
-                onPlaylist={() => open([track.id])}
-                subtitle={track.album}
-              />
-            ))}
-          </>
+            {ready ? (
+              top.map((track, index) => (
+                /* Cada linha anima por conta própria: a seção reordena por contagem de
+                   reproduções, e o que entra empurra as outras para baixo. */
+                <Animated.View key={track.id} entering={FadeIn.duration(240)} layout={SHIFT}>
+                  <TrackRow
+                    track={track}
+                    position={index + 1}
+                    accent={accent}
+                    onPress={() => play(top, index)}
+                    onLongPress={() => openMenu({ kind: 'track', track })}
+                    onQueue={() => enqueueLast([track])}
+                    onPlaylist={() => open([track.id])}
+                    subtitle={track.album}
+                  />
+                </Animated.View>
+              ))
+            ) : (
+              <TrackSkeleton rows={top.length} />
+            )}
+          </Animated.View>
         )}
 
         {albums.length > 0 && (
-          <>
+          <Animated.View layout={SHIFT}>
             <SectionLabel title="Álbuns" trailing={`${albums.length}`} />
             <ScrollView
               horizontal
@@ -253,19 +273,31 @@ function Artist({
                 />
               ))}
             </ScrollView>
-          </>
+          </Animated.View>
         )}
 
-        <SectionLabel title="Todas as faixas" trailing={`${tracks.length}`} />
+        <Animated.View layout={SHIFT}>
+          <SectionLabel title="Todas as faixas" trailing={`${tracks.length}`} />
+        </Animated.View>
       </View>
 
-      {ready && (
-        <TrackPager
-          tracks={tracks}
-          accent={accent}
-          onHold={(track) => openMenu({ kind: 'track', track })}
-        />
-      )}
+      {/* O carrossel também desce quando a seção nasce acima dele. O fundo sólido é o
+          mesmo do `TrackPager`, e fica no envoltório para valer também na silhueta: o
+          conteúdo precisa cobrir a foto do hero ao subir. */}
+      <Animated.View layout={SHIFT} style={{ backgroundColor: C.bg }}>
+        {ready ? (
+          <TrackPager
+            tracks={tracks}
+            accent={accent}
+            onHold={(track) => openMenu({ kind: 'track', track })}
+          />
+        ) : (
+          <TrackSkeleton
+            rows={Math.min(PER_PAGE, tracks.length)}
+            style={{ paddingHorizontal: PADDING }}
+          />
+        )}
+      </Animated.View>
     </>
   );
 

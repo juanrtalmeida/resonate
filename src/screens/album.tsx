@@ -8,6 +8,7 @@ import { Backdrop } from '@/components/backdrop';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { ChevronLeft, Heart, Play, Queue, Shuffle } from '@/components/icons';
 import { Body, Display, Mono } from '@/components/text';
+import { TrackSkeleton } from '@/components/skeleton';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
@@ -154,6 +155,12 @@ function AlbumDetail({ album }: { album: Album }) {
         data={ready ? tracks : NO_TRACKS}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}
+        /*
+          A silhueta das faixas enquanto elas não chegam. Pela lista vazia, que é
+          exatamente o estado em que a tela está no primeiro quadro — e com a contagem
+          real, então as linhas nascem onde as barras estavam.
+        */
+        ListEmptyComponent={ready ? null : <TrackSkeleton rows={Math.min(tracks.length, 9)} />}
         contentContainerStyle={{
           paddingTop: insets.top + 24,
           paddingBottom: CHROME_HEIGHT + insets.bottom,
