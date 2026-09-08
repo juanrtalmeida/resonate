@@ -16,9 +16,10 @@ import { Platform, type ViewStyle } from 'react-native';
 
 type Props = { tint?: string; style?: ViewStyle };
 
+const native = requireOptionalNativeModule<{ isAvailable: () => boolean }>('AudioRoute');
+
 /** Se o controle pode ser desenhado. Falso fora do iOS e em build sem o módulo. */
-export const canShowRoutePicker =
-  Platform.OS === 'ios' && requireOptionalNativeModule('AudioRoute') !== null;
+export const canShowRoutePicker = Platform.OS === 'ios' && native !== null;
 
 /**
  * O `requireNativeViewManager` só é chamado quando o módulo existe: fora disso ele lança,

@@ -46,7 +46,14 @@ import Animated, {
 export type Rect = { x: number; y: number; width: number; height: number; radius: number };
 
 const OPEN = { duration: 420, easing: Easing.bezier(0.2, 0.9, 0.2, 1) };
-const CLOSE = { duration: 300, easing: Easing.bezier(0.35, 0, 0.3, 1) };
+/**
+ * A saída é mais curta que a entrada de propósito.
+ *
+ * Era 300 ms, e o toque só voltava a valer ~450 ms depois de pedir para fechar: a curva,
+ * mais o desmonte da janela nativa, mais o tempo de a tela de baixo voltar a receber
+ * toque. Entrar merece o tempo todo; sair é o usuário dizendo que já acabou.
+ */
+const CLOSE = { duration: 210, easing: Easing.bezier(0.35, 0, 0.3, 1) };
 
 /**
  * A origem vive num módulo, não em estado do React.
@@ -202,15 +209,39 @@ export function ZoomScreen({
   // Shared value, não ref: este guard é lido dentro dos worklets do gesto, que rodam na
   // thread de UI e não enxergam refs do JavaScript.
   const closing = useSharedValue(false);
+  /**
+   * O mesmo "fechando", em estado, porque `pointerEvents` é prop e não estilo animado.
+   *
+   * Enquanto a tela desce ela continuava capturando toque, e por mais tempo que a
+   * animação: medido, 126 ms entre o fim do movimento e o desmonte de verdade. Nesse vão
+   * tocar em qualquer coisa embaixo não fazia nada — era o "travando a experiência".
+   */
+  const [leaving, setLeaving] = useState(false);
+
   const close = useCallback(() => {
     if (closing.value) return;
     closing.value = true;
+    setLeaving(true);
     // Mede de novo antes de descer: entre abrir e fechar a lista rolou, o parallax andou,
     // e a capa precisa voltar do lugar onde ela está agora.
     stale.value += 1;
-    progress.value = withTiming(0, CLOSE, (done) => {
-      if (done) runOnJS(finish)();
-    });
+    /*
+      O desmonte começa antes de o movimento acabar, e é isso que tira o vão do fechamento.
+
+      Dois problemas mediram juntos: o callback do `withTiming` chega pela thread de UI e o
+      `runOnJS` custava 44 ms *depois* de a animação terminar, e o desmonte em si custa
+      outros 77 ms — nesse tempo a janela nativa do modal continua engolindo toque, e
+      fechar e tocar em outra coisa não funcionava. `pointerEvents` não resolve: a janela
+      consome o toque antes de a hierarquia do React Native ver.
+
+      Com a curva de saída (`Easing.bezier(0.35, 0, 0.3, 1)`), em 85% do tempo a capa já
+      andou ~97% do caminho. Desmontar ali sobrepõe os 77 ms de teardown aos últimos
+      quadros do movimento: o vão desaparece, e a troca entre a capa em voo e a capa de
+      origem acontece com as duas praticamente no mesmo lugar — o que também mata o
+      salto que se via no fim.
+    */
+    setTimeout(finish, CLOSE.duration * 0.85);
+    progress.value = withTiming(0, CLOSE);
   }, [progress, closing, finish, stale]);
 
   /**
@@ -243,6 +274,7 @@ export function ZoomScreen({
         return;
       }
       closing.value = true;
+      runOnJS(setLeaving)(true);
       progress.value = withTiming(0, CLOSE, (done) => {
         if (done) runOnJS(finish)();
       });
@@ -273,6 +305,7 @@ export function ZoomScreen({
         return;
       }
       closing.value = true;
+      runOnJS(setLeaving)(true);
       progress.value = withTiming(0, CLOSE, (done) => {
         if (done) runOnJS(finish)();
       });
@@ -282,7 +315,9 @@ export function ZoomScreen({
   // justamente o que deve permanecer sólido enquanto viaja. O fundo ganha a própria
   // camada esmaecível; o resto usa ZoomFade.
   const body = (
-    <View style={[{ flex: 1 }, style]}>
+    // `box-none` deixa o toque atravessar para o que está embaixo assim que a tela começa
+    // a sair; sem isto ela segurava o toque até desmontar.
+    <View pointerEvents={leaving ? 'none' : 'auto'} style={[{ flex: 1 }, style]}>
       {background ? (
         <ZoomFade style={{ position: 'absolute', inset: 0, backgroundColor: background }} />
       ) : null}

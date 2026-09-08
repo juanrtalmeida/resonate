@@ -20,6 +20,15 @@ public class AudioRouteModule: Module {
   public func definition() -> ModuleDefinition {
     Name("AudioRoute")
 
+    /*
+      Existe para o JavaScript ter o que perguntar.
+
+      `requireOptionalNativeModule` procura um módulo registrado; um módulo que só declara
+      uma `View` é o tipo de coisa que pode devolver null sem erro nenhum, e aí o botão
+      desaparece calado. Uma função trivial garante o registro.
+    */
+    Function("isAvailable") { true }
+
     View(RoutePickerView.self) {
       Prop("tint") { (view: RoutePickerView, hex: String) in
         view.setTint(hex)

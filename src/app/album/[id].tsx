@@ -53,20 +53,24 @@ function AlbumDetail({ album }: { album: Album }) {
   const tracks = tracksOf(album);
 
   /*
-    O que é caro entra no quadro seguinte, não no primeiro: a lista de faixas, o fundo
-    borrado e a barra inferior.
+    O que é caro entra no quadro seguinte, não no primeiro: a lista de faixas e o fundo
+    borrado.
 
     Tudo isso no mesmo commit que abre a tela atrasava o início do zoom. Instrumentei a
     cadeia com timestamps e o toque custava 154 ms até o `withTiming` começar; o commit
-    sozinho respondia por 118 deles. Diferindo os três, 79 ms — e cada peça foi medida:
+    sozinho respondia por 118 deles. Diferindo, 110 ms — e cada peça foi medida:
 
         lista de faixas   ~330 ms  (era o grosso: dezenas de TrackRow, cada uma com um
                                     GestureDetector nativo e shared values próprios)
-        <Chrome overModal>  32 ms  (monta um mini player inteiro)
         Backdrop             9 ms  (o `blurRadius` da capa)
 
+    A barra inferior (`<Chrome overModal />`) valia outros 32 ms e **ficou de fora**: ela
+    é o destino do voo da capa quando o player minimiza, e diferi-la fazia a barra sumir
+    e voltar ao abrir a tela, além de deixar o player sem pílula para onde voltar. Trinta
+    milissegundos não pagam isso.
+
     Com o primeiro commit barato o zoom começa logo, e ele corre na thread de UI — imune
-    ao que o JavaScript faça depois. As três peças chegam com a tela já em movimento, no
+    ao que o JavaScript faça depois. As duas peças chegam com a tela já em movimento, no
     meio do fade, onde não se vê.
 
     O que *não* era o problema, medido para não ficar no palpite: `measureInWindow` custa
@@ -185,7 +189,7 @@ function AlbumDetail({ album }: { album: Album }) {
       Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
       do root se cala nestas rotas — ver `overModal` em chrome.tsx.
     */}
-    {ready && <Chrome overModal />}
+    <Chrome overModal />
     </>
   );
 }
