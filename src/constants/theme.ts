@@ -8,6 +8,14 @@ export const C = {
   art: '#241E1A',
   onAccent: '#12100E',
   ok: '#5FBF7E',
+  /**
+   * Vermelho de ação destrutiva.
+   *
+   * Fora da paleta de acentos de propósito: o acento é escolha do usuário e pode ser o
+   * laranja, e aí um botão de apagar no acento não se distinguiria de um botão comum.
+   * Perigo não é tema.
+   */
+  danger: '#E5484D',
 } as const;
 
 /** Texto #F6F1EA nas opacidades usadas pelo design. */

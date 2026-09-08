@@ -87,6 +87,22 @@ function baseOf(pathname: string): string | null {
   return null;
 }
 
+/**
+ * Se a última rota que não era o player estava sobre um detalhe.
+ *
+ * Guardada pelo mesmo motivo de `lastBase`, e resolve um caso concreto: em `/player` o
+ * `detailOf` devolve falso, então a instância que estava visível — a de dentro da tela de
+ * álbum ou de artista — desmontava ao abrir o player e só voltava quando o pathname
+ * voltasse a ser `/album/...`, isto é, **depois** do voo. Era a pílula aparecendo só no
+ * fim da animação, sem a capa ter para onde ir.
+ */
+let lastOverModal = false;
+
+/** Álbum e artista sobem numa janela própria no Android; o resto, não. */
+function detailOf(pathname: string): boolean {
+  return pathname.startsWith('/album') || pathname.startsWith('/artist');
+}
+
 export function Chrome({
   /**
    * Renderizada de dentro de uma tela `transparentModal`, e não do root.
@@ -114,6 +130,12 @@ export function Chrome({
     if (base) lastBase = base;
   }, [base]);
 
+  const onPlayer = pathname.startsWith('/player');
+  const detail = detailOf(pathname);
+  useEffect(() => {
+    if (!onPlayer) lastOverModal = detail;
+  }, [onPlayer, detail]);
+
   /*
     `/player` entra na lista, e é de propósito.
 
@@ -137,7 +159,15 @@ export function Chrome({
     pathname.startsWith('/player') ||
     pathname.startsWith('/settings');
 
-  const modal = pathname.startsWith('/album') || pathname.startsWith('/artist');
+  /*
+    Em `/player`, quem manda é de onde ele foi aberto.
+
+    O player cobre a tela numa janela acima de tudo, e a barra que tem de continuar
+    montada embaixo é a mesma que estava visível antes dele — senão a instância troca no
+    meio do caminho, o `hidden` da capa de origem se perde com ela, e a pílula só reaparece
+    quando o pathname volta.
+  */
+  const modal = onPlayer ? lastOverModal : detail;
   if (!visible || modal !== overModal) return null;
 
   // Numa tela de detalhe fica aceso o destino de onde ela foi aberta.

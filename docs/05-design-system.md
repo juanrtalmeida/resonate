@@ -61,6 +61,12 @@ ok      #5FBF7E    indicador de biblioteca pronta
 ```
 
 Acento, escolhido em Ajustes: `#F2653A` (padrão), `#E8B44A`, `#5FBFA8`, `#8A6BD1`.
+
+`danger #E5484D` fica **fora** da paleta de acentos: o acento é escolha do usuário e pode
+ser o laranja, e aí um botão de apagar no acento não se distinguiria de um botão comum.
+Perigo não é tema. Toda ação destrutiva usa este vermelho e passa por confirmação — no
+menu do toque longo e em Ajustes ela troca o próprio botão em vez de abrir um diálogo,
+para a decisão ficar onde o dedo já está.
 O acento é lido do `PrefsProvider`, nunca escrito direto num componente.
 
 Raios: 9, 13, 15, 17, 21, 26.
