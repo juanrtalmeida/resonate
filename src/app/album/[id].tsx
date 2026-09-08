@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useDeferredValue } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,8 +19,10 @@ import { usePlayer } from '@/lib/player';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
-import type { Album } from '@/lib/scan';
+import type { Album, Track } from '@/lib/scan';
 import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
+
+const NO_TRACKS: Track[] = [];
 
 export default function AlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -48,6 +51,21 @@ function AlbumDetail({ album }: { album: Album }) {
   const { open: openMenu, menu } = useItemMenu();
 
   const tracks = tracksOf(album);
+
+  /*
+    A lista de faixas entra no quadro seguinte, não no primeiro.
+
+    Montar dezenas de TrackRow — cada uma com um GestureDetector nativo e shared values
+    próprios — no mesmo commit que abre a tela atrasava a transição de zoom: medido, 14
+    quadros (~470 ms) entre o toque no card e o primeiro pixel mudar. Com o primeiro
+    commit barato, o `withTiming` do zoom começa logo, e ele corre na thread de UI —
+    imune ao que o JavaScript faça depois. As linhas chegam com a tela já em movimento.
+
+    `useDeferredValue` com valor inicial, e não um `setState` em efeito: o primeiro render
+    recebe `false`, e o React agenda o segundo em prioridade baixa — podendo ceder a quem
+    estiver animando, em vez de encadear um render logo depois do commit.
+  */
+  const ready = useDeferredValue(true, false);
   const art = artworkFor(album.artist, album.title);
   const total = tracks.reduce((n, t) => n + (t.duration ?? 0), 0);
   const liked = isAlbumLiked(album.id);
@@ -119,7 +137,7 @@ function AlbumDetail({ album }: { album: Album }) {
       <Backdrop cover={album.cover} color={art.a} />
       <FlatList
         {...chromeScroll}
-        data={tracks}
+        data={ready ? tracks : NO_TRACKS}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}
         contentContainerStyle={{

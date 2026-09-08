@@ -30,6 +30,8 @@
 
 import { Platform } from 'react-native';
 
+import { canOpenStory } from '../../modules/story-share';
+
 /** Formato de Stories. Tudo o que o card desenha assume esta proporção. */
 export const CARD_WIDTH = 360;
 export const CARD_HEIGHT = 640;
@@ -41,7 +43,11 @@ const OUT_HEIGHT = 1920;
 export type ShareTarget = 'sheet' | 'stories';
 
 /** O Stories só existe como intent do Android. */
-export const canShareToStories = Platform.OS === 'android';
+/**
+ * Se o atalho do Stories existe neste build. Vem do módulo, não de uma checagem de
+ * plataforma: os dois lados são implementados, e o que decide é a presença do nativo.
+ */
+export const canShareToStories = canOpenStory;
 
 /**
  * Captura a View apontada pelo ref e devolve o caminho do arquivo.
@@ -87,10 +93,19 @@ async function capture(ref: React.RefObject<unknown>, resize: boolean): Promise<
  * build, ou quando ele recusou — quem chama cai na folha do sistema com o card achatado.
  */
 async function toStories(sticker: string, top: string, bottom: string): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
+  if (!canOpenStory) return false;
   try {
-    const { getContentUriAsync } = await import('expo-file-system/legacy');
     const { openStory } = await import('../../modules/story-share');
+    /*
+      Android precisa de `content://`, iOS quer o caminho do arquivo.
+
+      Lá a etiqueta atravessa para outro processo por um extra do intent, e só um
+      `content://` do FileProvider é legível de fora. Aqui ela é lida pelo próprio app,
+      que copia os bytes para o pasteboard antes de abrir o Instagram — `file://` serve, e
+      `getContentUriAsync` nem existe no iOS.
+    */
+    if (Platform.OS !== 'android') return await openStory(sticker, top, bottom);
+    const { getContentUriAsync } = await import('expo-file-system/legacy');
     return await openStory(await getContentUriAsync(sticker), top, bottom);
   } catch {
     return false;

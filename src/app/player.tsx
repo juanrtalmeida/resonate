@@ -43,24 +43,40 @@ import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { canPickOutput, pickAudioOutput } from '@/lib/audio-output';
+import { RoutePicker, canShowRoutePicker } from '../../modules/audio-route';
+import { chromeReveal } from '@/lib/chrome-scroll';
 import { canShareToStories } from '@/lib/share';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
 import { TILT_INTERVAL, TILT_REST, tiltAngles, tiltStep } from '@/lib/tilt';
 import { LyricsView, NoLyrics } from '@/components/lyrics';
-import { parseLrc, type Lyrics } from '@/lib/lrc';
+import { type Lyrics } from '@/lib/lrc';
+import { forgetLyrics, useLyrics } from '@/lib/lyrics';
 import { CONTINUATIONS, continuationFor } from '@/lib/queue';
-import { importLrc, readLyrics } from '@/lib/scan';
+import { importLrc } from '@/lib/scan';
 import { useLibrary } from '@/lib/library';
-import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
+import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose, useZoomProgress } from '@/lib/zoom';
+
+/**
+ * Respiro entre a barra do topo e a capa.
+ *
+ * Aplicado como `marginTop` de verdade, e não deixado por conta da folga: com
+ * `justifyContent: 'center'`, tela sem folga nenhuma cola a capa na barra — foi o que
+ * apareceu no iPhone. Entra também na reserva abaixo, então a capa encolhe o suficiente
+ * para o respiro existir em vez de empurrar o conteúdo para fora.
+ */
+const ART_TOP = 22;
 
 /**
  * Altura reservada ao que não é a capa, em dp: fechar (38), título grande (70), fita (44),
- * tempo (32), transporte (92), fileira secundária (60), recuos da tela (20), respiro no
- * topo (24), e as margens entre eles.
+ * tempo (32), transporte (92), fileira secundária (60), recuos da tela (20), as margens
+ * entre eles, e o respiro do topo.
+ *
+ * Conservadora de propósito: errar para cima encolhe a capa alguns dp numa tela curta, e
+ * errar para baixo cola ela na barra do topo. O primeiro ninguém nota.
  */
-const ROOM = 394;
+const ROOM = 400 + ART_TOP;
 
 export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
@@ -134,6 +150,15 @@ export default function PlayerScreen() {
         : Math.max(170, Math.min(286, artRoom));
 
 
+  /*
+    A letra é pedida desde que a tela monta, e não quando o painel abre: a leitura é I/O
+    de arquivo, e assim ela corre enquanto o usuário olha a capa. `useLyrics` guarda o
+    resultado, então reabrir o painel é instantâneo.
+
+    Antes do `return` de "nada tocando": hook não pode ficar atrás de um return.
+  */
+  const lyrics = useLyrics(track);
+
   if (!track) {
     return (
       <ZoomScreen background={C.surface}>
@@ -183,6 +208,7 @@ export default function PlayerScreen() {
 
   return (
     <ZoomScreen background={C.surface} dismissable={!showLyrics}>
+      <ChromeReveal />
       {/*
         O fundo é a própria capa, borrada — o mesmo `Backdrop` das telas de álbum e de
         lista. Eram dois radial-gradients tingidos com `art.a` e `art.b`, cores sorteadas
@@ -237,14 +263,14 @@ export default function PlayerScreen() {
         {/* área da arte, ou a letra no lugar dela */}
         {showLyrics ? (
           <ZoomFade style={{ flex: 1 }}>
-            <LyricsPane track={track} onSeek={seekTo} />
+            <LyricsPane track={track} lyrics={lyrics} onSeek={seekTo} />
           </ZoomFade>
         ) : (
         <GestureDetector gesture={swipe}>
           <View style={{ flex: 1, justifyContent: showQueue ? 'flex-start' : 'center' }}>
             <Animated.View
               layout={LinearTransition.duration(300)}
-              style={{ alignItems: 'center' }}>
+              style={{ alignItems: 'center', marginTop: showQueue ? 0 : ART_TOP }}>
             {treatment === 'ember' && (
               <Animated.View style={[{ alignSelf: 'center' }, dragStyle]}>
                 <ZoomFade
@@ -350,15 +376,23 @@ export default function PlayerScreen() {
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
+                  justifyContent: 'center',
+                  gap: 22,
                   alignSelf: 'center',
-                  // Presa à largura do card. No modo onda não existe card grande, e o
-                  // bloco inteiro já é de largura cheia.
+                  // Presa à largura do card, e centrada dentro dela: nas beiradas os três
+                  // ícones liam como cantos de uma moldura, não como um grupo.
                   width: treatment === 'wave' ? '100%' : artSize,
                   marginTop: 26,
                 }}>
-                {/* Trocar de saída é do sistema: o botão abre o painel dele, já apontado
-                    para a nossa reprodução. */}
+                {/*
+                  Trocar de saída é do sistema nos dois lados, por caminhos opostos.
+
+                  No Android abrimos o painel de saída por intent, já apontado para a nossa
+                  reprodução — daí uma pílula nossa com o nosso ícone. No iOS não existe API
+                  para apresentar o seletor: o único caminho é o `AVRoutePickerView`, um
+                  botão da AVKit que tem de estar na tela. Ali o controle é o próprio botão
+                  da Apple, com o glifo do AirPlay que o usuário já conhece.
+                */}
                 {canPickOutput && (
                   <Pill
                     onPress={() => {
@@ -366,6 +400,21 @@ export default function PlayerScreen() {
                     }}>
                     <Output size={16} color={T.t72} />
                   </Pill>
+                )}
+                {canShowRoutePicker && (
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 1,
+                      borderColor: T.t12,
+                      backgroundColor: T.t06,
+                    }}>
+                    <RoutePicker size={26} tint={T.full} />
+                  </View>
                 )}
                 {canShareToStories && (
                   <Pill onPress={() => share(nowPlaying(), 'stories')}>
@@ -469,6 +518,39 @@ export default function PlayerScreen() {
   );
 }
 
+/**
+ * Apaga a barra inferior enquanto o player está aberto, e a devolve no ritmo em que ele
+ * fecha.
+ *
+ * A barra fica **montada** embaixo: é o que faz a pílula já estar no lugar quando a capa
+ * pousa nela, e o que mantém a capa de origem escondida durante o voo. Ver `chromeReveal`.
+ *
+ * Componente à parte, e não um efeito no PlayerScreen: `useZoomProgress` lê o contexto
+ * que o próprio `ZoomScreen` provê, então do componente que o *renderiza* ele volta nulo.
+ * Aqui dentro ele é o progresso de verdade.
+ */
+function ChromeReveal() {
+  const zoom = useZoomProgress();
+
+  useAnimatedReaction(
+    () => 1 - (zoom?.value ?? 1),
+    (reveal) => {
+      chromeReveal.value = reveal;
+    },
+    [zoom]
+  );
+
+  // Sair por qualquer outro caminho não pode deixar a barra apagada para sempre.
+  useEffect(
+    () => () => {
+      chromeReveal.value = 1;
+    },
+    []
+  );
+
+  return null;
+}
+
 /** Pílula das ações secundárias do player. */
 function Pill({
   onPress,
@@ -526,7 +608,6 @@ function CloseButton() {
   );
 }
 
-const EMPTY_LYRICS: Lyrics = { synced: false, lines: [] };
 
 /** Altura da capa quando a fila está aberta. */
 const ART_MINI = 92;
@@ -891,46 +972,40 @@ function ArtLyricsTabs({
  * Busca a letra da faixa quando a aba abre. O texto não fica no índice da biblioteca
  * (ver docs/03-decisoes.md, D11), então é lido do arquivo aqui.
  */
-function LyricsPane(props: { track: Track; onSeek: (seconds: number) => void }) {
-  // A key remonta ao trocar de faixa, o que zera o estado sem um setState no efeito.
-  return <LoadedLyrics key={props.track.id} {...props} />;
-}
-
-function LoadedLyrics({
+/**
+ * O painel de letras.
+ *
+ * A letra vem de fora, por `useLyrics` — o Now Playing a pede desde que monta, então na
+ * hora de abrir o painel ela quase sempre já está pronta. Antes a leitura começava aqui,
+ * e o painel ficava em branco esperando o disco.
+ */
+function LyricsPane({
   track,
+  lyrics,
   onSeek,
 }: {
   track: Track;
+  lyrics: Lyrics | null;
   onSeek: (seconds: number) => void;
 }) {
   // A letra sincronizada é o único lugar que realmente precisa do tempo em JavaScript, e
   // só enquanto o painel está aberto. Re-renderiza daqui para baixo, não a tela inteira.
   const elapsed = useElapsed();
   const { markLyrics } = useLibrary();
-  const [lyrics, setLyrics] = useState<Lyrics | null>(track.hasLyrics ? null : EMPTY_LYRICS);
-
-  useEffect(() => {
-    if (!track.hasLyrics) return;
-    let alive = true;
-    readLyrics(track).then((raw) => {
-      if (alive) setLyrics(parseLrc(raw ?? ''));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [track]);
 
   const pick = async () => {
     if (!(await importLrc(track))) return;
+    // O que estava guardado é de antes do arquivo novo.
+    forgetLyrics(track.id);
     markLyrics(track.id);
-    setLyrics(parseLrc((await readLyrics(track)) ?? ''));
   };
 
   if (!lyrics) return <View style={{ flex: 1 }} />;
   if (!lyrics.lines.length) return <NoLyrics onPick={pick} />;
   return (
     <View style={{ flex: 1 }}>
-      <LyricsView lyrics={lyrics} elapsed={elapsed} onSeek={onSeek} />
+      {/* A key remonta ao trocar de faixa: zera o scroll sem um setState em efeito. */}
+      <LyricsView key={track.id} lyrics={lyrics} elapsed={elapsed} onSeek={onSeek} />
     </View>
   );
 }

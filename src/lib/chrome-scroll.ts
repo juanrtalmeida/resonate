@@ -12,6 +12,22 @@ import { makeMutable, withTiming } from 'react-native-reanimated';
 /** 0 = barra inteira, 1 = só o item ativo e o player. */
 export const chromeCollapsed = makeMutable(0);
 
+/**
+ * Quanto da barra se vê. 1 no normal, 0 com o Now Playing aberto.
+ *
+ * A barra fica **montada** enquanto o player está aberto, e é isso que resolve duas
+ * coisas na saída: ela já está no lugar quando a capa pousa nela, e a capa de origem
+ * continua escondida — `useZoomLaunch` guarda esse "escondido" em estado de componente,
+ * então desmontar a barra ao abrir o player a devolvia visível, e o voo terminava
+ * pousando em cima de uma capa idêntica.
+ *
+ * Montada não pode significar visível: no Android a barra desenha *por cima* da tela do
+ * player, e mini player e player inteiro apareciam juntos. Quem apaga é esta opacidade,
+ * dirigida pelo progresso do zoom do player — ela dissolve na entrada e volta exatamente
+ * no ritmo em que a capa encolhe de volta para a pílula.
+ */
+export const chromeReveal = makeMutable(1);
+
 /** O alvo, guardado à parte: `chromeCollapsed` no meio da animação vale 0.37. */
 const target = makeMutable(0);
 const lastY = makeMutable(0);
@@ -33,6 +49,20 @@ export function chromeScrollTo(y: number) {
   if (next === target.value) return;
   target.value = next;
   chromeCollapsed.value = withTiming(next, { duration: 260 });
+}
+
+/**
+ * Barra inteira **agora**, sem animação.
+ *
+ * Usado antes de medir a origem de um voo de zoom. Recolhida, a barra abre um disco de 40
+ * à esquerda do player e a capa mora 52 px mais à direita; medir naquele estado e pousar
+ * depois de a barra ter aberto errava o alvo por esses 52 px. Assentar antes de medir faz
+ * a origem já ser a posição final.
+ */
+export function chromeSettle() {
+  target.value = 0;
+  lastY.value = 0;
+  chromeCollapsed.value = 0;
 }
 
 /** Barra inteira de novo — ao trocar de tela, ou quando o usuário toca no item ativo. */

@@ -74,6 +74,24 @@ export function LyricsView({
   const offsets = useRef<number[]>([]);
   const [height, setHeight] = useState(0);
   const manualUntil = useRef(0);
+  /**
+   * Se a primeira posição já foi assumida.
+   *
+   * Ela é dada **sem animação**. Abrindo o painel com a faixa em 2:30, animar significa
+   * assistir a letra rolar do começo até a linha atual — era o "fica tudo sem a letra e
+   * desce até ela". Da segunda em diante o movimento é animado, que é o que acompanha a
+   * música.
+   */
+  const settled = useRef(false);
+  /**
+   * Sobe quando o conteúdo é medido.
+   *
+   * Os `offsets` vêm do `onLayout` de cada linha e moram num ref: escrevê-los não
+   * re-renderiza nada. Sem esta dependência, o efeito abaixo rodava antes de haver
+   * medida, desistia no `y == null`, e só voltava a rodar quando a *linha* mudasse — a
+   * letra ficava parada no topo esperando o próximo verso.
+   */
+  const [laid, setLaid] = useState(0);
 
   const at = lyrics.synced ? lineAt(lyrics.lines, elapsed) : -1;
 
@@ -84,8 +102,12 @@ export function LyricsView({
     if (Date.now() < manualUntil.current) return;
     const y = offsets.current[at];
     if (y == null) return;
-    scroller.current?.scrollTo({ y: Math.max(0, y - height * ANCHOR), animated: true });
-  }, [at, height]);
+    scroller.current?.scrollTo({
+      y: Math.max(0, y - height * ANCHOR),
+      animated: settled.current,
+    });
+    settled.current = true;
+  }, [at, height, laid]);
 
   const measure = useCallback((index: number, y: number) => {
     offsets.current[index] = y;
@@ -101,6 +123,8 @@ export function LyricsView({
       onScrollBeginDrag={() => {
         manualUntil.current = Date.now() + MANUAL_PAUSE;
       }}
+      // Dispara quando as linhas terminam de ser medidas: é o gatilho da primeira posição.
+      onContentSizeChange={() => setLaid((n) => n + 1)}
       contentContainerStyle={{
         // Folga para a primeira e a última linha também alcançarem a âncora.
         paddingTop: height * ANCHOR,

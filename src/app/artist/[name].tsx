@@ -1,6 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, View } from 'react-native';
+import { useDeferredValue, useMemo, useState } from 'react';
+import {
+  Dimensions,
+  FlatList,
+  Image,
+  Pressable,
+  ScrollView,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedScrollHandler,
@@ -25,13 +33,31 @@ import { chromeScrollTo } from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
-import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose, useZoomProgress } from '@/lib/zoom';
+import {
+  ZoomFade,
+  ZoomScreen,
+  ZoomTarget,
+  useZoomClose,
+  useZoomLaunch,
+  useZoomProgress,
+} from '@/lib/zoom';
 import type { Track } from '@/lib/scan';
 
 /** Quantas faixas a seção "Mais tocadas" mostra. */
 const TOP = 5;
-/** Faixas carregadas por vez: um artista pode ter centenas. */
-const PAGE = 40;
+/**
+ * Faixas por página do carrossel.
+ *
+ * Era uma lista vertical que crescia de 40 em 40 conforme se rolava. Um artista com
+ * centenas de faixas virava uma lista sem fim embaixo do hero; em páginas de seis, o que
+ * está na tela sempre cabe na tela.
+ */
+const PER_PAGE = 6;
+
+/** Altura de uma linha de faixa, medida no aparelho: é o que iguala a altura das páginas. */
+const ROW = 54;
+
+const NO_TRACKS: Track[] = [];
 
 const { height: SCREEN } = Dimensions.get('window');
 /** Altura do hero, como no Music: pouco menos da metade da tela. */
@@ -82,19 +108,24 @@ function Artist({
   tracks: Track[];
   top: Track[];
 }) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { accent } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
-  const [limit, setLimit] = useState(PAGE);
 
   const cover = albums.find((a) => a.cover)?.cover ?? null;
   const art = artworkFor(name, albums[0]?.title ?? '');
   const total = tracks.reduce((n, t) => n + (t.duration ?? 0), 0);
   const hours = Math.floor(total / 3600);
   const minutes = Math.round((total % 3600) / 60);
+
+  /*
+    "Mais tocadas" e o carrossel entram no quadro seguinte, não no primeiro — mesma razão
+    da tela de álbum: onze TrackRow no commit que abre a tela atrasavam a transição de
+    zoom. Ver o comentário em `album/[id].tsx` para o porquê do `useDeferredValue`.
+  */
+  const ready = useDeferredValue(true, false);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -142,8 +173,6 @@ function Artist({
     opacity: interpolate(scrollY.value, [HERO * 0.55, HERO * 0.85], [0, 1], 'clamp'),
   }));
 
-  const shown = tracks.slice(0, limit);
-
   const header = (
     <>
       {/*
@@ -186,7 +215,7 @@ function Artist({
         </View>
       </Animated.View>
       <View style={{ paddingHorizontal: PADDING, backgroundColor: C.bg }}>
-        {top.length > 0 && (
+        {ready && top.length > 0 && (
           <>
             <SectionLabel title="Mais tocadas" />
             {top.map((track, index) => (
@@ -214,26 +243,11 @@ function Artist({
               style={{ marginHorizontal: -PADDING }}
               contentContainerStyle={{ gap: 12, paddingHorizontal: PADDING }}>
               {albums.map((album) => (
-                <Pressable
+                <AlbumCard
                   key={album.id}
-                  onPress={() => router.push(`/album/${album.id}`)}
-                  onLongPress={() => openMenu({ kind: 'album', album })}
-                  delayLongPress={280}
-                  style={{ width: 130 }}>
-                  <AlbumArt
-                    art={artworkFor(album.artist, album.title)}
-                    size={130}
-                    radius={R.r15}
-                    cover={album.cover}
-                    detail="ring"
-                  />
-                  <Body size={12.5} weight={600} numberOfLines={1} style={{ marginTop: 8 }}>
-                    {album.title}
-                  </Body>
-                  <Body size={11} color={T.t42} numberOfLines={1}>
-                    {album.trackIds.length} faixas
-                  </Body>
-                </Pressable>
+                  album={album}
+                  onHold={() => openMenu({ kind: 'album', album })}
+                />
               ))}
             </ScrollView>
           </>
@@ -241,6 +255,14 @@ function Artist({
 
         <SectionLabel title="Todas as faixas" trailing={`${tracks.length}`} />
       </View>
+
+      {ready && (
+        <TrackPager
+          tracks={tracks}
+          accent={accent}
+          onHold={(track) => openMenu({ kind: 'track', track })}
+        />
+      )}
     </>
   );
 
@@ -286,39 +308,16 @@ function Artist({
       <ZoomFade style={{ flex: 1 }}>
       <Animated.FlatList
         showsVerticalScrollIndicator={false}
-        data={shown}
+        // Vazia de propósito: as faixas viraram carrossel e moram no cabeçalho.
+        data={NO_TRACKS}
         keyExtractor={(t) => (t as Track).id}
         onScroll={onScroll}
         scrollEventThrottle={16}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingBottom: CHROME_HEIGHT + insets.bottom }}
-        // Vai carregando o resto conforme a lista chega ao fim.
-        onEndReachedThreshold={0.6}
-        onEndReached={() => setLimit((n) => (n < tracks.length ? n + PAGE : n))}
-        ListFooterComponent={
-          // Fundo sólido até o fim: o conteúdo precisa cobrir a foto ao subir.
-          <View style={{ backgroundColor: C.bg, paddingVertical: 18, minHeight: 24 }}>
-            {limit < tracks.length ? (
-              <Body size={12} color={T.t34} align="center">
-                carregando…
-              </Body>
-            ) : null}
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <View style={{ paddingHorizontal: PADDING, backgroundColor: C.bg }}>
-            <TrackRow
-              track={item as Track}
-              position={index + 1}
-              accent={accent}
-              onPress={() => play(shown, index)}
-              onLongPress={() => openMenu({ kind: 'track', track: item as Track })}
-              onQueue={() => enqueueLast([item as Track])}
-              onPlaylist={() => open([(item as Track).id])}
-              subtitle={(item as Track).album}
-            />
-          </View>
-        )}
+        // Fundo sólido até o fim: o conteúdo precisa cobrir a foto ao subir.
+        ListFooterComponent={<View style={{ backgroundColor: C.bg, minHeight: 24 }} />}
+        renderItem={() => null}
       />
       </ZoomFade>
 
@@ -366,6 +365,147 @@ function Artist({
     */}
     <Chrome overModal />
     </>
+  );
+}
+
+/**
+ * As faixas do artista em páginas de seis, deslizando para o lado.
+ *
+ * FlatList horizontal com `pagingEnabled`: as páginas são virtualizadas, então um artista
+ * com centenas de faixas monta seis linhas por vez e não uma lista inteira.
+ *
+ * As páginas têm largura de tela cheia e o recuo mora dentro delas — é o mesmo truque da
+ * tira de álbuns. Sem isso, a página seguinte apareceria colada na borda.
+ *
+ * A última página é completada com espaçadores. Sem eles ela é mais baixa que as outras,
+ * e a altura da lista pularia ao chegar nela.
+ */
+function TrackPager({
+  tracks,
+  accent,
+  onHold,
+}: {
+  tracks: Track[];
+  accent: string;
+  onHold: (track: Track) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const { play, enqueueLast } = usePlayer();
+  const { open } = usePlaylistSheet();
+  const [page, setPage] = useState(0);
+
+  const pages = useMemo(() => {
+    const out: Track[][] = [];
+    for (let i = 0; i < tracks.length; i += PER_PAGE) out.push(tracks.slice(i, i + PER_PAGE));
+    return out;
+  }, [tracks]);
+
+  if (!pages.length) return null;
+
+  return (
+    <View style={{ backgroundColor: C.bg }}>
+      <FlatList
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        data={pages}
+        keyExtractor={(_, i) => String(i)}
+        // O índice da página vem do deslocamento: uma divisão em vez de um handler por item.
+        onMomentumScrollEnd={(e) =>
+          setPage(Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width)))
+        }
+        renderItem={({ item, index: at }) => (
+          <View style={{ width, paddingHorizontal: PADDING }}>
+            {item.map((track, i) => {
+              // Índice global: tocar daqui segue a ordem da discografia inteira.
+              const index = at * PER_PAGE + i;
+              return (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  position={index + 1}
+                  accent={accent}
+                  onPress={() => play(tracks, index)}
+                  onLongPress={() => onHold(track)}
+                  onQueue={() => enqueueLast([track])}
+                  onPlaylist={() => open([track.id])}
+                  subtitle={track.album}
+                />
+              );
+            })}
+            {/* Completa a última página para todas terem a mesma altura. */}
+            {Array.from({ length: PER_PAGE - item.length }, (_, i) => (
+              <View key={`vazio-${i}`} style={{ height: ROW }} />
+            ))}
+          </View>
+        )}
+      />
+
+      {pages.length > 1 && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 7,
+            paddingTop: 14,
+          }}>
+          {pages.map((_, i) => (
+            <View
+              key={i}
+              style={{
+                width: i === page ? 18 : 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: i === page ? accent : T.t18,
+              }}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Capa do álbum na tira do artista.
+ *
+ * Componente à parte porque `useZoomLaunch` é hook e não pode ser chamado dentro do
+ * `map`. Sem ele esta era a única capa do app que abria sem o zoom: dava um fade seco na
+ * ida e, na volta, nada voava para o lugar dela — a capa simplesmente reaparecia.
+ */
+function AlbumCard({
+  album,
+  onHold,
+}: {
+  album: ReturnType<typeof useLibrary>['artists'][number]['albums'][number];
+  onHold: () => void;
+}) {
+  const router = useRouter();
+  const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
+
+  return (
+    <Pressable
+      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onLongPress={onHold}
+      delayLongPress={280}
+      style={{ width: 130 }}>
+      <View ref={ref} collapsable={false} style={originStyle}>
+        <AlbumArt
+          art={artworkFor(album.artist, album.title)}
+          size={130}
+          radius={R.r15}
+          cover={album.cover}
+          detail="ring"
+        />
+      </View>
+      <Body size={12.5} weight={600} numberOfLines={1} style={{ marginTop: 8 }}>
+        {album.title}
+      </Body>
+      <Body size={11} color={T.t42} numberOfLines={1}>
+        {album.trackIds.length} faixas
+      </Body>
+    </Pressable>
   );
 }
 

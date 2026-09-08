@@ -14,7 +14,7 @@
  */
 
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -32,7 +32,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, R, T } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
-import { chromeCollapsed, chromeExpand } from '@/lib/chrome-scroll';
+import {
+  chromeCollapsed,
+  chromeExpand,
+  chromeReveal,
+  chromeSettle,
+} from '@/lib/chrome-scroll';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -109,6 +114,19 @@ export function Chrome({
     if (base) lastBase = base;
   }, [base]);
 
+  /*
+    `/player` entra na lista, e é de propósito.
+
+    O Now Playing é `transparentModal`: ele cobre a barra numa janela própria, então
+    manter a barra montada embaixo não a mostra. O que isso resolve são duas coisas na
+    saída, quando o player esmaece:
+
+    - a barra já está no lugar quando a capa pousa nela, em vez de aparecer de estalo
+      depois que o voo termina;
+    - a capa de origem continua escondida. `useZoomLaunch` guarda esse "escondido" em
+      estado do componente: desmontando a barra ao abrir o player, ela remontava com a
+      capa visível, e o voo terminava pousando em cima de uma capa idêntica já ali.
+  */
   const visible =
     pathname.startsWith('/library') ||
     pathname.startsWith('/album') ||
@@ -116,6 +134,7 @@ export function Chrome({
     pathname.startsWith('/search') ||
     pathname.startsWith('/folders') ||
     pathname.startsWith('/playlist') ||
+    pathname.startsWith('/player') ||
     pathname.startsWith('/settings');
 
   const modal = pathname.startsWith('/album') || pathname.startsWith('/artist');
@@ -125,21 +144,49 @@ export function Chrome({
   const active = base ?? lastBase;
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        paddingHorizontal: 14,
-        // O inset já reserva a barra de gestos; o que se somava além dele era vão puro.
-        paddingBottom: Math.max(insets.bottom, 16) + 4,
-        paddingTop: 40,
-        experimental_backgroundImage: `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
-      }}>
+    <Reveal insets={insets}>
       <Bar active={active} hasTrack={!!track} />
-    </View>
+    </Reveal>
+  );
+}
+
+/**
+ * A moldura da barra, com a opacidade que o Now Playing dirige.
+ *
+ * `pointerEvents` desliga junto: apagada, a barra não pode continuar recebendo toque
+ * embaixo do player.
+ */
+function Reveal({
+  insets,
+  children,
+}: {
+  insets: { bottom: number };
+  children: ReactNode;
+}) {
+  const reveal = useAnimatedStyle(() => ({
+    opacity: chromeReveal.value,
+    pointerEvents: chromeReveal.value < 0.5 ? 'none' : 'box-none',
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="box-none"
+      style={[
+        {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingHorizontal: 14,
+          // O inset já reserva a barra de gestos; o que se somava além dele era vão puro.
+          paddingBottom: Math.max(insets.bottom, 16) + 4,
+          paddingTop: 40,
+          experimental_backgroundImage: `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
+        },
+        reveal,
+      ]}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -229,7 +276,14 @@ function MiniPlayer({
 
   const ActiveIcon = NAV.find((item) => item.key === active)!.Icon;
 
-  const openPlayer = () => launch(() => router.push('/player'));
+  /*
+    A barra assenta antes de medir: a origem do voo tem de ser onde a capa vai *pousar*,
+    e não onde ela está com a barra recolhida — ver `chromeSettle`.
+  */
+  const openPlayer = () => {
+    chromeSettle();
+    launch(() => router.push('/player'));
+  };
 
   // Arrastar o mini player para cima abre o Now Playing, o contrário de arrastá-lo para
   // baixo lá dentro. O toque continua valendo.
