@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlbumArt } from '@/components/album-art';
 import { Carousel, Grid, Heart, LibraryIcon, Search } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
+import { Chip, ChipRow } from '@/components/chip';
 import { SectionLabel } from '@/components/section-label';
 import { GridSkeleton, RowSkeleton, TrackSkeleton } from '@/components/skeleton';
 import { Body, Display, Mono } from '@/components/text';
@@ -745,63 +746,6 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
         />
       ))}
     </ChipRow>
-  );
-}
-
-/**
- * A fileira rolável dos chips.
- *
- * Sangra para as bordas com a margem negativa e devolve o recuo por dentro: sem isso o
- * primeiro e o último chip encostam no ar em vez de alinharem com o resto da tela, e o
- * que rola para fora corta no recuo em vez de na borda.
- */
-function ChipRow({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: { marginTop?: number };
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={[{ marginHorizontal: -PADDING }, style]}
-      contentContainerStyle={{ gap: 8, paddingHorizontal: PADDING, alignItems: 'center' }}>
-      {children}
-    </ScrollView>
-  );
-}
-
-/** Um chip: aba ou gênero. Ativo vai no acento, com a tinta escura por cima. */
-function Chip({
-  label,
-  on,
-  accent,
-  onPress,
-}: {
-  label: string;
-  on: boolean;
-  accent: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        height: 34,
-        paddingHorizontal: 14,
-        borderRadius: R.r17,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: on ? accent : C.card,
-        borderWidth: 1,
-        borderColor: on ? accent : T.t07,
-      }}>
-      <Body size={12.5} weight={600} numberOfLines={1} color={on ? C.onAccent : T.t72}>
-        {label}
-      </Body>
-    </Pressable>
   );
 }
 

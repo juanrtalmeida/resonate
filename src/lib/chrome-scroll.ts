@@ -74,6 +74,25 @@ export function chromeExpand() {
 
 /** Props de qualquer lista vertical: `<FlatList {...chromeScroll} />`. */
 export const chromeScroll = {
+  /*
+    Quanto a lista mantém montado, medido em alturas de tela.
+
+    O padrão do FlatList é 21 — dez telas acima da visível e dez abaixo. Com linha de
+    faixa de 54 px são umas trezentas `TrackRow` montadas, e cada uma tem um
+    `GestureDetector` nativo, dois shared values e um `useConfirm`. Isso não pesa enquanto
+    se rola, porque nada muda; pesa na hora de trocar o conteúdo da lista, que desmonta
+    todas de uma vez. Era a demora ao sair da aba de Faixas.
+
+    Cinco é a tela visível mais duas de cada lado: rolagem rápida continua encontrando
+    linha pronta, e o que se desmonta ao trocar de aba é um quarto do que era.
+
+    Aqui, e não na tela da biblioteca: cada lista do app é feita da mesma linha caríssima,
+    e todas passam por estas props. As três valem só para lista virtualizada — os
+    `ScrollView` que também usam este objeto as ignoram.
+  */
+  windowSize: 5,
+  maxToRenderPerBatch: 8,
+  initialNumToRender: 12,
   // 30 Hz basta para decidir mostrar ou esconder; 60 acordava a thread de JS o dobro.
   scrollEventThrottle: 32,
   // A barra de rolagem do sistema não combina com nada aqui, e some das listas todas de

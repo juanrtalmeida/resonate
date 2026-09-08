@@ -46,7 +46,6 @@ import { useZoomLaunch } from '@/lib/zoom';
 import { AlbumArt } from './album-art';
 import { EqBars } from './eq-bars';
 import {
-  FolderNav,
   LibraryIcon,
   Pause,
   Play,
@@ -58,7 +57,6 @@ import { Body } from './text';
 const NAV = [
   { key: 'Library', label: 'Biblioteca', Icon: LibraryIcon, href: '/library' },
   { key: 'Search', label: 'Busca', Icon: SearchNav, href: '/search' },
-  { key: 'Folders', label: 'Pastas', Icon: FolderNav, href: '/folders' },
   { key: 'Settings', label: 'Ajustes', Icon: SettingsNav, href: '/settings' },
 ] as const;
 
@@ -83,7 +81,6 @@ let lastBase = 'Library';
 function baseOf(pathname: string): string | null {
   if (pathname.startsWith('/settings')) return 'Settings';
   if (pathname.startsWith('/search')) return 'Search';
-  if (pathname.startsWith('/folders')) return 'Folders';
   if (pathname.startsWith('/library')) return 'Library';
   return null;
 }
@@ -124,7 +121,6 @@ export function Chrome() {
   const visible =
     pathname.startsWith('/library') ||
     pathname.startsWith('/search') ||
-    pathname.startsWith('/folders') ||
     pathname.startsWith('/playlist') ||
     pathname.startsWith('/settings');
 

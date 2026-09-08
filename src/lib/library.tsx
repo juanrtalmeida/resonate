@@ -2,6 +2,8 @@
 
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 
+import { applyEdits } from './edits';
+import { usePrefs } from './prefs';
 import { clear, load, save, type Album, type Library, type Track } from './scan';
 
 type LibraryApi = {
@@ -10,7 +12,6 @@ type LibraryApi = {
   trackById: (id: string) => Track | undefined;
   albumById: (id: string) => Album | undefined;
   artists: { name: string; albums: Album[] }[];
-  folders: { path: string; name: string; tracks: Track[] }[];
   replace: (library: Library) => void;
   /** Depois de importar um .lrc, para o selo aparecer sem esperar uma nova varredura. */
   markLyrics: (trackId: string) => void;
@@ -23,7 +24,22 @@ const Ctx = createContext<LibraryApi | null>(null);
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
   // load() é síncrono: a biblioteca já está disponível no primeiro render.
-  const [library, setLibrary] = useState<Library | null>(load);
+  const [scanned, setLibrary] = useState<Library | null>(load);
+  const { edits } = usePrefs();
+
+  /*
+    As correções do usuário entram aqui, num lugar só.
+
+    O que a varredura leu fica intacto no estado — o `library.json` continua sendo o que os
+    arquivos dizem, e uma varredura nova não precisa saber que existem correções. O que o
+    app inteiro consome é este `library` corrigido: busca, listas, player, controles do
+    sistema e card de compartilhar recebem o texto certo sem nenhum deles saber de
+    `edits`. Ver `lib/edits.ts`.
+
+    Sem correção nenhuma, `applyEdits` devolve o mesmo objeto — o `useMemo` abaixo não
+    invalida nada e a biblioteca não é remapeada por nada.
+  */
+  const library = useMemo(() => applyEdits(scanned, edits), [scanned, edits]);
 
   const byId = useMemo(
     () => new Map((library?.tracks ?? []).map((t) => [t.id, t])),
@@ -51,18 +67,6 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [library]);
 
-  const folders = useMemo(() => {
-    const map = new Map<string, Track[]>();
-    for (const track of library?.tracks ?? []) {
-      const list = map.get(track.folder);
-      if (list) list.push(track);
-      else map.set(track.folder, [track]);
-    }
-    return [...map]
-      .map(([path, tracks]) => ({ path, name: path.split('/').filter(Boolean).pop() ?? path, tracks }))
-      .sort((a, b) => b.tracks.length - a.tracks.length);
-  }, [library]);
-
   const api = useMemo<LibraryApi>(
     () => ({
       library,
@@ -70,7 +74,6 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       trackById: (id) => byId.get(id),
       albumById: (id) => albumsById.get(id),
       artists,
-      folders,
       replace: (next) => {
         save(next);
         setLibrary(next);
@@ -108,7 +111,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         setLibrary(null);
       },
     }),
-    [library, tracksOf, byId, albumsById, artists, folders]
+    [library, tracksOf, byId, albumsById, artists]
   );
 
   return <Ctx value={api}>{children}</Ctx>;

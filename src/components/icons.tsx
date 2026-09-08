@@ -173,19 +173,6 @@ export function LibraryIcon({ size = 21, color = 'currentColor' }: IconProps) {
   );
 }
 
-export function FolderNav({ size = 21, color = 'currentColor' }: IconProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
-      <Path
-        d="M2.6 6c0-1 .8-1.8 1.8-1.8h3.4L9.6 6h7.8c1 0 1.8.8 1.8 1.8v8c0 1-.8 1.8-1.8 1.8H4.4c-1 0-1.8-.8-1.8-1.8V6z"
-        stroke={color}
-        strokeWidth={1.7}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 export function SearchNav({ size = 21, color = 'currentColor' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
@@ -328,6 +315,22 @@ export function Lyrics({ size = 16, color = '#F6F1EA' }: IconProps) {
         strokeWidth={1.7}
         strokeLinecap="round"
       />
+    </Svg>
+  );
+}
+
+/** Lápis: editar o que a tag disse errado. */
+export function Pencil({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M12.1 2.6a1.7 1.7 0 0 1 2.4 0l.9.9a1.7 1.7 0 0 1 0 2.4l-8 8-4 1.1 1.1-4 7.6-8.4Z"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M11.4 3.9l2.7 2.7" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
     </Svg>
   );
 }

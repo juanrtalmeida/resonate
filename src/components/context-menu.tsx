@@ -26,6 +26,7 @@ import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePrefs } from '@/lib/prefs';
+import { useEditSheet, type Editable } from './edit-sheet';
 import { spokenOf, type SpokenMarks } from '@/lib/spoken';
 import { removeFromDevice } from '@/lib/remove';
 import { canShareToStories } from '@/lib/share';
@@ -38,6 +39,7 @@ import {
   Heart,
   Instagram,
   Mic,
+  Pencil,
   Play,
   Plus,
   Queue,
@@ -121,30 +123,6 @@ export function ContextMenu({
             paddingTop: insets.top,
             paddingBottom: insets.bottom,
           }}>
-          {/*
-            Um X, e não só o toque no fundo. O fundo fecha desde sempre, mas ele exige
-            acertar as beiradas — e com a lista de ações ocupando o meio da tela, sobra
-            pouca beirada para acertar.
-          */}
-          <Animated.View
-            entering={FadeIn.duration(200).delay(80)}
-            style={{ position: 'absolute', top: insets.top + 10, right: 22 }}>
-            <Pressable
-              onPress={close}
-              hitSlop={12}
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: T.t08,
-                borderWidth: 1,
-                borderColor: T.t1,
-              }}>
-              <Close size={16} color={T.t72} />
-            </Pressable>
-          </Animated.View>
           <Animated.View entering={FadeInDown.duration(260)} style={{ alignItems: 'center' }}>
             <AlbumArt
               art={header.art}
@@ -259,6 +237,39 @@ export function ContextMenu({
               ))}
             </ScrollView>
           )}
+
+          {/*
+            Um X, e não só o toque no fundo. O fundo fecha desde sempre, mas ele exige
+            acertar as beiradas — e com a lista de ações ocupando o meio da tela, sobra
+            pouca beirada para acertar.
+
+            **Último filho**, e é isto que o faz funcionar. Ele era o primeiro, e irmão
+            posterior pinta em cima: o bloco da capa é uma View sem handler nenhum, mas em
+            React Native ela ainda é o alvo do toque — a busca para no topo do que cobre o
+            ponto e sobe pela cadeia de responders, nunca desce para o irmão de baixo.
+            Enquanto o menu era curto o X ficava livre; com a lista mais alta o bloco do
+            meio passou a cobrir o círculo dele, e o toque morria ali. Por último, o X
+            pinta acima de tudo e recebe o toque em qualquer tamanho de menu.
+          */}
+          <Animated.View
+            entering={FadeIn.duration(200).delay(80)}
+            style={{ position: 'absolute', top: insets.top + 10, right: 22 }}>
+            <Pressable
+              onPress={close}
+              hitSlop={12}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: T.t08,
+                borderWidth: 1,
+                borderColor: T.t1,
+              }}>
+              <Close size={16} color={T.t72} />
+            </Pressable>
+          </Animated.View>
         </View>
       )}
     </Modal>
@@ -323,6 +334,7 @@ export function useItemMenu() {
   const { remove: removePlaylist } = usePlaylists();
   const { toggleLike, isLiked, toggleAlbumLike, isAlbumLiked, spoken, setSpoken } = usePrefs();
   const { open: openPlaylists, sheet } = usePlaylistSheet();
+  const { open: openEditor, sheet: editor } = useEditSheet();
 
   /** As faixas do item, na ordem em que ele as toca. */
   const tracksOfItem = (menu: MenuItem): Track[] => {
@@ -386,6 +398,28 @@ export function useItemMenu() {
         label: isAlbumLiked(menu.album.id) ? 'Descurtir' : 'Curtir',
         icon: <Heart size={16} color={T.t72} filled={isAlbumLiked(menu.album.id)} />,
         onPress: () => toggleAlbumLike(menu.album.id),
+      });
+    }
+
+    /*
+      Corrigir os metadados.
+
+      Vale para faixa, álbum e artista, e o alcance é o do item que foi segurado: no álbum
+      a correção entra em todas as faixas dele, no artista ela renomeia a biblioteca
+      inteira. Lista fica fora — o nome dela já se edita onde ela vive, e ela não tem tag
+      nenhuma para corrigir.
+    */
+    if (menu.kind !== 'playlist' && tracks.length) {
+      const target: Editable =
+        menu.kind === 'track'
+          ? { kind: 'track', track: menu.track }
+          : menu.kind === 'album'
+            ? { kind: 'album', album: menu.album, tracks }
+            : { kind: 'artist', name: menu.name, tracks };
+      list.push({
+        label: 'Editar informações',
+        icon: <Pencil size={16} color={T.t72} />,
+        onPress: () => openEditor(target),
       });
     }
 
@@ -494,6 +528,7 @@ export function useItemMenu() {
         />
         {card}
         {sheet}
+        {editor}
       </>
     ),
   };

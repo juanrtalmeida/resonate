@@ -5,6 +5,7 @@ import { createContext, use, useCallback, useMemo, useState, type ReactNode } fr
 
 import { ACCENTS, type Accent } from '@/constants/theme';
 import { isHex } from './color';
+import { NO_EDITS, type Edits, type TrackEdit } from './edits';
 import type { Continuation } from './queue';
 import type { SpokenMarks } from './spoken';
 
@@ -38,6 +39,18 @@ type Prefs = {
   progress: Record<string, number>;
   /** Marcas manuais de podcast/audiolivro, por álbum. */
   spoken: SpokenMarks;
+  /**
+   * O que foi ouvido até o fim, por id de faixa.
+   *
+   * Não dá para deduzir de `progress`: a entrada de lá é apagada quando o episódio
+   * termina, e um capítulo terminado fica com o mesmo zero de um que nunca começou. É
+   * esta lista que sabe a diferença — e é dela que sai a conta das sessões de leitura.
+   */
+  heard: string[];
+  /** Tamanho da sessão de leitura, em minutos, por álbum. Zero ou ausente = desligado. */
+  sessions: Record<string, number>;
+  /** Correções de metadados feitas pelo usuário. Ver `lib/edits.ts`. */
+  edits: Edits;
   /** Como a aba de álbuns se apresenta. */
   albumView: AlbumView;
   /** O que fazer quando a fila acaba. */
@@ -58,6 +71,9 @@ const DEFAULTS: Prefs = {
   plays: {},
   progress: {},
   spoken: {},
+  heard: [],
+  sessions: {},
+  edits: NO_EDITS,
   albumView: 'grid',
   continuation: 'album',
   shuffle: false,
@@ -88,6 +104,15 @@ function migrate(prefs: Prefs): Prefs {
   // O acento é hex livre desde o seletor: o arquivo é nosso, mas uma cor quebrada ali
   // não pinta um botão errado — ela vira `undefined` em todo estilo que a usa.
   const accent = isHex(prefs.accent) ? prefs.accent : DEFAULTS.accent;
+  // Arquivo de uma versão anterior não tem estes campos, e `{...DEFAULTS}` só cobre o que
+  // falta — não o que veio como `null` de um JSON meio escrito.
+  const edits: Edits = {
+    tracks: prefs.edits?.tracks ?? {},
+    artists: prefs.edits?.artists ?? {},
+  };
+  const heard = prefs.heard ?? [];
+  const sessions = prefs.sessions ?? {};
+  prefs = { ...prefs, edits, heard, sessions };
   if (prefs.likedAlbums.length || prefs.liked.every((id) => id.includes('://'))) {
     return accent === prefs.accent ? prefs : { ...prefs, accent };
   }
@@ -116,6 +141,16 @@ type PrefsApi = Prefs & {
   progressOf: (trackId: string) => number;
   /** Trata o álbum como podcast, audiolivro ou música — sobrescreve tag e duração. */
   setSpoken: (albumId: string, kind: SpokenMarks[string] | null) => void;
+  isHeard: (trackId: string) => boolean;
+  /** Tamanho da sessão de leitura do álbum, em minutos. Zero = desligado. */
+  sessionOf: (albumId: string) => number;
+  setSession: (albumId: string, minutes: number) => void;
+  /** Corrige os metadados de uma ou mais faixas de uma vez. */
+  editTracks: (trackIds: string[], patch: TrackEdit) => void;
+  /** Renomeia um artista em toda a biblioteca. */
+  renameArtist: (from: string, to: string) => void;
+  /** Devolve as faixas ao que a tag diz. */
+  clearEdits: (trackIds: string[]) => void;
   setAlbumView: (v: AlbumView) => void;
   setContinuation: (c: Continuation) => void;
   setShuffle: (on: boolean) => void;
@@ -157,10 +192,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       mark: (trackId, position, done) => {
         // Menos de 20 s não é "onde parei", é o começo: retomar aí só atrapalha.
         if (done || position < 20) {
-          if (prefs.progress[trackId] == null) return;
           const rest = { ...prefs.progress };
+          const had = rest[trackId] != null;
           delete rest[trackId];
-          update({ progress: rest });
+          // Terminar entra na lista de ouvidos; parar no primeiro minuto, não.
+          const heard =
+            done && !prefs.heard.includes(trackId) ? [...prefs.heard, trackId] : prefs.heard;
+          if (!had && heard === prefs.heard) return;
+          update({ progress: rest, heard });
           return;
         }
         if (Math.round(prefs.progress[trackId] ?? -1) === Math.round(position)) return;
@@ -172,6 +211,37 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
         if (kind) next[albumId] = kind;
         else delete next[albumId];
         update({ spoken: next });
+      },
+      isHeard: (trackId) => prefs.heard.includes(trackId),
+      sessionOf: (albumId) => prefs.sessions[albumId] ?? 0,
+      setSession: (albumId, minutes) => {
+        const next = { ...prefs.sessions };
+        if (minutes > 0) next[albumId] = minutes;
+        else delete next[albumId];
+        update({ sessions: next });
+      },
+      /*
+        Uma entrada por faixa, mesmo editando um álbum inteiro: o álbum é um registro
+        derivado das faixas (ver `lib/edits.ts`), e a correção tem de morar em quem a
+        varredura vai reler. Álbum tem dezenas de faixas, não centenas — o renome de
+        artista, que pega centenas, é o que ganhou entrada própria.
+      */
+      editTracks: (trackIds, patch) => {
+        const tracks = { ...prefs.edits.tracks };
+        for (const id of trackIds) tracks[id] = { ...tracks[id], ...patch };
+        update({ edits: { ...prefs.edits, tracks } });
+      },
+      renameArtist: (from, to) => {
+        const artists = { ...prefs.edits.artists };
+        // Renomear de volta ao nome original tira a regra em vez de gravar a identidade.
+        if (to === from) delete artists[from];
+        else artists[from] = to;
+        update({ edits: { ...prefs.edits, artists } });
+      },
+      clearEdits: (trackIds) => {
+        const tracks = { ...prefs.edits.tracks };
+        for (const id of trackIds) delete tracks[id];
+        update({ edits: { ...prefs.edits, tracks } });
       },
       setAlbumView: (albumView) => update({ albumView }),
       setContinuation: (continuation) => update({ continuation }),

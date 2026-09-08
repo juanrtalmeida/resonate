@@ -21,6 +21,9 @@ import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
 import type { Album, Track } from '@/lib/scan';
 import { spokenOf } from '@/lib/spoken';
+import { reading, SESSIONS } from '@/lib/sessions';
+import { Chip, ChipRow } from '@/components/chip';
+import { SectionLabel } from '@/components/section-label';
 import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
 const NO_TRACKS: Track[] = [];
@@ -50,7 +53,16 @@ function AlbumDetail({ album }: { album: Album }) {
   const { openArtist, close } = useDetail();
   const { tracksOf } = useLibrary();
   const { play, enqueueLast } = usePlayer();
-  const { accent, isAlbumLiked, toggleAlbumLike, spoken, progressOf } = usePrefs();
+  const {
+    accent,
+    isAlbumLiked,
+    toggleAlbumLike,
+    spoken,
+    progressOf,
+    isHeard,
+    sessionOf,
+    setSession,
+  } = usePrefs();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
 
@@ -99,6 +111,26 @@ function AlbumDetail({ album }: { album: Album }) {
   const kind = tracks[0] ? spokenOf(tracks[0], spoken) : null;
   const unit = kind === 'audiobook' ? 'CAPÍTULOS' : kind ? 'EPISÓDIOS' : 'FAIXAS';
 
+  /*
+    A régua de sessões do livro.
+
+    O ouvido de cada capítulo é a duração inteira quando ele terminou, e a posição salva
+    enquanto está no meio — é por isso que `heard` existe em preferências: a posição é
+    apagada ao terminar, e sem a lista um capítulo terminado teria o mesmo zero de um que
+    nunca começou. Ver `lib/sessions.ts`.
+  */
+  const minutes = sessionOf(album.id);
+  const session =
+    kind === 'audiobook'
+      ? reading(
+          {
+            chapters: tracks.map((t) => t.duration),
+            heard: tracks.map((t) => (isHeard(t.id) ? (t.duration ?? 0) : progressOf(t.id))),
+          },
+          minutes
+        )
+      : null;
+
   const header = (
     <View>
       <ZoomFade>
@@ -144,7 +176,9 @@ function AlbumDetail({ album }: { album: Album }) {
           }}>
           <Play size={14} color={C.onAccent} />
           <Display size={15.5} tracking={-0.015} color={C.onAccent}>
-            {kind ? 'Tocar' : 'Tocar álbum'}
+            {/* Com sessões ligadas o botão diz em qual delas a escuta volta: é o que o
+                usuário está retomando, e não "o álbum". */}
+            {session ? `Retomar sessão ${session.at}` : kind ? 'Tocar' : 'Tocar álbum'}
           </Display>
         </Pressable>
         <SquareButton onPress={() => play(shuffled(tracks), 0)}>
@@ -155,6 +189,65 @@ function AlbumDetail({ album }: { album: Album }) {
           <Heart color={accent} filled={liked} />
         </SquareButton>
       </ZoomFade>
+
+      {/*
+        As sessões de leitura, só no audiolivro e só se o usuário quiser.
+
+        Capítulo não é sessão: um tem 8 minutos e outro 90, e quem ouve livro ouve por
+        tempo. Desligado é o padrão, e aí o livro se comporta como qualquer álbum.
+      */}
+      {kind === 'audiobook' && (
+        <ZoomFade>
+          {/* O mesmo rótulo de seção do resto do app: título, filete e um valor à
+              direita. Era isto escrito à mão aqui. */}
+          <SectionLabel
+            title={session ? `Sessão ${session.at} de ${session.total}` : 'Sessões de leitura'}
+            trailing={session ? `${Math.ceil(session.left / 60)} min restantes` : undefined}
+            style={{ marginTop: 24, marginBottom: 0 }}
+          />
+
+          {session && (
+            <View
+              style={{
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: T.t08,
+                marginTop: 12,
+                overflow: 'hidden',
+              }}>
+              <View
+                style={{
+                  // Largura em porcento: a barra não precisa saber a largura da tela.
+                  width: `${Math.round(session.done * 100)}%`,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: accent,
+                }}
+              />
+            </View>
+          )}
+
+          <ChipRow style={{ marginTop: 12 }}>
+            {SESSIONS.map((size) => (
+              <Chip
+                key={size}
+                label={`${size} min`}
+                on={minutes === size}
+                accent={accent}
+                onPress={() => setSession(album.id, minutes === size ? 0 : size)}
+              />
+            ))}
+            {minutes > 0 && (
+              <Chip
+                label="Desligar"
+                on={false}
+                accent={accent}
+                onPress={() => setSession(album.id, 0)}
+              />
+            )}
+          </ChipRow>
+        </ZoomFade>
+      )}
 
       <View style={{ height: 26 }} />
     </View>
@@ -202,9 +295,11 @@ function AlbumDetail({ album }: { album: Album }) {
                 algo no meio, aqui se vê qual episódio é.
               */
               subtitle={
-                kind && progressOf(item.id) > 0
-                  ? `Continuar · ${fmt(progressOf(item.id))}`
-                  : item.artist
+                kind && isHeard(item.id)
+                  ? 'Ouvido'
+                  : kind && progressOf(item.id) > 0
+                    ? `Continuar · ${fmt(progressOf(item.id))}`
+                    : item.artist
               }
             />
           </ZoomFade>
