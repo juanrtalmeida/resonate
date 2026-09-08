@@ -41,7 +41,7 @@ import {
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { useZoomLaunch } from '@/lib/zoom';
 import { AlbumArt } from './album-art';
 import { EqBars } from './eq-bars';
@@ -54,10 +54,11 @@ import {
 } from './icons';
 import { Body } from './text';
 
+/** O rótulo é chave de tradução, resolvida no render — ver `lib/i18n.ts`. */
 const NAV = [
-  { key: 'Library', label: 'Biblioteca', Icon: LibraryIcon, href: '/library' },
-  { key: 'Search', label: 'Busca', Icon: SearchNav, href: '/search' },
-  { key: 'Settings', label: 'Ajustes', Icon: SettingsNav, href: '/settings' },
+  { key: 'Library', label: 'nav.library', Icon: LibraryIcon, href: '/library' },
+  { key: 'Search', label: 'nav.search', Icon: SearchNav, href: '/search' },
+  { key: 'Settings', label: 'nav.settings', Icon: SettingsNav, href: '/settings' },
 ] as const;
 
 /** Altura da pílula: 42 do item, mais 5 de recuo de cada lado e a borda. */
@@ -392,6 +393,7 @@ function NavItem({
 }) {
   const router = useRouter();
   const { accent } = usePrefs();
+  const t = useT();
 
   // Só o item ativo abre o rótulo — a largura anima de 0 a 78, como no design.
   //
@@ -429,7 +431,7 @@ function NavItem({
       <item.Icon size={21} color={color} />
       <Animated.View style={label}>
         <Body size={13} weight={600} tracking={-0.01} color={color} numberOfLines={1}>
-          {item.label}
+          {t(item.label)}
         </Body>
       </Animated.View>
     </Pressable>

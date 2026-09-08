@@ -40,20 +40,22 @@ import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { Sheet } from '@/components/sheet';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
-import { usePrefs, type AlbumView } from '@/lib/prefs';
+import { usePrefs, useT, type AlbumView } from '@/lib/prefs';
+import type { Key } from '@/lib/i18n';
 import { spokenOf, type Spoken } from '@/lib/spoken';
 import { useZoomLaunch } from '@/lib/zoom';
 import type { Album, Track } from '@/lib/scan';
 
+/** Os rótulos são chaves de tradução, resolvidas no render — ver `lib/i18n.ts`. */
 const TABS = [
-  { key: 'albums', label: 'Álbuns' },
-  { key: 'artists', label: 'Artistas' },
-  { key: 'tracks', label: 'Faixas' },
-  { key: 'playlists', label: 'Listas' },
-  { key: 'liked', label: 'Favoritos' },
-  { key: 'podcasts', label: 'Podcasts' },
-  { key: 'audiobooks', label: 'Audiolivros' },
-] as const;
+  { key: 'albums', label: 'tab.albums' },
+  { key: 'artists', label: 'tab.artists' },
+  { key: 'tracks', label: 'tab.tracks' },
+  { key: 'playlists', label: 'tab.playlists' },
+  { key: 'liked', label: 'tab.liked' },
+  { key: 'podcasts', label: 'tab.podcasts' },
+  { key: 'audiobooks', label: 'tab.audiobooks' },
+] as const satisfies { key: string; label: Key }[];
 
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -66,11 +68,11 @@ type TabKey = (typeof TABS)[number]['key'];
  */
 const GENRE_TABS: readonly TabKey[] = ['albums', 'artists', 'tracks', 'liked'];
 
-/** As duas abas de palavra falada, e como cada uma se chama no singular e no plural. */
+/** As duas abas de palavra falada: o que classifica cada uma, e como ela conta os itens. */
 const SPOKEN_TABS = {
-  podcasts: { kind: 'podcast', one: 'programa', many: 'programas', item: 'episódios' },
-  audiobooks: { kind: 'audiobook', one: 'livro', many: 'livros', item: 'capítulos' },
-} as const;
+  podcasts: { kind: 'podcast', section: 'lib.shows', count: 'count.episodes' },
+  audiobooks: { kind: 'audiobook', section: 'lib.books', count: 'count.chapters' },
+} as const satisfies Record<string, { kind: Spoken; section: Key; count: Key }>;
 
 const NO_TRACKS: Track[] = [];
 const NO_ALBUMS: Album[] = [];
@@ -83,6 +85,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { library, artists, trackById, albumById } = useLibrary();
   const { accent, albumView, setAlbumView, liked, likedAlbums, spoken } = usePrefs();
+  const t = useT();
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
@@ -259,12 +262,16 @@ export default function LibraryScreen() {
         }}>
         <View style={{ flex: 1 }}>
           <Display size={33} tracking={-0.035}>
-            Sua biblioteca
+            {t('lib.title')}
           </Display>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 7 }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.ok }} />
             <Body size={12.5} color={T.t42}>
-              {tracks.length} faixas · {albums.length} álbuns · {Math.round(totalSeconds / 3600)} h
+              {t('lib.stats', {
+                tracks: tracks.length,
+                albums: albums.length,
+                hours: Math.round(totalSeconds / 3600),
+              })}
             </Body>
           </View>
         </View>
@@ -295,7 +302,7 @@ export default function LibraryScreen() {
       */}
       {GENRE_TABS.includes(tab) && genres.length > 0 && (
         <ChipRow style={{ marginTop: 10 }}>
-          <Chip label="Todos" on={!picked} accent={accent} onPress={() => setGenre(null)} />
+          <Chip label={t('lib.allGenres')} on={!picked} accent={accent} onPress={() => setGenre(null)} />
           {genres.map((g) => (
             <Chip
               key={g.name}
@@ -322,7 +329,7 @@ export default function LibraryScreen() {
       <Animated.View key={shown} entering={(forward ? FadeInRight : FadeInLeft).duration(240)}>
       {shown === 'albums' && albums.length > 0 && (
         <AlbumStrip
-          title="Recém-encontrados"
+          title={t('lib.recent')}
           albums={albums.slice(0, 8)}
           badge="NOVO"
           onHold={(album) => openMenu({ kind: 'album', album })}
@@ -331,7 +338,7 @@ export default function LibraryScreen() {
 
       {shown === 'albums' && (
         <SectionLabel
-          title="Todos os álbuns"
+          title={t('lib.allAlbums')}
           trailing={`${albums.length}`}
           action={<ViewToggle value={albumView} onPick={setAlbumView} accent={accent} />}
         />
@@ -339,19 +346,19 @@ export default function LibraryScreen() {
 
       {shown === 'liked' && favoriteAlbums.length > 0 && (
         <AlbumStrip
-          title="Álbuns curtidos"
+          title={t('lib.likedAlbums')}
           albums={favoriteAlbums}
           onHold={(album) => openMenu({ kind: 'album', album })}
         />
       )}
 
       {shown === 'liked' && likedTracks.length > 0 && (
-        <SectionLabel title="Faixas curtidas" trailing={`${likedTracks.length}`} />
+        <SectionLabel title={t('lib.likedTracks')} trailing={`${likedTracks.length}`} />
       )}
 
       {(shown === 'podcasts' || shown === 'audiobooks') && spokenCount(SPOKEN_TABS[shown].kind) > 0 && (
         <SectionLabel
-          title={shown === 'podcasts' ? 'Programas' : 'Livros'}
+          title={t(SPOKEN_TABS[shown].section)}
           trailing={`${spokenCount(SPOKEN_TABS[shown].kind)}`}
         />
       )}
@@ -375,7 +382,7 @@ export default function LibraryScreen() {
             +
           </Body>
           <Body size={13.5} weight={500} color={T.t72} style={{ flex: 1 }}>
-            Nova lista
+            {t('lib.newPlaylist')}
           </Body>
         </Pressable>
       )}
@@ -440,14 +447,27 @@ export default function LibraryScreen() {
     return listTracks.map((track) => ({ kind: 'track', id: track.id, track }));
   }, [shown, albumView, genreAlbums, genreArtists, playlists, shows, listTracks]);
 
-  const empty = emptyFor(shown, favoriteAlbums.length > 0);
+  const empty = <Empty tab={shown} hasFavoriteAlbums={favoriteAlbums.length > 0} />;
 
   return (
     <>
       <FlatList
         {...chromeScroll}
-        // Vazia enquanto assenta: é isto que faz o commit urgente ser barato.
-        data={settling ? NO_ROWS : rows}
+        /*
+          Segue `shown`, que é diferido — então a lista **não** muda no commit do toque.
+
+          Ela era esvaziada enquanto assentava, para o esqueleto aparecer. Esvaziar
+          desmonta tudo o que está montado, e isso caía justamente no commit urgente: sair
+          da aba de Faixas custava dezenas de `TrackRow` com gesto nativo, e o toque na
+          aba nova esperava por elas. Agora as linhas velhas ficam onde estão até as novas
+          estarem prontas, e a troca inteira — desmontar e montar — acontece no commit de
+          baixa prioridade.
+
+          O esqueleto continua no `ListEmptyComponent`, e agora aparece quando a lista
+          está de fato vazia: entrando numa aba a partir de uma vazia, ou na primeira
+          montagem da tela.
+        */
+        data={rows}
         keyExtractor={(r) => r.id}
         ListHeaderComponent={
           <>
@@ -504,13 +524,13 @@ export default function LibraryScreen() {
               <ShowRow
                 album={item.album}
                 episodes={item.episodes}
-                unit={SPOKEN_TABS[shown === 'audiobooks' ? 'audiobooks' : 'podcasts'].item}
+                count={SPOKEN_TABS[shown === 'audiobooks' ? 'audiobooks' : 'podcasts'].count}
                 onHold={() => openMenu({ kind: 'album', album: item.album })}
               />
             ) : item.kind === 'playlist' ? (
               <GroupRow
                 title={item.playlist.name}
-                subtitle={`${item.playlist.trackIds.length} ${item.playlist.trackIds.length === 1 ? 'faixa' : 'faixas'}`}
+                subtitle={t('count.tracks', { n: item.playlist.trackIds.length })}
                 art={artworkFor(item.playlist.name, 'lista')}
                 cover={item.playlist.cover ?? null}
                 onPress={() => router.push(`/playlist/${item.playlist.id}`)}
@@ -581,79 +601,58 @@ const NO_ROWS: Row[] = [];
 function ShowRow({
   album,
   episodes,
-  unit,
+  count,
   onHold,
 }: {
   album: Album;
   episodes: Track[];
-  /** "episódios" ou "capítulos": a aba decide a palavra. */
-  unit: string;
+  /** A chave que conta os itens: episódios num programa, capítulos num livro. */
+  count: Key;
   onHold: () => void;
 }) {
   const { openAlbum } = useDetail();
   const { progressOf } = usePrefs();
+  const t = useT();
   const started = episodes.find((e) => progressOf(e.id) > 0);
 
   return (
     <GroupRow
       title={album.title}
-      subtitle={`${episodes.length} ${episodes.length === 1 ? unit.replace(/s$/, '') : unit}`}
-      mono={started ? `CONTINUAR · ${fmt(progressOf(started.id))} · ${started.title}` : undefined}
+      subtitle={t(count, { n: episodes.length })}
+      mono={
+        started
+          ? `${t('album.resumeAt', { time: fmt(progressOf(started.id)) }).toUpperCase()} · ${started.title}`
+          : undefined
+      }
       art={artworkFor(album.artist, album.title)}
       cover={album.cover}
+      // A capa do programa voa para a tela dele, como a da grade e a do artista.
+      zoom
       onPress={() => openAlbum(album.id)}
       onLongPress={onHold}
     />
   );
 }
 
-function emptyFor(tab: TabKey, hasFavoriteAlbums: boolean) {
-  if (tab === 'albums') {
-    return (
-      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Biblioteca vazia">
-        Nenhum álbum por aqui ainda. Varra o aparelho de novo em Ajustes.
-      </EmptyState>
-    );
-  }
-  if (tab === 'artists') {
-    return (
-      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhum artista">
-        A varredura não encontrou nada com metadados de artista.
-      </EmptyState>
-    );
-  }
-  if (tab === 'playlists') {
-    return (
-      <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma lista ainda">
-        Segure uma faixa em qualquer tela para criar a primeira.
-      </EmptyState>
-    );
-  }
-  if (tab === 'podcasts' || tab === 'audiobooks') {
-    const podcast = tab === 'podcasts';
-    return (
-      <EmptyState
-        icon={<LibraryIcon size={30} color={T.full} />}
-        title={podcast ? 'Nenhum podcast' : 'Nenhum audiolivro'}>
-        {podcast
-          ? 'Entram aqui os arquivos com gênero de podcast, os mais longos que 25 minutos, e o que você marcar como podcast segurando um álbum.'
-          : 'Entram aqui os arquivos com gênero de audiolivro, e o que você marcar como audiolivro segurando um álbum.'}
-      </EmptyState>
-    );
-  }
-  if (tab === 'liked') {
-    // Álbum curtido sem faixa curtida não é uma aba vazia: as capas já estão no cabeçalho.
-    if (hasFavoriteAlbums) return null;
-    return (
-      <EmptyState icon={<Heart size={30} color={T.full} filled />} title="Nada curtido ainda">
-        Toque no coração de uma faixa no Now Playing, ou no de um álbum, para guardá-la
-        aqui.
-      </EmptyState>
-    );
-  }
+/**
+ * O vazio de cada aba.
+ *
+ * Componente, e não função que devolve JSX: o texto vem de `useT`, e hook não roda fora de
+ * componente. O par de chaves é sempre `empty.<aba>` e `empty.<aba>.body`.
+ */
+function Empty({ tab, hasFavoriteAlbums }: { tab: TabKey; hasFavoriteAlbums: boolean }) {
+  const t = useT();
+
+  // Álbum curtido sem faixa curtida não é uma aba vazia: as capas já estão no cabeçalho.
+  if (tab === 'liked' && hasFavoriteAlbums) return null;
+
+  const key = tab === 'tracks' ? 'tracks' : tab;
+  const icon =
+    tab === 'liked' ? <Heart size={30} color={T.full} filled /> : <LibraryIcon size={30} color={T.full} />;
+
   return (
-    <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma faixa">
-      Varra o aparelho de novo em Ajustes para procurar música.
+    <EmptyState icon={icon} title={t(`empty.${key}` as Key)}>
+      {t(`empty.${key}.body` as Key)}
     </EmptyState>
   );
 }
@@ -661,6 +660,7 @@ function emptyFor(tab: TabKey, hasFavoriteAlbums: boolean) {
 /** Criação direta de lista, sem precisar de uma faixa para começar. */
 function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { accent } = usePrefs();
+  const t = useT();
   const { create } = usePlaylists();
   const [name, setName] = useState('');
 
@@ -672,12 +672,12 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Nova lista">
+    <Sheet visible={visible} onClose={onClose} title={t('lib.newPlaylist')}>
       <TextInput
         value={name}
         onChangeText={setName}
         autoFocus
-        placeholder="Nome da lista"
+        placeholder={t('lib.playlistName')}
         placeholderTextColor={T.t34}
         selectionColor={accent}
         returnKeyType="done"
@@ -698,7 +698,7 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18, marginTop: 16 }}>
         <Pressable onPress={onClose} hitSlop={8} style={{ paddingVertical: 8 }}>
           <Body size={13.5} weight={600} color={T.t5}>
-            Cancelar
+            {t('common.cancel')}
           </Body>
         </Pressable>
         <Pressable
@@ -711,7 +711,7 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
             backgroundColor: name.trim() ? accent : T.t06,
           }}>
           <Body size={13.5} weight={600} color={name.trim() ? C.onAccent : T.t24}>
-            Criar
+            {t('common.create')}
           </Body>
         </Pressable>
       </View>
@@ -733,16 +733,17 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
  */
 function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => void }) {
   const { accent } = usePrefs();
+  const t = useT();
 
   return (
     <ChipRow style={{ marginTop: 18 }}>
-      {TABS.map((t) => (
+      {TABS.map((tab) => (
         <Chip
-          key={t.key}
-          label={t.label}
-          on={t.key === current}
+          key={tab.key}
+          label={t(tab.label)}
+          on={tab.key === current}
           accent={accent}
-          onPress={() => onPick(t.key)}
+          onPress={() => onPick(tab.key)}
         />
       ))}
     </ChipRow>
@@ -1101,6 +1102,7 @@ function GroupRow({
   art,
   cover,
   round = false,
+  zoom = false,
   onPress,
   onLongPress,
 }: {
@@ -1112,12 +1114,27 @@ function GroupRow({
   cover?: string | null;
   /** Artista aparece em círculo; álbum e pasta, em quadrado. */
   round?: boolean;
+  /**
+   * A miniatura é a origem do voo de zoom.
+   *
+   * Vale para quem abre uma camada — programa de podcast e livro abrem a tela de álbum.
+   * A linha de lista abre uma rota de verdade (`/playlist/...`), que não tem para onde
+   * voar, e por isso o padrão é desligado.
+   */
+  zoom?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
+  const radius = round ? 26 : 14;
+  /*
+    O hook é chamado sempre, mesmo com `zoom` desligado — é um ref e um booleano, e
+    condicionar chamada de hook não existe. Quem não voa simplesmente não usa o `launch`.
+  */
+  const { ref, launch, style: originStyle } = useZoomLaunch(radius);
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={zoom ? () => launch(onPress) : onPress}
       onLongPress={onLongPress}
       delayLongPress={280}
       style={{
@@ -1126,7 +1143,11 @@ function GroupRow({
         gap: 13,
         paddingVertical: 10,
       }}>
-      <AlbumArt art={art} size={52} radius={round ? 26 : 14} detail="ring" cover={cover} />
+      {/* `collapsable={false}` para o Android não fundir esta View com a de cima: sem um
+          nó nativo próprio não há o que medir, e o voo sai sem origem. */}
+      <View ref={ref} collapsable={false} style={originStyle}>
+        <AlbumArt art={art} size={52} radius={radius} detail="ring" cover={cover} />
+      </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Body size={14.5} weight={600} tracking={-0.01} numberOfLines={1}>
           {title}

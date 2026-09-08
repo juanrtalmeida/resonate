@@ -6,6 +6,7 @@ import { createContext, use, useCallback, useMemo, useState, type ReactNode } fr
 import { ACCENTS, type Accent } from '@/constants/theme';
 import { isHex } from './color';
 import { NO_EDITS, type Edits, type TrackEdit } from './edits';
+import { resolveLang, translate, type Key, type Lang } from './i18n';
 import type { Continuation } from './queue';
 import type { SpokenMarks } from './spoken';
 
@@ -51,6 +52,13 @@ type Prefs = {
   sessions: Record<string, number>;
   /** Correções de metadados feitas pelo usuário. Ver `lib/edits.ts`. */
   edits: Edits;
+  /**
+   * Idioma da interface. `auto` segue o aparelho.
+   *
+   * `auto` é o padrão de propósito: quem já usava o app em português continua em português
+   * sem ter de escolher nada, e um aparelho em japonês abre em japonês na primeira vez.
+   */
+  language: Lang | 'auto';
   /** Como a aba de álbuns se apresenta. */
   albumView: AlbumView;
   /** O que fazer quando a fila acaba. */
@@ -74,6 +82,7 @@ const DEFAULTS: Prefs = {
   heard: [],
   sessions: {},
   edits: NO_EDITS,
+  language: 'auto',
   albumView: 'grid',
   continuation: 'album',
   shuffle: false,
@@ -111,8 +120,9 @@ function migrate(prefs: Prefs): Prefs {
     artists: prefs.edits?.artists ?? {},
   };
   const heard = prefs.heard ?? [];
+  const language = prefs.language ?? DEFAULTS.language;
   const sessions = prefs.sessions ?? {};
-  prefs = { ...prefs, edits, heard, sessions };
+  prefs = { ...prefs, edits, heard, sessions, language };
   if (prefs.likedAlbums.length || prefs.liked.every((id) => id.includes('://'))) {
     return accent === prefs.accent ? prefs : { ...prefs, accent };
   }
@@ -151,6 +161,7 @@ type PrefsApi = Prefs & {
   renameArtist: (from: string, to: string) => void;
   /** Devolve as faixas ao que a tag diz. */
   clearEdits: (trackIds: string[]) => void;
+  setLanguage: (language: Lang | 'auto') => void;
   setAlbumView: (v: AlbumView) => void;
   setContinuation: (c: Continuation) => void;
   setShuffle: (on: boolean) => void;
@@ -238,6 +249,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
         else artists[from] = to;
         update({ edits: { ...prefs.edits, artists } });
       },
+      setLanguage: (language) => update({ language }),
       clearEdits: (trackIds) => {
         const tracks = { ...prefs.edits.tracks };
         for (const id of trackIds) delete tracks[id];
@@ -258,4 +270,28 @@ export function usePrefs(): PrefsApi {
   const api = use(Ctx);
   if (!api) throw new Error('usePrefs fora de PrefsProvider');
   return api;
+}
+
+/**
+ * O idioma em vigor. Serve para `toLocaleDateString` e afins.
+ *
+ * Aqui, e não em `i18n.ts`: o dicionário é puro para poder ser testado fora do React, e é
+ * a escolha do idioma que é preferência. Quem lê a preferência mora onde ela mora.
+ */
+export function useLang(): Lang {
+  return resolveLang(usePrefs().language);
+}
+
+/**
+ * `const t = useT()` e depois `t('nav.library')`.
+ *
+ * As chaves são tipadas: escrever uma que não existe não compila. É isso que substitui o
+ * "arquivo de tradução que ninguém sabe se está completo".
+ */
+export function useT() {
+  const lang = useLang();
+  return useCallback(
+    (key: Key, vars?: Record<string, string | number>) => translate(lang, key, vars),
+    [lang]
+  );
 }

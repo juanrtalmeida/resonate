@@ -87,12 +87,13 @@ export const chromeScroll = {
     linha pronta, e o que se desmonta ao trocar de aba é um quarto do que era.
 
     Aqui, e não na tela da biblioteca: cada lista do app é feita da mesma linha caríssima,
-    e todas passam por estas props. As três valem só para lista virtualizada — os
-    `ScrollView` que também usam este objeto as ignoram.
+    e todas passam por estas props. As duas valem só para lista virtualizada — os
+    `ScrollView` que também usam este objeto as ignoram. `initialNumToRender` fica no
+    padrão de propósito: baixá-lo atrasaria o primeiro quadro de toda lista para ganhar
+    numa troca de aba que ainda não aconteceu.
   */
   windowSize: 5,
   maxToRenderPerBatch: 8,
-  initialNumToRender: 12,
   // 30 Hz basta para decidir mostrar ou esconder; 60 acordava a thread de JS o dobro.
   scrollEventThrottle: 32,
   // A barra de rolagem do sistema não combina com nada aqui, e some das listas todas de

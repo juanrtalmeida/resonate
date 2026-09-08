@@ -18,7 +18,7 @@ import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import type { Album, Track } from '@/lib/scan';
 import { spokenOf } from '@/lib/spoken';
 import { reading, SESSIONS } from '@/lib/sessions';
@@ -34,13 +34,14 @@ const NO_TRACKS: Track[] = [];
  */
 export function AlbumScreen({ id }: { id: string }) {
   const { albumById } = useLibrary();
+  const t = useT();
 
   const album = albumById(id);
   if (!album) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Body size={14} color={T.t5}>
-          Álbum não encontrado.
+          {t('album.notFound')}
         </Body>
       </View>
     );
@@ -63,6 +64,7 @@ function AlbumDetail({ album }: { album: Album }) {
     sessionOf,
     setSession,
   } = usePrefs();
+  const t = useT();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
 
@@ -109,7 +111,9 @@ function AlbumDetail({ album }: { album: Album }) {
     mesmos. Uma tela própria para falado seria uma segunda cópia desta.
   */
   const kind = tracks[0] ? spokenOf(tracks[0], spoken) : null;
-  const unit = kind === 'audiobook' ? 'CAPÍTULOS' : kind ? 'EPISÓDIOS' : 'FAIXAS';
+  const unit = t(
+    kind === 'audiobook' ? 'unit.chapters' : kind ? 'unit.episodes' : 'unit.tracks'
+  );
 
   /*
     A régua de sessões do livro.
@@ -178,7 +182,9 @@ function AlbumDetail({ album }: { album: Album }) {
           <Display size={15.5} tracking={-0.015} color={C.onAccent}>
             {/* Com sessões ligadas o botão diz em qual delas a escuta volta: é o que o
                 usuário está retomando, e não "o álbum". */}
-            {session ? `Retomar sessão ${session.at}` : kind ? 'Tocar' : 'Tocar álbum'}
+            {session
+              ? t('session.resume', { at: session.at })
+              : t(kind ? 'album.play' : 'album.playAll')}
           </Display>
         </Pressable>
         <SquareButton onPress={() => play(shuffled(tracks), 0)}>
@@ -201,8 +207,14 @@ function AlbumDetail({ album }: { album: Album }) {
           {/* O mesmo rótulo de seção do resto do app: título, filete e um valor à
               direita. Era isto escrito à mão aqui. */}
           <SectionLabel
-            title={session ? `Sessão ${session.at} de ${session.total}` : 'Sessões de leitura'}
-            trailing={session ? `${Math.ceil(session.left / 60)} min restantes` : undefined}
+            title={
+              session
+                ? t('session.at', { at: session.at, total: session.total })
+                : t('session.label')
+            }
+            trailing={
+              session ? t('session.left', { min: Math.ceil(session.left / 60) }) : undefined
+            }
             style={{ marginTop: 24, marginBottom: 0 }}
           />
 
@@ -231,7 +243,7 @@ function AlbumDetail({ album }: { album: Album }) {
             {SESSIONS.map((size) => (
               <Chip
                 key={size}
-                label={`${size} min`}
+                label={t('session.size', { n: size })}
                 on={minutes === size}
                 accent={accent}
                 onPress={() => setSession(album.id, minutes === size ? 0 : size)}
@@ -239,7 +251,7 @@ function AlbumDetail({ album }: { album: Album }) {
             ))}
             {minutes > 0 && (
               <Chip
-                label="Desligar"
+                label={t('session.off')}
                 on={false}
                 accent={accent}
                 onPress={() => setSession(album.id, 0)}
@@ -296,9 +308,9 @@ function AlbumDetail({ album }: { album: Album }) {
               */
               subtitle={
                 kind && isHeard(item.id)
-                  ? 'Ouvido'
+                  ? t('album.heard')
                   : kind && progressOf(item.id) > 0
-                    ? `Continuar · ${fmt(progressOf(item.id))}`
+                    ? t('album.resumeAt', { time: fmt(progressOf(item.id)) })
                     : item.artist
               }
             />

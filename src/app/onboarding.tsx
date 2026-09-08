@@ -16,7 +16,7 @@ import { ArrowRight, ChevronRight, Folder, FolderPlus } from '@/components/icons
 import { Wordmark } from '@/components/logo';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha } from '@/constants/theme';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import {
   canBrowseFolders,
   displayPath,
@@ -52,6 +52,7 @@ export default function Onboarding() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { accent, granted, setSources, grantFolder } = usePrefs();
+  const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [importing, setImporting] = useState(false);
 
@@ -115,10 +116,10 @@ export default function Onboarding() {
             se identifica pelo símbolo — na notificação, no ícone, na tela de bloqueio. */}
         <Wordmark size={30} animated />
         <Mono size={10} weight={500} tracking={0.2} caps color={accent} style={{ marginTop: 22 }}>
-          Primeira execução
+          {t('onboarding.first')}
         </Mono>
         <Display size={38} tracking={-0.035} style={{ marginTop: 14 }}>
-          Vamos achar o que já está aqui.
+          {t('onboarding.lead')}
         </Display>
         <Body size={14.5} color="rgba(246,241,234,.58)" style={{ marginTop: 14, lineHeight: 21.75 }}>
           Sem login, sem streaming. O Resonate lê os arquivos que já estão no seu aparelho e
@@ -134,11 +135,11 @@ export default function Onboarding() {
             marginBottom: 12,
           }}>
           <Mono size={10} weight={500} tracking={0.16} caps color={T.t4}>
-            {canBrowseFolders ? 'Onde eu procuro?' : 'O que já foi importado'}
+            {t(canBrowseFolders ? 'onboarding.where' : 'onboarding.imported')}
           </Mono>
           {state.kind === 'ready' && (
             <Body size={12} color={T.t4}>
-              {selected.length} de {state.folders.length} selecionadas
+              {t('onboarding.selected', { on: selected.length, total: state.folders.length })}
             </Body>
           )}
         </View>
@@ -147,20 +148,20 @@ export default function Onboarding() {
           <View style={{ alignItems: 'center', gap: 12, marginTop: 24 }}>
             <ActivityIndicator color={accent} />
             <Body size={12.5} color={T.t42}>
-              Vendo o que tem no aparelho…
+              {t('onboarding.looking')}
             </Body>
           </View>
         )}
 
         {state.kind === 'denied' && (
-          <Notice accent={accent} onRetry={refresh} title="Sem acesso aos arquivos de áudio">
+          <Notice accent={accent} onRetry={refresh} title={t('onboarding.denied')}>
             Libere o acesso a música nas configurações do sistema e toque aqui para tentar de
             novo.
           </Notice>
         )}
 
         {state.kind === 'unavailable' && (
-          <Notice accent={accent} title="Este app precisa de um development build">
+          <Notice accent={accent} title={t('onboarding.unavailable')}>
             A leitura da biblioteca de mídia usa um módulo nativo que o Expo Go não tem. Feche
             e rode `npx expo run:android`. As pastas escolhidas à mão continuam funcionando.
           </Notice>
@@ -169,8 +170,8 @@ export default function Onboarding() {
         {state.kind === 'ready' && state.folders.length === 0 && (
           <Body size={13.5} color={T.t55}>
             {canBrowseFolders
-              ? 'Nenhum arquivo de áudio encontrado neste aparelho.'
-              : 'Nenhuma música aqui ainda. Importe arquivos ou arraste-os para a pasta do Resonate no app Arquivos.'}
+              ? t('onboarding.nothing')
+              : t('onboarding.nothingIos')}
           </Body>
         )}
 
@@ -215,10 +216,10 @@ export default function Onboarding() {
           <FolderPlus />
           <Body size={13.5} weight={500} color={T.t72} style={{ flex: 1 }}>
             {importing
-              ? 'Importando…'
+              ? t('onboarding.importing')
               : canBrowseFolders
-                ? 'Procurar no armazenamento…'
-                : 'Importar arquivos…'}
+                ? t('onboarding.browse')
+                : t('onboarding.import')}
           </Body>
           <ChevronRight />
         </Pressable>
@@ -226,7 +227,7 @@ export default function Onboarding() {
         <ScanCta accent={accent} total={total} folders={selected.length} onPress={start} />
 
         <Body size={11.5} color="rgba(246,241,234,.33)" align="center" style={{ marginTop: 13 }}>
-          Nada é enviado. Os arquivos ficam exatamente onde estão.
+          {t('onboarding.privacy')}
         </Body>
       </ScrollView>
     </View>
@@ -392,6 +393,7 @@ function ScanCta({
   folders: number;
   onPress: () => void;
 }) {
+  const t = useT();
   const spin = useSharedValue(0);
   useEffect(() => {
     spin.value = withRepeat(withTiming(360, { duration: 2400 }), -1, false);
@@ -452,12 +454,15 @@ function ScanCta({
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Display size={18} tracking={-0.025}>
-          {total ? 'Começar a varredura' : 'Escolha uma pasta'}
+          {t(total ? 'onboarding.start' : 'onboarding.pickFolder')}
         </Display>
         <Body size={12} color={T.t5} numberOfLines={1} style={{ marginTop: 3 }}>
           {total
-            ? `${total} arquivos · ${folders} ${folders === 1 ? 'pasta' : 'pastas'}`
-            : 'Ligue uma das pastas acima'}
+            ? t('onboarding.found', {
+                files: t('count.files', { n: total }),
+                folders: t('count.folders', { n: folders }),
+              })
+            : t('onboarding.turnOn')}
         </Body>
       </View>
       <View

@@ -16,20 +16,21 @@ import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { useKeyboardOverlap } from '@/lib/keyboard';
 
 export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { byId } = usePlaylists();
+  const t = useT();
 
   const playlist = byId(id);
   if (!playlist) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Body size={14} color={T.t5}>
-          Lista não encontrada.
+          {t('playlist.notFound')}
         </Body>
       </View>
     );
@@ -43,6 +44,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
   const { trackById } = useLibrary();
   const { play, enqueueLast } = usePlayer();
   const { accent } = usePrefs();
+  const t = useT();
   const { rename, remove, removeTrack, pickCover, clearCover } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
@@ -79,7 +81,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
           }}
           hitSlop={8}>
           <Body size={13.5} weight={600} color={editing ? accent : T.t5}>
-            {editing ? 'Pronto' : 'Editar'}
+            {t(editing ? 'playlist.done' : 'playlist.edit')}
           </Body>
         </Pressable>
       </View>
@@ -101,7 +103,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
               }}>
               <Plus size={22} color={T.full} />
               <Body size={12.5} weight={600} color={T.full}>
-                {playlist.cover ? 'Trocar capa' : 'Escolher capa'}
+                {t(playlist.cover ? 'playlist.changeCover' : 'playlist.pickCover')}
               </Body>
             </View>
           )}
@@ -152,7 +154,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
             }}>
             <Play size={14} color={C.onAccent} />
             <Display size={15.5} tracking={-0.015} color={C.onAccent}>
-              Tocar
+              {t('album.play')}
             </Display>
           </Pressable>
           <Pressable
@@ -178,7 +180,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
               onPress={() => clearCover(playlist.id)}
               style={{ paddingVertical: 10 }}>
               <Body size={13} weight={500} color={T.t5}>
-                Remover a capa
+                {t('playlist.removeCover')}
               </Body>
             </Pressable>
           ) : null}
@@ -189,7 +191,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
             }}
             style={{ paddingVertical: 10 }}>
             <Body size={13.5} weight={600} color={accent}>
-              Apagar esta lista
+              {t('menu.deletePlaylist')}
             </Body>
           </Pressable>
         </View>
@@ -208,8 +210,8 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          <EmptyState compact icon={<Play size={26} color={T.full} />} title="Lista vazia">
-            Segure uma faixa em qualquer tela do app para jogá-la aqui.
+          <EmptyState compact icon={<Play size={26} color={T.full} />} title={t('playlist.empty')}>
+            {t('playlist.empty.body')}
           </EmptyState>
         }
         contentContainerStyle={{

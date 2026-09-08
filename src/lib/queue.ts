@@ -6,21 +6,29 @@
  * similaridade calculada, e inventar uma seria pior que ser explícito sobre o critério.
  */
 
+import type { Key } from './i18n';
 import type { Track } from './scan';
 
 export type Continuation = 'off' | 'album' | 'artist' | 'genre';
 
+/**
+ * Os quatro modos, com as chaves dos textos deles.
+ *
+ * Chaves, e não texto: este módulo é lógica de fila e roda em `node --test`, longe de
+ * React e do idioma escolhido. Quem desenha resolve as chaves com `useT` — ver
+ * `lib/i18n.ts`.
+ */
 export const CONTINUATIONS: {
   key: Continuation;
-  /** Rótulo curto, para as abas. */
-  short: string;
-  label: string;
-  blurb: string;
+  /** Chave do rótulo curto, para as abas. */
+  short: Key;
+  label: Key;
+  blurb: Key;
 }[] = [
-  { key: 'off', short: 'Parar', label: 'Parar no fim', blurb: 'a fila termina e o áudio para' },
-  { key: 'album', short: 'Álbum', label: 'Seguir pelo álbum', blurb: 'o resto do álbum' },
-  { key: 'artist', short: 'Artista', label: 'Seguir pelo artista', blurb: 'mais do mesmo artista' },
-  { key: 'genre', short: 'Parecidas', label: 'Parecidas', blurb: 'outros artistas do mesmo gênero' },
+  { key: 'off', short: 'cont.off.short', label: 'cont.off', blurb: 'cont.off.blurb' },
+  { key: 'album', short: 'cont.album.short', label: 'cont.album', blurb: 'cont.album.blurb' },
+  { key: 'artist', short: 'cont.artist.short', label: 'cont.artist', blurb: 'cont.artist.blurb' },
+  { key: 'genre', short: 'cont.genre.short', label: 'cont.genre', blurb: 'cont.genre.blurb' },
 ];
 
 /** Teto do que se anexa de uma vez: continuar não é despejar a biblioteca na fila. */

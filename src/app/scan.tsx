@@ -14,7 +14,7 @@ import { ScanRing } from '@/components/icons';
 import { Body, Display, Mono } from '@/components/text';
 import { C, R, T, alpha } from '@/constants/theme';
 import { useLibrary } from '@/lib/library';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { scan, type ScanProgress } from '@/lib/scan';
 
 const START: ScanProgress = { done: 0, total: 0, file: '', albums: 0, artists: 0, hours: 0 };
@@ -23,6 +23,7 @@ export default function Scan() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { accent, sources, granted } = usePrefs();
+  const t = useT();
   const { replace } = useLibrary();
 
   const [progress, setProgress] = useState<ScanProgress>(START);
@@ -49,10 +50,10 @@ export default function Scan() {
       <Glow accent={accent} />
 
       <Mono size={10} weight={500} tracking={0.2} caps color={accent}>
-        Varredura
+        {t('scan.title')}
       </Mono>
       <Display size={27} tracking={-0.03} align="center" style={{ marginTop: 11 }}>
-        {failed ? 'Não deu certo.' : done ? 'Tudo seu.' : 'Lendo seu armazenamento…'}
+        {t(failed ? 'scan.failed' : done ? 'scan.done' : 'scan.reading')}
       </Display>
 
       <View style={{ width: 236, height: 236, marginTop: 34, alignItems: 'center', justifyContent: 'center' }}>
@@ -87,9 +88,9 @@ export default function Scan() {
       </View>
 
       <View style={{ flexDirection: 'row', gap: 9, width: '100%', marginTop: 14 }}>
-        <Stat value={progress.albums} label="álbuns" />
-        <Stat value={progress.artists} label="artistas" />
-        <Stat value={progress.hours} label="horas" />
+        <Stat value={progress.albums} label={t('scan.albums')} />
+        <Stat value={progress.artists} label={t('scan.artists')} />
+        <Stat value={progress.hours} label={t('scan.hours')} />
       </View>
 
       {failed && (
@@ -104,7 +105,7 @@ export default function Scan() {
             borderColor: alpha(accent, 0.5),
           }}>
           <Body size={13.5} weight={600}>
-            Voltar e escolher as pastas de novo
+            {t('scan.back')}
           </Body>
         </Pressable>
       )}

@@ -15,7 +15,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists } from '@/lib/playlists';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { AlbumArt } from './album-art';
 import { Check, Plus, Queue } from './icons';
 import { Sheet, SheetRow } from './sheet';
@@ -32,12 +32,13 @@ export function PlaylistSheet({
   onClose: () => void;
 }) {
   const { accent } = usePrefs();
+  const t = useT();
   const { playlists, create, addTracks } = usePlaylists();
   const { track, enqueueNext, enqueueLast } = usePlayer();
   const { trackById } = useLibrary();
   const [name, setName] = useState('');
 
-  const picked = trackIds.map(trackById).filter((t) => !!t);
+  const picked = trackIds.map(trackById).filter((item) => !!item);
 
   const put = (id: string) => {
     addTracks(id, trackIds);
@@ -54,14 +55,18 @@ export function PlaylistSheet({
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={trackIds.length === 1 ? 'Adicionar' : `Adicionar ${trackIds.length} faixas`}>
+      title={
+        trackIds.length === 1
+          ? t('sheet.add')
+          : t('sheet.addTracks', { tracks: t('count.tracks', { n: trackIds.length }) })
+      }>
       {/* Fila primeiro: é a ação mais frequente e não exige escolher nada. */}
       {track && picked.length > 0 && (
         <Animated.View
           entering={FadeInDown.duration(240)}
           style={{ flexDirection: 'row', gap: 9, marginTop: 14 }}>
           <QueueAction
-            label="Tocar em seguida"
+            label={t('menu.playNext')}
             accent={accent}
             onPress={() => {
               enqueueNext(picked);
@@ -69,7 +74,7 @@ export function PlaylistSheet({
             }}
           />
           <QueueAction
-            label="No fim da fila"
+            label={t('menu.playLast')}
             accent={accent}
             onPress={() => {
               enqueueLast(picked);
@@ -96,7 +101,7 @@ export function PlaylistSheet({
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="Nome de uma lista nova"
+          placeholder={t('sheet.newPlaylistName')}
           placeholderTextColor={T.t34}
           selectionColor={accent}
           returnKeyType="done"
@@ -111,7 +116,7 @@ export function PlaylistSheet({
         />
         <Pressable onPress={createAndPut} disabled={!name.trim()} hitSlop={8}>
           <Body size={13} weight={600} color={name.trim() ? accent : T.t24}>
-            Criar
+            {t('common.create')}
           </Body>
         </Pressable>
       </Animated.View>

@@ -25,7 +25,8 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
+import type { Translate } from '@/lib/i18n';
 import { useEditSheet, type Editable } from './edit-sheet';
 import { spokenOf, type SpokenMarks } from '@/lib/spoken';
 import { removeFromDevice } from '@/lib/remove';
@@ -87,6 +88,7 @@ export function ContextMenu({
 }) {
   const insets = useSafeAreaInsets();
   const { accent } = usePrefs();
+  const t = useT();
   const [confirming, setConfirming] = useState<MenuAction | null>(null);
 
   const close = () => {
@@ -192,7 +194,7 @@ export function ContextMenu({
                     borderColor: T.t12,
                   }}>
                   <Body size={13.5} weight={600} color={T.t72}>
-                    Cancelar
+                    {t('common.cancel')}
                   </Body>
                 </Pressable>
                 <Pressable
@@ -209,7 +211,7 @@ export function ContextMenu({
                     backgroundColor: accent,
                   }}>
                   <Body size={13.5} weight={600} color={C.onAccent}>
-                    Apagar
+                    {t('common.delete')}
                   </Body>
                 </Pressable>
               </View>
@@ -333,6 +335,7 @@ export function useItemMenu() {
   const { play, enqueueNext, enqueueLast } = usePlayer();
   const { remove: removePlaylist } = usePlaylists();
   const { toggleLike, isLiked, toggleAlbumLike, isAlbumLiked, spoken, setSpoken } = usePrefs();
+  const t = useT();
   const { open: openPlaylists, sheet } = usePlaylistSheet();
   const { open: openEditor, sheet: editor } = useEditSheet();
 
@@ -349,7 +352,7 @@ export function useItemMenu() {
   const coverOf = (menu: MenuItem) =>
     menu.kind === 'track' ? (albumById(menu.track.albumId)?.cover ?? null) : null;
 
-  const header = item ? headerFor(item, tracksOfItem(item).length, coverOf(item)) : null;
+  const header = item ? headerFor(item, tracksOfItem(item).length, coverOf(item), t) : null;
   const actions = item ? actionsFor(item) : [];
 
   function actionsFor(menu: MenuItem): MenuAction[] {
@@ -358,7 +361,7 @@ export function useItemMenu() {
 
     const list: MenuAction[] = [
       {
-        label: tracks.length === 1 ? 'Tocar' : 'Tocar tudo',
+        label: t(tracks.length === 1 ? 'menu.play' : 'menu.playAll'),
         icon: <Play size={16} color={T.t72} />,
         onPress: () => play(tracks, 0),
       },
@@ -366,7 +369,7 @@ export function useItemMenu() {
 
     if (tracks.length > 1) {
       list.push({
-        label: 'Embaralhar',
+        label: t('menu.shuffle'),
         icon: <Shuffle size={17} color={T.t72} />,
         onPress: () => play(shuffled(tracks), 0),
       });
@@ -374,12 +377,12 @@ export function useItemMenu() {
 
     list.push(
       {
-        label: 'Tocar em seguida',
+        label: t('menu.playNext'),
         icon: <Queue size={17} color={T.t72} />,
         onPress: () => enqueueNext(tracks),
       },
       {
-        label: 'No fim da fila',
+        label: t('menu.playLast'),
         icon: <Queue size={17} color={T.t72} />,
         onPress: () => enqueueLast(tracks),
       }
@@ -388,14 +391,14 @@ export function useItemMenu() {
     // Curtir só onde existe uma curtida: faixa e álbum têm; artista e lista não.
     if (menu.kind === 'track') {
       list.push({
-        label: isLiked(menu.track.id) ? 'Descurtir' : 'Curtir',
+        label: t(isLiked(menu.track.id) ? 'menu.unlike' : 'menu.like'),
         icon: <Heart size={16} color={T.t72} filled={isLiked(menu.track.id)} />,
         onPress: () => toggleLike(menu.track.id),
       });
     }
     if (menu.kind === 'album') {
       list.push({
-        label: isAlbumLiked(menu.album.id) ? 'Descurtir' : 'Curtir',
+        label: t(isAlbumLiked(menu.album.id) ? 'menu.unlike' : 'menu.like'),
         icon: <Heart size={16} color={T.t72} filled={isAlbumLiked(menu.album.id)} />,
         onPress: () => toggleAlbumLike(menu.album.id),
       });
@@ -417,7 +420,7 @@ export function useItemMenu() {
             ? { kind: 'album', album: menu.album, tracks }
             : { kind: 'artist', name: menu.name, tracks };
       list.push({
-        label: 'Editar informações',
+        label: t('menu.edit'),
         icon: <Pencil size={16} color={T.t72} />,
         onPress: () => openEditor(target),
       });
@@ -442,20 +445,20 @@ export function useItemMenu() {
         onPress: () => setSpoken(menu.album.id, kind),
       });
       if (now !== 'podcast') {
-        list.push(as('podcast', 'Tratar como podcast', <Mic size={16} color={T.t72} />));
+        list.push(as('podcast', t('menu.asPodcast'), <Mic size={16} color={T.t72} />));
       }
       if (now !== 'audiobook') {
-        list.push(as('audiobook', 'Tratar como audiolivro', <Book size={16} color={T.t72} />));
+        list.push(as('audiobook', t('menu.asAudiobook'), <Book size={16} color={T.t72} />));
       }
       if (now !== null) {
-        list.push(as('music', 'Tratar como música', <Disc color={T.t72} />));
+        list.push(as('music', t('menu.asMusic'), <Disc color={T.t72} />));
       }
     }
 
     // Jogar uma lista dentro de outra lista não é o gesto de ninguém.
     if (menu.kind !== 'playlist' && ids.length) {
       list.push({
-        label: 'Adicionar a uma lista',
+        label: t('menu.addToPlaylist'),
         icon: <Plus size={17} color={T.t72} />,
         onPress: () => openPlaylists(ids),
       });
@@ -467,44 +470,43 @@ export function useItemMenu() {
       linha própria.
     */
     list.push({
-      label: 'Compartilhar',
+      label: t('menu.share'),
       icon: <ShareIcon size={16} color={T.t72} />,
-      onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu)), 'sheet'),
+      onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu), t), 'sheet'),
     });
     if (canShareToStories) {
       list.push({
-        label: 'Stories',
+        label: t('menu.stories'),
         icon: <Instagram size={16} color={T.t72} />,
-        onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu)), 'stories'),
+        onPress: () => share(shareableFor(menu, tracks.length, coverOf(menu), t), 'stories'),
       });
     }
 
     if (menu.kind === 'playlist') {
       list.push({
-        label: 'Apagar esta lista',
+        label: t('menu.deletePlaylist'),
         icon: <Trash size={16} color={T.full} />,
         destructive: true,
-        confirm: `Apagar “${menu.playlist.name}”?`,
+        confirm: t('menu.deletePlaylist.confirm', { name: menu.playlist.name }),
         // A lista é só um registro nosso: os arquivos dela continuam no aparelho.
-        warning: 'A lista sai do app. As faixas continuam no aparelho.',
+        warning: t('menu.deletePlaylist.warning'),
         onPress: () => removePlaylist(menu.playlist.id),
       });
     } else if (tracks.length) {
       list.push({
         label:
           tracks.length === 1
-            ? 'Remover do dispositivo'
-            : `Remover ${tracks.length} arquivos do dispositivo`,
+            ? t('menu.removeFile')
+            : t('menu.removeFiles', { n: tracks.length }),
         icon: <Trash size={16} color={T.full} />,
         destructive: true,
         confirm:
           tracks.length === 1
-            ? `Apagar “${tracks[0].title}” do aparelho?`
-            : `Apagar ${tracks.length} arquivos do aparelho?`,
-        warning:
-          tracks.length === 1
-            ? 'Isto apaga o arquivo do aparelho e não tem volta.'
-            : 'Isto apaga os arquivos do aparelho e não tem volta.',
+            ? t('menu.removeFile.confirm', { title: tracks[0].title })
+            : t('menu.removeFiles.confirm', { n: tracks.length }),
+        warning: t(
+          tracks.length === 1 ? 'menu.removeFile.warning' : 'menu.removeFiles.warning'
+        ),
         onPress: () => {
           void removeFromDevice(tracks).then(({ removed }) => {
             if (removed.length) removeTracks(removed);
@@ -534,7 +536,18 @@ export function useItemMenu() {
   };
 }
 
-function headerFor(item: MenuItem, count: number, trackCover: string | null): Header {
+/**
+ * O cabeçalho do menu.
+ *
+ * Recebe o `t` em vez de chamar `useT`: é função pura, chamada de dentro do render de
+ * `useItemMenu`, e hook não roda fora de componente.
+ */
+function headerFor(
+  item: MenuItem,
+  count: number,
+  trackCover: string | null,
+  t: Translate
+): Header {
   if (item.kind === 'track') {
     return {
       title: item.track.title,
@@ -548,7 +561,7 @@ function headerFor(item: MenuItem, count: number, trackCover: string | null): He
     return {
       title: item.album.title,
       subtitle: item.album.artist,
-      detail: `${count} ${count === 1 ? 'faixa' : 'faixas'}`,
+      detail: t('count.tracks', { n: count }),
       art: artworkFor(item.album.artist, item.album.title),
       cover: item.album.cover,
     };
@@ -556,8 +569,8 @@ function headerFor(item: MenuItem, count: number, trackCover: string | null): He
   if (item.kind === 'artist') {
     return {
       title: item.name,
-      subtitle: `${item.albums.length} ${item.albums.length === 1 ? 'álbum' : 'álbuns'}`,
-      detail: `${count} ${count === 1 ? 'faixa' : 'faixas'}`,
+      subtitle: t('count.albums', { n: item.albums.length }),
+      detail: t('count.tracks', { n: count }),
       art: artworkFor(item.name, item.albums[0]?.title ?? ''),
       cover: item.albums.find((a) => a.cover)?.cover ?? null,
       round: true,
@@ -565,14 +578,19 @@ function headerFor(item: MenuItem, count: number, trackCover: string | null): He
   }
   return {
     title: item.playlist.name,
-    subtitle: `${count} ${count === 1 ? 'faixa' : 'faixas'}`,
+    subtitle: t('count.tracks', { n: count }),
     art: artworkFor(item.playlist.name, 'lista'),
     cover: item.playlist.cover ?? null,
   };
 }
 
-function shareableFor(item: MenuItem, count: number, trackCover: string | null): Shareable {
-  const header = headerFor(item, count, trackCover);
+function shareableFor(
+  item: MenuItem,
+  count: number,
+  trackCover: string | null,
+  t: Translate
+): Shareable {
+  const header = headerFor(item, count, trackCover, t);
   return {
     title: header.title,
     subtitle: header.subtitle,

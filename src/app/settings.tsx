@@ -23,7 +23,9 @@ import { ACCENTS, C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/the
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { hsl, toHsl } from '@/lib/color';
 import { useLibrary } from '@/lib/library';
-import { usePrefs, type Treatment } from '@/lib/prefs';
+import { usePrefs, useLang, useT, type Treatment } from '@/lib/prefs';
+import { LANGS, localeOf, type Key } from '@/lib/i18n';
+import { Chip, ChipRow } from '@/components/chip';
 
 /**
  * A luminosidade de todo acento, presa.
@@ -51,21 +53,20 @@ const HUE_STRIP = `linear-gradient(90deg, ${[0, 60, 120, 180, 240, 300, 360]
 const STRIP = 30;
 const KNOB = 26;
 
-const TREATMENTS: { key: Treatment; title: string; blurb: string }[] = [
-  { key: 'ember', title: 'Brasa', blurb: 'Capa grande, com o brilho pulsando atrás dela.' },
-  { key: 'vinyl', title: 'Vinil', blurb: 'A capa vira um disco, e ele gira enquanto toca.' },
-  {
-    key: 'wave',
-    title: 'Onda',
-    blurb: 'A forma de onda da faixa inteira. Toque ou arraste nela para buscar.',
-  },
-];
+/** Os três modos. Título e explicação são chaves de tradução. */
+const TREATMENTS = [
+  { key: 'ember', title: 'treatment.ember', blurb: 'treatment.ember.blurb' },
+  { key: 'vinyl', title: 'treatment.vinyl', blurb: 'treatment.vinyl.blurb' },
+  { key: 'wave', title: 'treatment.wave', blurb: 'treatment.wave.blurb' },
+] as const satisfies { key: Treatment; title: Key; blurb: Key }[];
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { accent, treatment, setAccent, setTreatment } = usePrefs();
+  const { accent, treatment, setAccent, setTreatment, language, setLanguage } = usePrefs();
   const { library, reset } = useLibrary();
+  const t = useT();
+  const lang = useLang();
 
   const current = TREATMENTS.find((t) => t.key === treatment) ?? TREATMENTS[0];
 
@@ -78,7 +79,7 @@ export default function Settings() {
         paddingBottom: CHROME_HEIGHT + insets.bottom,
       }}>
       <Display size={33} tracking={-0.035}>
-        Ajustes
+        {t('settings.title')}
       </Display>
 
       {/*
@@ -89,30 +90,55 @@ export default function Settings() {
         e ocupava metade da tela. Aqui cada tile desenha o próprio modo, e a explicação do
         escolhido fica numa linha abaixo da fileira.
       */}
-      <SectionLabel title="Now Playing" />
+      <SectionLabel title={t('settings.nowPlaying')} />
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        {TREATMENTS.map((t) => (
+        {TREATMENTS.map((mode) => (
           <Mode
-            key={t.key}
-            kind={t.key}
-            title={t.title}
-            on={t.key === treatment}
+            key={mode.key}
+            kind={mode.key}
+            title={t(mode.title)}
+            on={mode.key === treatment}
             accent={accent}
-            onPress={() => setTreatment(t.key)}
+            onPress={() => setTreatment(mode.key)}
           />
         ))}
       </View>
       {/* A `key` faz a linha reentrar quando o modo muda: sem ela o texto troca seco. */}
       <Animated.View key={current.key} entering={FadeIn.duration(200)}>
         <Body size={12.5} color={T.t5} style={{ marginTop: 12, lineHeight: 18 }}>
-          {current.blurb}
+          {t(current.blurb)}
         </Body>
       </Animated.View>
 
-      <SectionLabel title="Cor de acento" />
+      <SectionLabel title={t('settings.accent')} />
       <AccentPicker accent={accent} onPick={setAccent} />
 
-      <SectionLabel title="Biblioteca" />
+      {/*
+        O idioma, entre a cor e a biblioteca: as duas primeiras seções são aparência, e
+        idioma é a terceira coisa que se procura aqui. "Automático" segue o aparelho.
+      */}
+      <SectionLabel title={t('settings.language')} />
+      <ChipRow>
+        <Chip
+          label={t('settings.languageAuto')}
+          on={language === 'auto'}
+          accent={accent}
+          onPress={() => setLanguage('auto')}
+        />
+        {LANGS.map((item) => (
+          <Chip
+            key={item.key}
+            // O nome de cada idioma no próprio idioma: ninguém procura "Japonês" numa
+            // tela que já está em japonês.
+            label={item.label}
+            on={language === item.key}
+            accent={accent}
+            onPress={() => setLanguage(item.key)}
+          />
+        ))}
+      </ChipRow>
+
+      <SectionLabel title={t('settings.library')} />
       <Pressable
         onPress={() => router.push('/onboarding')}
         style={{
@@ -123,14 +149,16 @@ export default function Settings() {
           borderColor: T.t07,
         }}>
         <Body size={14.5} weight={600}>
-          Varrer de novo
+          {t('settings.rescan')}
         </Body>
         <Body size={12} color={T.t5} style={{ marginTop: 3 }}>
           {library
-            ? `${library.tracks.length} faixas · última varredura em ${new Date(
-                library.scannedAt
-              ).toLocaleDateString('pt-BR')}`
-            : 'Nenhuma varredura ainda'}
+            ? t('settings.scanned', {
+                tracks: library.tracks.length,
+                // A data no formato de quem lê: o idioma escolhido manda no locale.
+                date: new Date(library.scannedAt).toLocaleDateString(localeOf(lang)),
+              })
+            : t('settings.neverScanned')}
         </Body>
       </Pressable>
 
@@ -145,7 +173,7 @@ export default function Settings() {
       <View style={{ alignItems: 'center', marginTop: 40, gap: 8 }}>
         <Wordmark size={17} />
         <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t24}>
-          Versão {Constants.expoConfig?.version ?? '—'}
+          {t('settings.version', { version: Constants.expoConfig?.version ?? '—' })}
         </Mono>
       </View>
     </ScrollView>
@@ -161,6 +189,7 @@ export default function Settings() {
  * escolheu a sua e voltou aos Ajustes.
  */
 function AccentPicker({ accent, onPick }: { accent: string; onPick: (hex: string) => void }) {
+  const t = useT();
   const preset = (ACCENTS as readonly string[]).includes(accent);
   const [open, setOpen] = useState(!preset);
   /*
@@ -215,7 +244,7 @@ function AccentPicker({ accent, onPick }: { accent: string; onPick: (hex: string
           layout={LinearTransition.duration(240)}
           style={{ marginTop: 16, gap: 14 }}>
           <Strip
-            label="Matiz"
+            label={t('settings.hue')}
             value={h / 360}
             gradient={HUE_STRIP}
             knob={shown}
@@ -223,7 +252,7 @@ function AccentPicker({ accent, onPick }: { accent: string; onPick: (hex: string
             onDone={(f) => onPick(hsl(f * 360, s, ACCENT_L))}
           />
           <Strip
-            label="Saturação"
+            label={t('settings.saturation')}
             value={(s - S_MIN) / (S_MAX - S_MIN)}
             gradient={`linear-gradient(90deg, ${hsl(h, S_MIN, ACCENT_L)} 0%, ${hsl(
               h,
@@ -474,6 +503,7 @@ function Mode({
  * a decisão fica onde o dedo já está.
  */
 function Wipe({ onConfirm }: { onConfirm: () => void }) {
+  const t = useT();
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -494,7 +524,7 @@ function Wipe({ onConfirm }: { onConfirm: () => void }) {
         }}>
         <Trash size={16} color={C.danger} />
         <Body size={13.5} weight={600} color={C.danger}>
-          Apagar a biblioteca
+          {t('settings.wipe')}
         </Body>
       </Pressable>
     );
@@ -512,11 +542,10 @@ function Wipe({ onConfirm }: { onConfirm: () => void }) {
         borderColor: alpha(C.danger, 0.4),
       }}>
       <Body size={14} weight={600} align="center">
-        Apagar a biblioteca?
+        {t('settings.wipe.confirm')}
       </Body>
       <Body size={12} color={T.t5} align="center" style={{ marginTop: 6, lineHeight: 17 }}>
-        As listas e as curtidas vão junto. Nenhum arquivo de música é apagado do aparelho —
-        você pode varrer de novo depois.
+        {t('settings.wipe.warning')}
       </Body>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
         <Pressable
@@ -531,7 +560,7 @@ function Wipe({ onConfirm }: { onConfirm: () => void }) {
             borderColor: T.t12,
           }}>
           <Body size={13.5} weight={600} color={T.t72}>
-            Cancelar
+            {t('common.cancel')}
           </Body>
         </Pressable>
         <Pressable
@@ -545,7 +574,7 @@ function Wipe({ onConfirm }: { onConfirm: () => void }) {
             backgroundColor: C.danger,
           }}>
           <Body size={13.5} weight={600} color={T.full}>
-            Apagar
+            {t('common.delete')}
           </Body>
         </Pressable>
       </View>

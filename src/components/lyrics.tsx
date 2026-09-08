@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { F, T } from '@/constants/theme';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { lineAt, wordAt, type LyricWord, type Lyrics } from '@/lib/lrc';
 import { EmptyState } from './empty-state';
 import { Lyrics as LyricsIcon } from './icons';
@@ -261,14 +261,14 @@ function Word({ word, sung, accent }: { word: LyricWord; sung: boolean; accent: 
 
 /** Estado vazio, na mesma linguagem do resto do app. */
 export function NoLyrics({ onPick }: { onPick?: () => void }) {
+  const t = useT();
   return (
     <EmptyState
       icon={<LyricsIcon size={30} color={T.full} />}
-      title="Sem letra"
-      action={onPick ? 'Escolher um .lrc' : undefined}
+      title={t('lyrics.none')}
+      action={onPick ? t('lyrics.pick') : undefined}
       onAction={onPick}>
-      O Resonate procura a letra dentro do arquivo e num .lrc ao lado dele. Esta faixa não tem
-      nenhum dos dois.
+      {t('lyrics.none.body')}
     </EmptyState>
   );
 }

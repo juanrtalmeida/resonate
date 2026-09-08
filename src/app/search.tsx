@@ -24,7 +24,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
@@ -37,6 +37,7 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { library, artists } = useLibrary();
   const { accent } = usePrefs();
+  const t = useT();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
@@ -108,7 +109,7 @@ export default function SearchScreen() {
       <View style={{ paddingHorizontal: PADDING }}>
         <Animated.View style={titleStyle}>
           <Display size={33} tracking={-0.035}>
-            Busca
+            {t('search.title')}
           </Display>
         </Animated.View>
 
@@ -151,7 +152,7 @@ export default function SearchScreen() {
             onChangeText={setQuery}
             autoFocus
             autoCorrect={false}
-            placeholder="Faixa, álbum ou artista"
+            placeholder={t('search.placeholder')}
             placeholderTextColor={T.t34}
             selectionColor={accent}
             returnKeyType="search"
@@ -167,7 +168,7 @@ export default function SearchScreen() {
             <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
               <Pressable onPress={() => setQuery('')} hitSlop={10}>
                 <Body size={12.5} color={T.t5}>
-                  limpar
+                  {t('search.clear')}
                 </Body>
               </Pressable>
             </Animated.View>
@@ -187,20 +188,20 @@ export default function SearchScreen() {
           paddingHorizontal: PADDING,
         }}>
         {!typed && (
-          <EmptyState icon={<SearchIcon size={30} color={T.full} />} title="O que você procura?">
-            Busque por uma faixa, um álbum ou um artista da sua biblioteca.
+          <EmptyState icon={<SearchIcon size={30} color={T.full} />} title={t('search.prompt')}>
+            {t('search.prompt.body')}
           </EmptyState>
         )}
 
         {typed && isEmpty(results) && (
-          <EmptyState icon={<SearchIcon size={30} color={T.full} />} title="Nada encontrado">
-            {`Nenhum resultado para “${query.trim()}”.`}
+          <EmptyState icon={<SearchIcon size={30} color={T.full} />} title={t('search.none')}>
+            {t('search.none.body', { query: query.trim() })}
           </EmptyState>
         )}
 
         {results.albums.length > 0 && (
           <View>
-            <SectionLabel title="Álbuns" />
+            <SectionLabel title={t('tab.albums')} />
             {results.albums.map((album, index) => (
               <Animated.View key={album.id} entering={found(index)}>
                 <AlbumResult
@@ -214,7 +215,7 @@ export default function SearchScreen() {
 
         {results.artists.length > 0 && (
           <View>
-            <SectionLabel title="Artistas" />
+            <SectionLabel title={t('tab.artists')} />
             {results.artists.map((artist, index) => (
               <Animated.View key={artist} entering={found(index)}>
                 <ArtistResult
@@ -238,7 +239,7 @@ export default function SearchScreen() {
 
         {results.tracks.length > 0 && (
           <View>
-            <SectionLabel title="Faixas" />
+            <SectionLabel title={t('tab.tracks')} />
             {results.tracks.map((track, index) => (
               <Animated.View key={track.id} entering={found(index)}>
                 <TrackRow

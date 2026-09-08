@@ -22,7 +22,8 @@ import { Pressable, TextInput, View } from 'react-native';
 
 import { C, R, T, alpha } from '@/constants/theme';
 import type { TrackEdit } from '@/lib/edits';
-import { usePrefs } from '@/lib/prefs';
+import type { Key, Translate } from '@/lib/i18n';
+import { usePrefs, useT } from '@/lib/prefs';
 import type { Album, Track } from '@/lib/scan';
 import { Body, Mono } from './text';
 import { Sheet } from './sheet';
@@ -36,7 +37,7 @@ export type Editable =
 /** Um campo do formulário: a chave que ele grava e o rótulo que ele mostra. */
 type Field = {
   key: 'title' | 'artist' | 'album' | 'trackNumber' | 'genre';
-  label: string;
+  label: Key;
   value: string;
   /** Número de faixa é o único campo numérico. */
   numeric?: boolean;
@@ -44,34 +45,38 @@ type Field = {
 
 function fieldsFor(item: Editable): Field[] {
   if (item.kind === 'artist') {
-    return [{ key: 'artist', label: 'Nome do artista', value: item.name }];
+    return [{ key: 'artist', label: 'edit.field.artistName', value: item.name }];
   }
   if (item.kind === 'album') {
     const first = item.tracks[0];
     return [
-      { key: 'album', label: 'Álbum', value: item.album.title },
-      { key: 'artist', label: 'Artista', value: item.album.artist },
-      { key: 'genre', label: 'Gênero', value: first?.genre ?? '' },
+      { key: 'album', label: 'edit.field.album', value: item.album.title },
+      { key: 'artist', label: 'edit.field.artist', value: item.album.artist },
+      { key: 'genre', label: 'edit.field.genre', value: first?.genre ?? '' },
     ];
   }
-  const t = item.track;
+  const track = item.track;
   return [
-    { key: 'title', label: 'Título', value: t.title },
-    { key: 'artist', label: 'Artista', value: t.artist },
-    { key: 'album', label: 'Álbum', value: t.album },
-    { key: 'trackNumber', label: 'Número', value: t.trackNumber?.toString() ?? '', numeric: true },
-    { key: 'genre', label: 'Gênero', value: t.genre ?? '' },
+    { key: 'title', label: 'edit.field.title', value: track.title },
+    { key: 'artist', label: 'edit.field.artist', value: track.artist },
+    { key: 'album', label: 'edit.field.album', value: track.album },
+    {
+      key: 'trackNumber',
+      label: 'edit.field.number',
+      value: track.trackNumber?.toString() ?? '',
+      numeric: true,
+    },
+    { key: 'genre', label: 'edit.field.genre', value: track.genre ?? '' },
   ];
 }
 
-const titleFor = (item: Editable) =>
-  item.kind === 'track' ? 'Editar faixa' : item.kind === 'album' ? 'Editar álbum' : 'Editar artista';
+const titleFor = (item: Editable): Key =>
+  item.kind === 'track' ? 'edit.track' : item.kind === 'album' ? 'edit.album' : 'edit.artist';
 
 /** Quantas faixas a correção alcança. Dito na folha: editar álbum mexe em todas elas. */
-function reachOf(item: Editable): string | null {
+function reachOf(item: Editable, t: Translate): string | null {
   if (item.kind === 'track') return null;
-  const n = item.tracks.length;
-  return `A correção vale para ${n} ${n === 1 ? 'faixa' : 'faixas'}`;
+  return t('edit.reach', { tracks: t('count.tracks', { n: item.tracks.length }) });
 }
 
 export function useEditSheet() {
@@ -92,6 +97,7 @@ export function useEditSheet() {
  */
 function EditSheet({ item, onClose }: { item: Editable; onClose: () => void }) {
   const { accent, editTracks, renameArtist, clearEdits } = usePrefs();
+  const t = useT();
   const fields = fieldsFor(item);
   const [draft, setDraft] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f.key, f.value]))
@@ -131,10 +137,10 @@ function EditSheet({ item, onClose }: { item: Editable; onClose: () => void }) {
     onClose();
   };
 
-  const reach = reachOf(item);
+  const reach = reachOf(item, t);
 
   return (
-    <Sheet visible onClose={onClose} title={titleFor(item)}>
+    <Sheet visible onClose={onClose} title={t(titleFor(item))}>
       {reach && (
         <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4} style={{ marginTop: 2 }}>
           {reach}
@@ -144,7 +150,7 @@ function EditSheet({ item, onClose }: { item: Editable; onClose: () => void }) {
       {fields.map((field, index) => (
         <View key={field.key} style={{ marginTop: index === 0 ? 14 : 12 }}>
           <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
-            {field.label}
+            {t(field.label)}
           </Mono>
           <TextInput
             value={draft[field.key] ?? ''}
@@ -183,14 +189,14 @@ function EditSheet({ item, onClose }: { item: Editable; onClose: () => void }) {
             hitSlop={8}
             style={{ paddingVertical: 8 }}>
             <Body size={13} weight={600} color={T.t42}>
-              Usar a tag
+              {t('edit.useTag')}
             </Body>
           </Pressable>
         )}
         <View style={{ flex: 1 }} />
         <Pressable onPress={onClose} hitSlop={8} style={{ paddingVertical: 8 }}>
           <Body size={13.5} weight={600} color={T.t5}>
-            Cancelar
+            {t('common.cancel')}
           </Body>
         </Pressable>
         <Pressable
@@ -203,7 +209,7 @@ function EditSheet({ item, onClose }: { item: Editable; onClose: () => void }) {
             backgroundColor: dirty ? accent : T.t06,
           }}>
           <Body size={13.5} weight={600} color={dirty ? C.onAccent : T.t24}>
-            Salvar
+            {t('common.save')}
           </Body>
         </Pressable>
       </View>

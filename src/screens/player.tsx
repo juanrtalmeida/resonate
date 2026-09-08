@@ -50,7 +50,7 @@ import { chromeReveal } from '@/lib/chrome-scroll';
 import { useDetail } from '@/lib/detail';
 import { canShareToStories } from '@/lib/share';
 import { useElapsed, usePlayer } from '@/lib/player';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
 import { TILT_INTERVAL, TILT_REST, tiltAngles, tiltStep } from '@/lib/tilt';
 import { LyricsView, NoLyrics } from '@/components/lyrics';
@@ -94,6 +94,7 @@ export function PlayerScreen() {
   const { track, playing, duration, toggle, next, previous, seekTo, canNext, canPrevious, elapsed } =
     usePlayer();
   const { accent, treatment, isLiked, toggleLike } = usePrefs();
+  const t = useT();
   const { albumById } = useLibrary();
   /**
    * 0 = capa, 1 = letra. Shared value, e não estado: a troca anima na thread de UI sem
@@ -183,7 +184,7 @@ export function PlayerScreen() {
       <ZoomScreen background={C.surface} onClosed={closePlayer}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Body size={14} color={T.t5}>
-            Nada tocando.
+            {t('player.nothing')}
           </Body>
         </View>
       </ZoomScreen>
@@ -281,7 +282,7 @@ export function PlayerScreen() {
               paddingHorizontal: 72,
             }}>
             <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
-              Tocando de
+              {t('player.playingFrom')}
             </Mono>
             <Body size={12.5} weight={600} numberOfLines={1} style={{ marginTop: 4 }}>
               {track.album}
@@ -330,7 +331,7 @@ export function PlayerScreen() {
                 </ZoomTarget>
                 <ZoomFade style={{ marginTop: 26 }}>
                   <Mono size={9.5} weight={500} tracking={0.18} caps color={T.t34}>
-                    {playing ? 'lado a · 33⅓ rpm' : 'agulha erguida'}
+                    {t(playing ? 'player.sideA' : 'player.needleUp')}
                   </Mono>
                 </ZoomFade>
               </Animated.View>
@@ -364,7 +365,7 @@ export function PlayerScreen() {
                 </View>
                 <ZoomFade style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 30 }}>
                   <Mono size={10} weight={500} tracking={0.16} caps color={T.t62}>
-                    Faixa inteira
+                    {t('player.wholeTrack')}
                   </Mono>
                   <View
                     style={{
@@ -515,7 +516,7 @@ export function PlayerScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: accent }} />
               <Mono size={10} weight={500} tracking={0.14} caps color={T.t62}>
-                {playing ? track.file.split('.').pop() : 'pausado'}
+                {playing ? track.file.split('.').pop() : t('player.paused')}
               </Mono>
             </View>
             <Remaining duration={duration} />
@@ -740,6 +741,7 @@ function QueuePanel() {
   const { track, queue, index, play, removeAt, reorder, toggleShuffle } = usePlayer();
   const { library } = useLibrary();
   const { accent, shuffle, repeat, setRepeat, continuation, setContinuation } = usePrefs();
+  const t = useT();
 
   const upcoming = queue.slice(index + 1);
 
@@ -820,7 +822,7 @@ function QueuePanel() {
                 backgroundColor: on ? alpha(accent, 0.18) : 'transparent',
               }}>
               <Body size={11.5} weight={600} color={on ? T.full : T.t42}>
-                {option.short}
+                {t(option.short)}
               </Body>
             </Pressable>
           );
@@ -844,7 +846,7 @@ function QueuePanel() {
 
         {upcoming.length === 0 && (
           <Body size={12.5} color={T.t42} style={{ paddingVertical: 12 }}>
-            Nada na fila depois desta faixa.
+            {t('player.queueEmpty')}
           </Body>
         )}
 
@@ -855,7 +857,7 @@ function QueuePanel() {
         */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
           <Mono size={9.5} weight={500} tracking={0.16} caps color={T.t4}>
-            Depois · {current?.blurb}
+            {t('player.after')} · {current ? t(current.blurb) : ''}
           </Mono>
           <View
             style={{
@@ -886,9 +888,7 @@ function QueuePanel() {
         ))}
         {preview.length === 0 && (
           <Body size={12.5} color={T.t42} style={{ paddingVertical: 10 }}>
-            {continuation === 'off'
-              ? 'A fila termina aqui e o áudio para.'
-              : 'Nada na biblioteca se encaixa nesta escolha.'}
+            {t(continuation === 'off' ? 'player.queueEnds' : 'player.noMatch')}
           </Body>
         )}
       </ScrollView>

@@ -35,7 +35,7 @@ import { chromeScrollTo } from '@/lib/chrome-scroll';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
-import { usePrefs } from '@/lib/prefs';
+import { usePrefs, useT } from '@/lib/prefs';
 import {
   ZoomFade,
   ZoomScreen,
@@ -83,6 +83,7 @@ export function ArtistScreen({ name }: { name: string }) {
   const insets = useSafeAreaInsets();
   const { library, artists } = useLibrary();
   const { playsOf } = usePrefs();
+  const t = useT();
 
   const albums = useMemo(
     () => artists.find((a) => a.name === name)?.albums ?? [],
@@ -102,8 +103,8 @@ export function ArtistScreen({ name }: { name: string }) {
   if (!tracks.length) {
     return (
       <View style={{ flex: 1, paddingTop: insets.top + 40 }}>
-        <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Artista não encontrado">
-          Nada na biblioteca com esse nome.
+        <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title={t('artist.notFound')}>
+          {t('artist.notFound.body')}
         </EmptyState>
       </View>
     );
@@ -125,6 +126,7 @@ function Artist({
 }) {
   const insets = useSafeAreaInsets();
   const { accent } = usePrefs();
+  const t = useT();
   const { close } = useDetail();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
@@ -214,8 +216,11 @@ function Artist({
             {name}
           </Display>
           <Mono size={10.5} tracking={0.14} caps color={T.t72} style={{ marginTop: 8 }}>
-            {albums.length} {albums.length === 1 ? 'álbum' : 'álbuns'} · {tracks.length} faixas ·{' '}
-            {hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`}
+            {t('artist.summary', {
+              albums: t('count.albums', { n: albums.length }),
+              tracks: tracks.length,
+              time: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+            })}
           </Mono>
         </View>
 
@@ -233,7 +238,7 @@ function Artist({
       <View style={{ paddingHorizontal: PADDING, backgroundColor: C.bg }}>
         {top.length > 0 && (
           <Animated.View entering={FadeInDown.duration(320)} layout={SHIFT}>
-            <SectionLabel title="Mais tocadas" />
+            <SectionLabel title={t('artist.top')} />
             {ready ? (
               top.map((track, index) => (
                 /* Cada linha anima por conta própria: a seção reordena por contagem de
@@ -259,7 +264,7 @@ function Artist({
 
         {albums.length > 0 && (
           <Animated.View layout={SHIFT}>
-            <SectionLabel title="Álbuns" trailing={`${albums.length}`} />
+            <SectionLabel title={t('tab.albums')} trailing={`${albums.length}`} />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -277,7 +282,7 @@ function Artist({
         )}
 
         <Animated.View layout={SHIFT}>
-          <SectionLabel title="Todas as faixas" trailing={`${tracks.length}`} />
+          <SectionLabel title={t('artist.allTracks')} trailing={`${tracks.length}`} />
         </Animated.View>
       </View>
 
@@ -509,6 +514,7 @@ function AlbumCard({
   onHold: () => void;
 }) {
   const { openAlbum } = useDetail();
+  const t = useT();
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
 
   return (
@@ -530,7 +536,7 @@ function AlbumCard({
         {album.title}
       </Body>
       <Body size={11} color={T.t42} numberOfLines={1}>
-        {album.trackIds.length} faixas
+        {t('count.tracks', { n: album.trackIds.length })}
       </Body>
     </Pressable>
   );
