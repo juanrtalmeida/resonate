@@ -23,6 +23,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -176,7 +177,16 @@ export function ZoomScreen({
   const progress = useSharedValue(0);
   const stale = useSharedValue(0);
 
-  useEffect(() => {
+  /*
+    `useLayoutEffect`, e não `useEffect`.
+
+    Efeito passivo é agendado depois do commit e chegava 31 ms mais tarde — medido com
+    timestamps na cadeia inteira. O layout effect corre no próprio commit, e o relógio da
+    animação parte antes. Seguro aqui porque `withTiming` num shared value não depende de
+    medida: o `ZoomTarget` mede o destino por conta dele, na thread de UI, e até ter a
+    medida não aplica transformação nenhuma.
+  */
+  useLayoutEffect(() => {
     progress.value = withTiming(1, OPEN);
   }, [progress]);
 

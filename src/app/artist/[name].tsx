@@ -363,7 +363,7 @@ function Artist({
       Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
       do root se cala nestas rotas — ver `overModal` em chrome.tsx.
     */}
-    <Chrome overModal />
+    {ready && <Chrome overModal />}
     </>
   );
 }

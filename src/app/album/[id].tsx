@@ -53,13 +53,24 @@ function AlbumDetail({ album }: { album: Album }) {
   const tracks = tracksOf(album);
 
   /*
-    A lista de faixas entra no quadro seguinte, não no primeiro.
+    O que é caro entra no quadro seguinte, não no primeiro: a lista de faixas, o fundo
+    borrado e a barra inferior.
 
-    Montar dezenas de TrackRow — cada uma com um GestureDetector nativo e shared values
-    próprios — no mesmo commit que abre a tela atrasava a transição de zoom: medido, 14
-    quadros (~470 ms) entre o toque no card e o primeiro pixel mudar. Com o primeiro
-    commit barato, o `withTiming` do zoom começa logo, e ele corre na thread de UI —
-    imune ao que o JavaScript faça depois. As linhas chegam com a tela já em movimento.
+    Tudo isso no mesmo commit que abre a tela atrasava o início do zoom. Instrumentei a
+    cadeia com timestamps e o toque custava 154 ms até o `withTiming` começar; o commit
+    sozinho respondia por 118 deles. Diferindo os três, 79 ms — e cada peça foi medida:
+
+        lista de faixas   ~330 ms  (era o grosso: dezenas de TrackRow, cada uma com um
+                                    GestureDetector nativo e shared values próprios)
+        <Chrome overModal>  32 ms  (monta um mini player inteiro)
+        Backdrop             9 ms  (o `blurRadius` da capa)
+
+    Com o primeiro commit barato o zoom começa logo, e ele corre na thread de UI — imune
+    ao que o JavaScript faça depois. As três peças chegam com a tela já em movimento, no
+    meio do fade, onde não se vê.
+
+    O que *não* era o problema, medido para não ficar no palpite: `measureInWindow` custa
+    4 ms, e trocar `transparentModal` por tela normal não muda nada.
 
     `useDeferredValue` com valor inicial, e não um `setState` em efeito: o primeiro render
     recebe `false`, e o React agenda o segundo em prioridade baixa — podendo ceder a quem
@@ -134,7 +145,7 @@ function AlbumDetail({ album }: { album: Album }) {
   return (
     <>
     <ZoomScreen background={C.bg} edgeBack>
-      <Backdrop cover={album.cover} color={art.a} />
+      {ready && <Backdrop cover={album.cover} color={art.a} />}
       <FlatList
         {...chromeScroll}
         data={ready ? tracks : NO_TRACKS}
@@ -174,7 +185,7 @@ function AlbumDetail({ album }: { album: Album }) {
       Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
       do root se cala nestas rotas — ver `overModal` em chrome.tsx.
     */}
-    <Chrome overModal />
+    {ready && <Chrome overModal />}
     </>
   );
 }
