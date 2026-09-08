@@ -40,8 +40,21 @@ export const T = {
   t06: 'rgba(246,241,234,.06)',
 } as const;
 
+/** Os quatro acentos do design. Atalhos: a cor de acento em si é livre — ver `Accent`. */
 export const ACCENTS = ['#F2653A', '#E8B44A', '#5FBFA8', '#8A6BD1'] as const;
-export type Accent = (typeof ACCENTS)[number];
+
+/**
+ * A cor de acento, em `#RRGGBB`.
+ *
+ * Era a união dos quatro de `ACCENTS`. Virou hex livre quando os Ajustes ganharam o
+ * seletor de matiz e saturação — os quatro seguem sendo o caminho normal, e o tipo só
+ * deixou de mentir que são os únicos possíveis.
+ *
+ * A luminosidade fica presa na faixa dos quatro (ver `ACCENT_L` em `app/settings.tsx`):
+ * `C.onAccent` é a tinta escura que escreve *em cima* do acento, e um acento escuro
+ * apagaria o texto do botão de tocar.
+ */
+export type Accent = string;
 
 export const R = { r9: 9, r13: 13, r15: 15, r17: 17, r21: 21, r26: 26 } as const;
 

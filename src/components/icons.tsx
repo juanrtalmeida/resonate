@@ -332,6 +332,41 @@ export function Lyrics({ size = 16, color = '#F6F1EA' }: IconProps) {
   );
 }
 
+/** Microfone: o que é podcast. */
+export function Mic({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M9 1.9a2.5 2.5 0 0 1 2.5 2.5v3.4a2.5 2.5 0 0 1-5 0V4.4A2.5 2.5 0 0 1 9 1.9Z"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4.4 8.1v.4a4.6 4.6 0 0 0 9.2 0v-.4M9 13.6v2.5"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Livro aberto: o que é audiolivro. */
+export function Book({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M9 5.4v9.3M9 5.4a2.6 2.6 0 0 0-2.6-1.9H2.4v9.3h4a2.6 2.6 0 0 1 2.6 1.9M9 5.4a2.6 2.6 0 0 1 2.6-1.9h4v9.3h-4A2.6 2.6 0 0 0 9 14.7"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export function ArrowRight({ size = 14, color = '#12100E' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">

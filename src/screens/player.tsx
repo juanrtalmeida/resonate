@@ -105,8 +105,6 @@ export function PlayerScreen() {
    * e, entre um painel e outro, não havia animação nenhuma para ver.
    */
   const lyricsOn = useSharedValue(0);
-  /** `1 - lyricsOn`, para quem esmaece no sentido contrário (a fita no modo onda). */
-  const lyricsOff = useDerivedValue(() => 1 - lyricsOn.value);
   const [showQueue, setShowQueue] = useState(false);
   const { share, card: shareCardView } = useShareCard();
 
@@ -486,16 +484,23 @@ export function PlayerScreen() {
           )}
 
           {ribbon && (
-            /* No modo onda a fita só aparece com a letra aberta: fora dela quem busca é
-               a própria forma de onda. Nos outros dois ela nunca esmaece. */
-            <Fade on={treatment === 'wave' ? lyricsOff : undefined}>
-              <Ribbon
-                seed={track.id}
-                progress={progress}
-                accent={accent}
-                onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
-              />
-            </Fade>
+            /*
+              A fita vale nos três tratamentos, inclusive no da onda.
+
+              Antes ela era escondida ali — quem buscava era a própria forma de onda — e
+              voltava quando a letra abria, que é quando a onda sai de cena. Manter o
+              lugar dela custava 40 px vazios embaixo do transporte, e recolher a altura
+              de verdade re-mede a caixa da letra a cada quadro da transição, que é a
+              travada que o `Fade` existe para não ter. Com a fita sempre lá, nada no
+              rodapé se move: no modo onda ela e a onda dizem a mesma coisa em dois
+              tamanhos, o que é barato demais para valer um vão morto.
+            */
+            <Ribbon
+              seed={track.id}
+              progress={progress}
+              accent={accent}
+              onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
+            />
           )}
 
           <View

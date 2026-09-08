@@ -4,7 +4,9 @@ import { File, Paths } from 'expo-file-system';
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import { ACCENTS, type Accent } from '@/constants/theme';
+import { isHex } from './color';
 import type { Continuation } from './queue';
+import type { SpokenMarks } from './spoken';
 
 export type Treatment = 'ember' | 'vinyl' | 'wave';
 
@@ -24,6 +26,18 @@ type Prefs = {
   granted: string[];
   /** Quantas vezes cada faixa foi tocada. Só guarda o que já tocou ao menos uma vez. */
   plays: Record<string, number>;
+  /**
+   * Onde a escuta parou, em segundos, por faixa.
+   *
+   * Só o que é falado entra aqui: canção se ouve do começo, e guardar posição de cada
+   * faixa de música inflaria o arquivo com o que ninguém vai usar. Ver `lib/spoken.ts`.
+   *
+   * A entrada é apagada quando o episódio termina — retomar no fim seria pior que não
+   * retomar.
+   */
+  progress: Record<string, number>;
+  /** Marcas manuais de podcast/audiolivro, por álbum. */
+  spoken: SpokenMarks;
   /** Como a aba de álbuns se apresenta. */
   albumView: AlbumView;
   /** O que fazer quando a fila acaba. */
@@ -42,6 +56,8 @@ const DEFAULTS: Prefs = {
   sources: [],
   granted: [],
   plays: {},
+  progress: {},
+  spoken: {},
   albumView: 'grid',
   continuation: 'album',
   shuffle: false,
@@ -69,9 +85,15 @@ function read(): Prefs {
  * URI do arquivo, e nenhum id de álbum — um hash curto — tem `://`.
  */
 function migrate(prefs: Prefs): Prefs {
-  if (prefs.likedAlbums.length || prefs.liked.every((id) => id.includes('://'))) return prefs;
+  // O acento é hex livre desde o seletor: o arquivo é nosso, mas uma cor quebrada ali
+  // não pinta um botão errado — ela vira `undefined` em todo estilo que a usa.
+  const accent = isHex(prefs.accent) ? prefs.accent : DEFAULTS.accent;
+  if (prefs.likedAlbums.length || prefs.liked.every((id) => id.includes('://'))) {
+    return accent === prefs.accent ? prefs : { ...prefs, accent };
+  }
   return {
     ...prefs,
+    accent,
     liked: prefs.liked.filter((id) => id.includes('://')),
     likedAlbums: prefs.liked.filter((id) => !id.includes('://')),
   };
@@ -89,6 +111,11 @@ type PrefsApi = Prefs & {
   grantFolder: (uri: string) => void;
   countPlay: (trackId: string) => void;
   playsOf: (trackId: string) => number;
+  /** Guarda onde a escuta parou. Zero ou fim de faixa apaga a entrada. */
+  mark: (trackId: string, position: number, done?: boolean) => void;
+  progressOf: (trackId: string) => number;
+  /** Trata o álbum como podcast, audiolivro ou música — sobrescreve tag e duração. */
+  setSpoken: (albumId: string, kind: SpokenMarks[string] | null) => void;
   setAlbumView: (v: AlbumView) => void;
   setContinuation: (c: Continuation) => void;
   setShuffle: (on: boolean) => void;
@@ -127,6 +154,25 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       countPlay: (trackId) =>
         update({ plays: { ...prefs.plays, [trackId]: (prefs.plays[trackId] ?? 0) + 1 } }),
       playsOf: (trackId) => prefs.plays[trackId] ?? 0,
+      mark: (trackId, position, done) => {
+        // Menos de 20 s não é "onde parei", é o começo: retomar aí só atrapalha.
+        if (done || position < 20) {
+          if (prefs.progress[trackId] == null) return;
+          const rest = { ...prefs.progress };
+          delete rest[trackId];
+          update({ progress: rest });
+          return;
+        }
+        if (Math.round(prefs.progress[trackId] ?? -1) === Math.round(position)) return;
+        update({ progress: { ...prefs.progress, [trackId]: position } });
+      },
+      progressOf: (trackId) => prefs.progress[trackId] ?? 0,
+      setSpoken: (albumId, kind) => {
+        const next = { ...prefs.spoken };
+        if (kind) next[albumId] = kind;
+        else delete next[albumId];
+        update({ spoken: next });
+      },
       setAlbumView: (albumView) => update({ albumView }),
       setContinuation: (continuation) => update({ continuation }),
       setShuffle: (shuffle) => update({ shuffle }),

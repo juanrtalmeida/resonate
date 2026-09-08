@@ -20,6 +20,7 @@ import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs } from '@/lib/prefs';
 import type { Album, Track } from '@/lib/scan';
+import { spokenOf } from '@/lib/spoken';
 import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
 const NO_TRACKS: Track[] = [];
@@ -49,7 +50,7 @@ function AlbumDetail({ album }: { album: Album }) {
   const { openArtist, close } = useDetail();
   const { tracksOf } = useLibrary();
   const { play, enqueueLast } = usePlayer();
-  const { accent, isAlbumLiked, toggleAlbumLike } = usePrefs();
+  const { accent, isAlbumLiked, toggleAlbumLike, spoken, progressOf } = usePrefs();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
 
@@ -86,6 +87,18 @@ function AlbumDetail({ album }: { album: Album }) {
   const total = tracks.reduce((n, t) => n + (t.duration ?? 0), 0);
   const liked = isAlbumLiked(album.id);
 
+  /*
+    Programa de podcast e livro não são álbuns, e a tela não pode chamá-los assim.
+
+    A classificação é do álbum inteiro, então a primeira faixa responde por todas — é o
+    mesmo critério da marca manual, que também é por álbum. Ver `lib/spoken.ts`.
+
+    Muda o que a tela *diz*, não o que ela faz: a lista, o zoom e o transporte são os
+    mesmos. Uma tela própria para falado seria uma segunda cópia desta.
+  */
+  const kind = tracks[0] ? spokenOf(tracks[0], spoken) : null;
+  const unit = kind === 'audiobook' ? 'CAPÍTULOS' : kind ? 'EPISÓDIOS' : 'FAIXAS';
+
   const header = (
     <View>
       <ZoomFade>
@@ -112,7 +125,7 @@ function AlbumDetail({ album }: { album: Album }) {
           </Body>
         </Pressable>
         <Mono size={11} tracking={0.06} color={T.t62} style={{ marginTop: 9 }}>
-          {tracks.length} FAIXAS · {fmt(total).replace(':', 'M ')}S
+          {tracks.length} {unit} · {fmt(total).replace(':', 'M ')}S
         </Mono>
       </ZoomFade>
 
@@ -131,7 +144,7 @@ function AlbumDetail({ album }: { album: Album }) {
           }}>
           <Play size={14} color={C.onAccent} />
           <Display size={15.5} tracking={-0.015} color={C.onAccent}>
-            Tocar álbum
+            {kind ? 'Tocar' : 'Tocar álbum'}
           </Display>
         </Pressable>
         <SquareButton onPress={() => play(shuffled(tracks), 0)}>
@@ -182,7 +195,17 @@ function AlbumDetail({ album }: { album: Album }) {
               onLongPress={() => openMenu({ kind: 'track', track: item })}
               onQueue={() => enqueueLast([item])}
               onPlaylist={() => open([item.id])}
-              subtitle={item.artist}
+              /*
+                No falado a segunda linha diz onde a escuta parou, no lugar do artista —
+                que num programa é o nome do programa, repetido em cada episódio. É o
+                outro lado do que a aba de Podcasts mostra: lá se vê que o programa tem
+                algo no meio, aqui se vê qual episódio é.
+              */
+              subtitle={
+                kind && progressOf(item.id) > 0
+                  ? `Continuar · ${fmt(progressOf(item.id))}`
+                  : item.artist
+              }
             />
           </ZoomFade>
         )}

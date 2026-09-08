@@ -24,7 +24,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 import { useLibrary } from './library';
@@ -32,6 +32,7 @@ import * as liveActivity from '../../modules/live-activity';
 import { continuationFor, moveItem, shuffle as shuffleTracks } from './queue';
 import { usePrefs } from './prefs';
 import type { Track } from './scan';
+import { isSpoken, type SpokenMarks } from './spoken';
 
 type Saved = { trackIds: string[]; index: number; position: number };
 
@@ -106,7 +107,8 @@ const Ctx = createContext<PlayerApi | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { library, trackById, albumById } = useLibrary();
-  const { accent, continuation, repeat, shuffle, setShuffle, countPlay } = usePrefs();
+  const { accent, continuation, repeat, shuffle, setShuffle, countPlay, mark, progressOf, spoken } =
+    usePrefs();
 
   /**
    * `countPlay` altera as preferências, e o objeto do contexto é recriado a cada
@@ -128,6 +130,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     artworkRef.current = (albumId: string) => albumById(albumId)?.cover ?? undefined;
   }, [albumById]);
+
+  /*
+    Retomar de onde parou é só para o que é falado — ver `lib/spoken.ts`.
+
+    Por ref pelo mesmo motivo de `countPlay`: as três coisas vêm do contexto de
+    preferências, que se recria a cada marca gravada. Nas dependências de `cue` ou `load`,
+    cada pausa geraria um `load` novo, e um `load` novo re-dispara o efeito de
+    restauração — o usuário voltaria à faixa e à posição salvas da sessão anterior.
+  */
+  const markRef = useRef(mark);
+  const progressRef = useRef(progressOf);
+  const marksRef = useRef<SpokenMarks>(spoken);
+  useEffect(() => {
+    markRef.current = mark;
+    progressRef.current = progressOf;
+    marksRef.current = spoken;
+  }, [mark, progressOf, spoken]);
   const player = useAudioPlayer(null, { updateInterval: 200 });
 
   // A fila da sessão anterior é lida de forma síncrona no primeiro render — assim o
@@ -180,6 +199,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [player]
   );
 
+  /**
+   * A faixa que está carregada no player, para quem não pode depender do render.
+   *
+   * O ouvinte de status é assinado uma vez; sem esta ref ele guardaria a faixa do primeiro
+   * commit e gravaria a posição do episódio errado.
+   */
+  const nowRef = useRef<Track | null>(null);
+
+  /**
+   * Guarda onde a escuta parou.
+   *
+   * Chamada ao pausar (por qualquer caminho: app, notificação, fone), ao sair da faixa e
+   * ao app ir para segundo plano. Não de tempo em tempo: cada gravação reescreve o
+   * prefs.json inteiro, e a `queue.json` já cobre o caso de o app morrer tocando.
+   */
+  const remember = useCallback(
+    (done = false, position?: number) => {
+      const item = nowRef.current;
+      if (!item || !isSpoken(item, marksRef.current)) return;
+      markRef.current(item.id, position ?? player.currentTime, done);
+    },
+    [player]
+  );
+
   /** Aponta o player para a faixa e, se for tocar, publica os metadados. */
   const cue = useCallback(
     (item: Track, autoplay: boolean, position = 0) => {
@@ -198,14 +241,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     (next: Track[], at: number, autoplay: boolean) => {
       const item = next[at];
       if (!item) return;
+      // Sair de um episódio guarda onde ele parou, antes de o player apontar para outro.
+      if (item.id !== nowRef.current?.id) remember();
       setQueue(next);
       setIndex(at);
+      nowRef.current = item;
       // Zera: o valor da faixa anterior não vale para esta, e o índice entra só como
       // estimativa até o player reportar a duração real.
       setLoadedDuration(0);
-      cue(item, autoplay);
+      // Podcast e audiolivro voltam de onde pararam; canção começa do começo.
+      cue(item, autoplay, isSpoken(item, marksRef.current) ? progressRef.current(item.id) : 0);
     },
-    [cue]
+    [cue, remember]
   );
 
   const step = useCallback(
@@ -263,6 +310,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [step]);
 
   const elapsed = useSharedValue(0);
+  /** Se o último status dizia que estava tocando: é a borda entre tocando e pausado. */
+  const wasPlaying = useRef(false);
 
   useEffect(() => {
     const sub = player.addListener('playbackStatusUpdate', (status) => {
@@ -271,10 +320,35 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       elapsed.value = status.currentTime;
       setPlaying(status.playing);
       if (status.isLoaded && status.duration > 0) setLoadedDuration(status.duration);
-      if (status.didJustFinish) advanceRef.current();
+      if (status.didJustFinish) {
+        // Terminou: a marca sai. Antes do avanço, que já troca a faixa de `nowRef`.
+        remember(true);
+        wasPlaying.current = false;
+        advanceRef.current();
+        return;
+      }
+      /*
+        Pausou. Pega toda pausa, e não só o botão da tela: a notificação do Android, a
+        Central de Controle do iOS e o fone de ouvido passam todas por aqui.
+      */
+      if (wasPlaying.current && !status.playing) remember(false, status.currentTime);
+      wasPlaying.current = status.playing;
     });
     return () => sub.remove();
-  }, [player, elapsed]);
+  }, [player, elapsed, remember]);
+
+  /**
+   * Ir para segundo plano também guarda.
+   *
+   * O sistema pode matar o app enquanto ele está lá atrás, e aí a pausa nunca acontece —
+   * a última posição seria a da pausa anterior.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') remember();
+    });
+    return () => sub.remove();
+  }, [remember]);
 
   // Carrega no player o que a sessão anterior estava tocando, pausado e na posição certa.
   // Uma vez só: repetir isto no meio da sessão jogaria o usuário de volta ao ponto salvo.
@@ -283,7 +357,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (restored.current) return;
     restored.current = true;
     const item = saved.queue[saved.index];
-    if (item) cue(item, false, saved.position);
+    if (!item) return;
+    nowRef.current = item;
+    cue(item, false, saved.position);
   }, [saved, cue]);
 
   // Grava a posição de vez em quando, não a cada tick.

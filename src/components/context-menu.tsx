@@ -26,14 +26,18 @@ import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePrefs } from '@/lib/prefs';
+import { spokenOf, type SpokenMarks } from '@/lib/spoken';
 import { removeFromDevice } from '@/lib/remove';
 import { canShareToStories } from '@/lib/share';
 import type { Album, Track } from '@/lib/scan';
 import { AlbumArt } from './album-art';
 import {
+  Book,
   Close,
+  Disc,
   Heart,
   Instagram,
+  Mic,
   Play,
   Plus,
   Queue,
@@ -317,7 +321,7 @@ export function useItemMenu() {
   const { tracksOf, trackById, albumById, removeTracks } = useLibrary();
   const { play, enqueueNext, enqueueLast } = usePlayer();
   const { remove: removePlaylist } = usePlaylists();
-  const { toggleLike, isLiked, toggleAlbumLike, isAlbumLiked } = usePrefs();
+  const { toggleLike, isLiked, toggleAlbumLike, isAlbumLiked, spoken, setSpoken } = usePrefs();
   const { open: openPlaylists, sheet } = usePlaylistSheet();
 
   /** As faixas do item, na ordem em que ele as toca. */
@@ -383,6 +387,35 @@ export function useItemMenu() {
         icon: <Heart size={16} color={T.t72} filled={isAlbumLiked(menu.album.id)} />,
         onPress: () => toggleAlbumLike(menu.album.id),
       });
+    }
+
+    /*
+      Reclassificar o álbum.
+
+      A classificação automática — tag de gênero, e depois duração — acerta a maioria e
+      erra em silêncio: um set de duas horas cai em Podcasts, um audiolivro etiquetado
+      como "Spoken" pode não cair em nada. Aqui o usuário desempata, e por álbum, que é o
+      programa ou o livro inteiro. Ver `lib/spoken.ts`.
+
+      As duas linhas são sempre as duas classificações que o álbum *não* tem: nada de
+      oferecer "tratar como podcast" no que já é podcast.
+    */
+    if (menu.kind === 'album' && tracks.length) {
+      const now = spokenOf(tracks[0], spoken);
+      const as = (kind: SpokenMarks[string], label: string, icon: ReactNode) => ({
+        label,
+        icon,
+        onPress: () => setSpoken(menu.album.id, kind),
+      });
+      if (now !== 'podcast') {
+        list.push(as('podcast', 'Tratar como podcast', <Mic size={16} color={T.t72} />));
+      }
+      if (now !== 'audiobook') {
+        list.push(as('audiobook', 'Tratar como audiolivro', <Book size={16} color={T.t72} />));
+      }
+      if (now !== null) {
+        list.push(as('music', 'Tratar como música', <Disc color={T.t72} />));
+      }
     }
 
     // Jogar uma lista dentro de outra lista não é o gesto de ninguém.

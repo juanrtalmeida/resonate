@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Pressable,
@@ -16,11 +15,9 @@ import Animated, {
   FadeInRight,
   FadeOut,
   interpolate,
-  makeMutable,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,9 +26,10 @@ import { AlbumArt } from '@/components/album-art';
 import { Carousel, Grid, Heart, LibraryIcon, Search } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { SectionLabel } from '@/components/section-label';
+import { GridSkeleton, RowSkeleton, TrackSkeleton } from '@/components/skeleton';
 import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
-import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
+import { C, CHROME_HEIGHT, PADDING, R, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
@@ -42,6 +40,7 @@ import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { Sheet } from '@/components/sheet';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
 import { usePrefs, type AlbumView } from '@/lib/prefs';
+import { spokenOf, type Spoken } from '@/lib/spoken';
 import { useZoomLaunch } from '@/lib/zoom';
 import type { Album, Track } from '@/lib/scan';
 
@@ -51,53 +50,38 @@ const TABS = [
   { key: 'tracks', label: 'Faixas' },
   { key: 'playlists', label: 'Listas' },
   { key: 'liked', label: 'Favoritos' },
+  { key: 'podcasts', label: 'Podcasts' },
+  { key: 'audiobooks', label: 'Audiolivros' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
+
+/**
+ * As abas em que filtrar por gênero quer dizer algo.
+ *
+ * Lista não tem gênero — ela é do usuário, não da tag. Podcast e audiolivro têm, mas o
+ * gênero deles *é* o que os classificou: filtrar "Podcast" dentro de Podcasts não separa
+ * nada.
+ */
+const GENRE_TABS: readonly TabKey[] = ['albums', 'artists', 'tracks', 'liked'];
+
+/** As duas abas de palavra falada, e como cada uma se chama no singular e no plural. */
+const SPOKEN_TABS = {
+  podcasts: { kind: 'podcast', one: 'programa', many: 'programas', item: 'episódios' },
+  audiobooks: { kind: 'audiobook', one: 'livro', many: 'livros', item: 'capítulos' },
+} as const;
 
 const NO_TRACKS: Track[] = [];
 const NO_ALBUMS: Album[] = [];
 
 const GAP = 14;
 
-/**
- * Onde o traço de acento está, medido em fatias de aba (0 = Álbuns, 4 = Favoritos).
- *
- * Fora do componente porque a posição do traço é estado da *tela*, não da faixa de abas:
- * ela precisa valer o que valia por último toda vez que a faixa monta. Num shared value
- * de componente o traço nascia em zero e corria da borda esquerda até a aba nova em vez
- * de sair da anterior — e, como a largura só se sabe depois do layout, o primeiro alvo
- * calculado era mesmo zero. A lista unificada tirou a remontagem que expôs isso; a
- * posição fica aqui de qualquer forma, que é onde ela deve estar.
- *
- * Em fatias, e não em pixels, para não precisar de sincronia com a medida da largura: o
- * worklet multiplica pela fatia atual.
- */
-const tracePosition = makeMutable(0);
-
-/**
- * Largura medida da linha de abas, guardada pelo mesmo motivo do `tracePosition`: a cada
- * remontagem ela voltava a zero e o traço passava um quadro fora da tela, o que piscava
- * em toda troca de aba.
- */
-let traceWidth = 0;
-
-/**
- * Superamortecida de propósito: o traço chega na aba nova e para.
- *
- * `mass: 1` é explícito e obrigatório. O padrão do `withSpring` no Reanimated 4 é o
- * `GentleSpringConfig`, que traz **mass 4** — um config só com `damping` e `stiffness`
- * herda essa massa e sai com metade da razão de amortecimento pretendida. Com 32/220 e
- * massa 4 a razão cai para 0,54, e foi isso que medi: o traço passava 56 px da aba e
- * voltava em 13 quadros. Com massa 1 a razão é 1,08 e não há repique.
- */
-const TRACE = { damping: 32, mass: 1, stiffness: 220 };
 
 export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { library, artists, trackById, albumById } = useLibrary();
-  const { accent, albumView, setAlbumView, liked, likedAlbums } = usePrefs();
+  const { accent, albumView, setAlbumView, liked, likedAlbums, spoken } = usePrefs();
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
@@ -135,12 +119,103 @@ export default function LibraryScreen() {
   const width = Dimensions.get('window').width;
   const cell = (width - PADDING * 2 - GAP) / 2;
 
-  const tracks = library?.tracks ?? NO_TRACKS;
-  const albums = library?.albums ?? NO_ALBUMS;
+  const all = library?.tracks ?? NO_TRACKS;
+  const everyAlbum = library?.albums ?? NO_ALBUMS;
+
+  /*
+    Palavra falada sai das abas de música.
+
+    Um episódio de duas horas entre as canções desarruma tudo: ele encabeça "faixas mais
+    longas", vira um álbum de uma faixa na grade e o artista dele é o nome do programa. As
+    duas abas próprias existem justamente para isso — ver `lib/spoken.ts`.
+  */
+  const kindOf = useMemo(() => {
+    const map = new Map<string, Spoken | null>();
+    for (const t of all) map.set(t.id, spokenOf(t, spoken));
+    return map;
+  }, [all, spoken]);
+
+  const tracks = useMemo(() => all.filter((t) => !kindOf.get(t.id)), [all, kindOf]);
+  const albums = useMemo(
+    () => everyAlbum.filter((a) => a.trackIds.some((id) => kindOf.get(id) === null)),
+    [everyAlbum, kindOf]
+  );
+
   const totalSeconds = useMemo(
     () => tracks.reduce((n, t) => n + (t.duration ?? 0), 0),
     [tracks]
   );
+
+  /**
+   * Os gêneros da biblioteca, do mais numeroso para o menos.
+   *
+   * Da tag, que é o que a varredura já traz — sem rede e sem catálogo. Gênero de uma
+   * faixa só não vira chip: um chip que filtra para uma faixa é ruído na fileira.
+   */
+  const genres = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const t of tracks) {
+      const g = t.genre?.trim();
+      if (g) count.set(g, (count.get(g) ?? 0) + 1);
+    }
+    return [...count.entries()]
+      .filter(([, n]) => n > 1)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, n]) => ({ name, count: n }));
+  }, [tracks]);
+
+  const [genre, setGenre] = useState<string | null>(null);
+  // Uma varredura nova pode não ter mais o gênero escolhido: o filtro não pode sobreviver
+  // ao que ele filtra, senão a aba fica permanentemente vazia sem dizer por quê.
+  const picked = genre && genres.some((g) => g.name === genre) ? genre : null;
+
+  /** O recorte do gênero, como conjunto de ids: álbuns e artistas se filtram por ele. */
+  const ofGenre = useMemo(
+    () => (picked ? new Set(tracks.filter((t) => t.genre?.trim() === picked).map((t) => t.id)) : null),
+    [tracks, picked]
+  );
+  const genreTracks = useMemo(
+    () => (ofGenre ? tracks.filter((t) => ofGenre.has(t.id)) : tracks),
+    [tracks, ofGenre]
+  );
+  const genreAlbums = useMemo(
+    () => (ofGenre ? albums.filter((a) => a.trackIds.some((id) => ofGenre.has(id))) : albums),
+    [albums, ofGenre]
+  );
+  /**
+   * Os artistas visíveis.
+   *
+   * O recorte é o do gênero quando há um, e o de "é música" quando não há. O nome que um
+   * podcast escreve no campo de artista é o do programa: sem este filtro ele aparecia na
+   * aba Artistas com um álbum de um episódio, ao lado das bandas.
+   */
+  const musicIds = useMemo(() => new Set(tracks.map((t) => t.id)), [tracks]);
+  const genreArtists = useMemo(() => {
+    const visible = ofGenre ?? musicIds;
+    return artists.filter((a) => a.albums.some((al) => al.trackIds.some((id) => visible.has(id))));
+  }, [artists, ofGenre, musicIds]);
+
+  /**
+   * Os programas e os livros: um por álbum, com os episódios em ordem.
+   *
+   * Agrupar por álbum é o que o arquivo já dá — um programa de podcast escreve o nome do
+   * programa no campo de álbum, e um audiolivro escreve o título do livro. Por isso a
+   * marca manual também é por álbum: ela marca o programa inteiro de uma vez.
+   */
+  const shows = useMemo(() => {
+    const byAlbum = new Map<string, { kind: Spoken; episodes: Track[] }>();
+    for (const t of all) {
+      const kind = kindOf.get(t.id);
+      if (!kind) continue;
+      const entry = byAlbum.get(t.albumId);
+      if (entry) entry.episodes.push(t);
+      else byAlbum.set(t.albumId, { kind, episodes: [t] });
+    }
+    return [...byAlbum.entries()]
+      .map(([albumId, entry]) => ({ album: albumById(albumId), ...entry }))
+      .filter((show) => !!show.album)
+      .sort((a, b) => a.album!.title.localeCompare(b.album!.title));
+  }, [all, kindOf, albumById]);
 
   /*
     Curtir é um append, então a lista salva está em ordem de quando foi curtido — do mais
@@ -149,13 +224,28 @@ export default function LibraryScreen() {
     encontrou mais, do mesmo jeito que a tela de lista faz.
   */
   const likedTracks = useMemo(
-    () => [...liked].reverse().map(trackById).filter((t) => !!t),
-    [liked, trackById]
+    () =>
+      [...liked]
+        .reverse()
+        .map(trackById)
+        .filter((t) => !!t)
+        // O mesmo recorte das outras abas: sem falado, e dentro do gênero escolhido. Um
+        // episódio curtido aparece na aba dele, com o resto do programa.
+        .filter((t) => !kindOf.get(t.id) && (!ofGenre || ofGenre.has(t.id))),
+    [liked, trackById, kindOf, ofGenre]
   );
   const favoriteAlbums = useMemo(
-    () => [...likedAlbums].reverse().map(albumById).filter((a) => !!a),
-    [likedAlbums, albumById]
+    () =>
+      [...likedAlbums]
+        .reverse()
+        .map(albumById)
+        .filter((a) => !!a)
+        .filter((a) => !ofGenre || a.trackIds.some((id) => ofGenre.has(id))),
+    [likedAlbums, albumById, ofGenre]
   );
+
+  /** Quantos programas ou livros há: o rótulo das duas abas de falado usa isto. */
+  const spokenCount = (kind: Spoken) => shows.filter((show) => show.kind === kind).length;
 
   const header = (
     <View>
@@ -194,6 +284,28 @@ export default function LibraryScreen() {
       </View>
 
       <Tabs current={tab} onPick={pickTab} />
+
+      {/*
+        Os gêneros logo abaixo das abas, e não numa tela própria.
+
+        Eles preenchem o vão que a fileira de abas deixava e filtram a aba que está
+        aberta: as mesmas capas, os mesmos artistas, só o recorte muda. Segue `tab`, e não
+        `shown` — a fileira é urgente como as abas, o conteúdo é que pode chegar depois.
+      */}
+      {GENRE_TABS.includes(tab) && genres.length > 0 && (
+        <ChipRow style={{ marginTop: 10 }}>
+          <Chip label="Todos" on={!picked} accent={accent} onPress={() => setGenre(null)} />
+          {genres.map((g) => (
+            <Chip
+              key={g.name}
+              label={`${g.name} · ${g.count}`}
+              on={picked === g.name}
+              accent={accent}
+              onPress={() => setGenre(g.name)}
+            />
+          ))}
+        </ChipRow>
+      )}
 
       {/*
         Daqui para baixo é conteúdo, e é só isto que se move na troca de aba. O título e
@@ -236,6 +348,13 @@ export default function LibraryScreen() {
         <SectionLabel title="Faixas curtidas" trailing={`${likedTracks.length}`} />
       )}
 
+      {(shown === 'podcasts' || shown === 'audiobooks') && spokenCount(SPOKEN_TABS[shown].kind) > 0 && (
+        <SectionLabel
+          title={shown === 'podcasts' ? 'Programas' : 'Livros'}
+          trailing={`${spokenCount(SPOKEN_TABS[shown].kind)}`}
+        />
+      )}
+
       {shown === 'playlists' && (
         <Pressable
           onPress={() => setNaming(true)}
@@ -275,7 +394,7 @@ export default function LibraryScreen() {
   const carousel = shown === 'albums' && albumView === 'carousel';
 
   /** As faixas que uma linha de faixa toca: a aba diz qual das duas listas é. */
-  const listTracks = shown === 'liked' ? likedTracks : tracks;
+  const listTracks = shown === 'liked' ? likedTracks : genreTracks;
 
   /*
     Uma FlatList só, para as cinco abas.
@@ -291,19 +410,34 @@ export default function LibraryScreen() {
       // No carrossel a lista fica vazia de propósito: as capas vão no cabeçalho.
       if (albumView === 'carousel') return NO_ROWS;
       const pairs: Row[] = [];
-      for (let i = 0; i < albums.length; i += 2) {
-        pairs.push({ kind: 'albums', id: albums[i].id, albums: albums.slice(i, i + 2) });
+      for (let i = 0; i < genreAlbums.length; i += 2) {
+        pairs.push({
+          kind: 'albums',
+          id: genreAlbums[i].id,
+          albums: genreAlbums.slice(i, i + 2),
+        });
       }
       return pairs;
     }
     if (shown === 'artists') {
-      return artists.map((artist) => ({ kind: 'artist', id: artist.name, artist }));
+      return genreArtists.map((artist) => ({ kind: 'artist', id: artist.name, artist }));
     }
     if (shown === 'playlists') {
       return playlists.map((playlist) => ({ kind: 'playlist', id: playlist.id, playlist }));
     }
+    if (shown === 'podcasts' || shown === 'audiobooks') {
+      const want = SPOKEN_TABS[shown].kind;
+      return shows
+        .filter((show) => show.kind === want)
+        .map((show) => ({
+          kind: 'show' as const,
+          id: show.album!.id,
+          album: show.album!,
+          episodes: show.episodes,
+        }));
+    }
     return listTracks.map((track) => ({ kind: 'track', id: track.id, track }));
-  }, [shown, albumView, albums, artists, playlists, listTracks]);
+  }, [shown, albumView, genreAlbums, genreArtists, playlists, shows, listTracks]);
 
   const empty = emptyFor(shown, favoriteAlbums.length > 0);
 
@@ -334,7 +468,9 @@ export default function LibraryScreen() {
           </>
         }
         // No carrossel o vazio de verdade já está no cabeçalho.
-        ListEmptyComponent={settling ? <Settling /> : carousel ? null : empty}
+        ListEmptyComponent={
+          settling ? <Settling tab={tab} cell={cell} /> : carousel ? null : empty
+        }
         contentContainerStyle={{
           paddingTop: insets.top + 24,
           paddingBottom: bottom,
@@ -362,6 +498,13 @@ export default function LibraryScreen() {
                 onLongPress={() =>
                   openMenu({ kind: 'artist', name: item.artist.name, albums: item.artist.albums })
                 }
+              />
+            ) : item.kind === 'show' ? (
+              <ShowRow
+                album={item.album}
+                episodes={item.episodes}
+                unit={SPOKEN_TABS[shown === 'audiobooks' ? 'audiobooks' : 'podcasts'].item}
+                onHold={() => openMenu({ kind: 'album', album: item.album })}
               />
             ) : item.kind === 'playlist' ? (
               <GroupRow
@@ -396,16 +539,24 @@ export default function LibraryScreen() {
 /**
  * O lugar da lista enquanto as linhas montam.
  *
- * Alto o bastante para o conteúdo não pular quando elas chegarem, e discreto: quem trocou
- * de aba já viu o traço de acento andar, e este é só o aviso de que falta um instante.
+ * A silhueta é da aba que está *chegando* (`tab`), e não da que está na tela (`shown`):
+ * durante o assentamento as duas discordam, e é o destino que vai ocupar o espaço.
+ *
+ * Era um `ActivityIndicator` centrado. O giro não dizia nada sobre o que vinha, e o
+ * conteúdo pulava quando chegava — a silhueta já está na forma e na altura das linhas.
+ *
+ * A grade serve as duas visualizações de álbum. No carrossel as capas moram no cabeçalho
+ * e esta silhueta sai de cena no mesmo commit em que elas entram, então não chegam a se
+ * ver juntas.
  */
-function Settling() {
-  const { accent } = usePrefs();
-  return (
-    <View style={{ paddingTop: 70, alignItems: 'center' }}>
-      <ActivityIndicator color={accent} />
-    </View>
-  );
+function Settling({ tab, cell }: { tab: TabKey; cell: number }) {
+  if (tab === 'albums') return <GridSkeleton rows={3} cell={cell} gap={GAP} />;
+  if (tab === 'artists') return <RowSkeleton rows={7} round />;
+  if (tab === 'playlists') return <RowSkeleton rows={5} />;
+  // Programa e livro são linhas com miniatura, como as listas.
+  if (tab === 'podcasts' || tab === 'audiobooks') return <RowSkeleton rows={5} />;
+  // Faixas e favoritas são as duas listas de faixa.
+  return <TrackSkeleton rows={8} />;
 }
 
 /** Uma linha da lista. A aba escolhe qual das quatro formas ela tem. */
@@ -413,11 +564,48 @@ type Row =
   | { kind: 'albums'; id: string; albums: Album[] }
   | { kind: 'artist'; id: string; artist: ReturnType<typeof useLibrary>['artists'][number] }
   | { kind: 'playlist'; id: string; playlist: Playlist }
+  /** Um programa de podcast ou um livro: o álbum, com os episódios dele. */
+  | { kind: 'show'; id: string; album: Album; episodes: Track[] }
   | { kind: 'track'; id: string; track: Track };
 
 const NO_ROWS: Row[] = [];
 
 /** O vazio de cada aba. */
+/**
+ * Um programa de podcast ou um livro na lista.
+ *
+ * O selo de "continuar" é o motivo de a aba existir separada: ele diz que há um episódio
+ * no meio e onde ele parou. Sem escuta começada a linha vai limpa, como a de uma lista.
+ */
+function ShowRow({
+  album,
+  episodes,
+  unit,
+  onHold,
+}: {
+  album: Album;
+  episodes: Track[];
+  /** "episódios" ou "capítulos": a aba decide a palavra. */
+  unit: string;
+  onHold: () => void;
+}) {
+  const { openAlbum } = useDetail();
+  const { progressOf } = usePrefs();
+  const started = episodes.find((e) => progressOf(e.id) > 0);
+
+  return (
+    <GroupRow
+      title={album.title}
+      subtitle={`${episodes.length} ${episodes.length === 1 ? unit.replace(/s$/, '') : unit}`}
+      mono={started ? `CONTINUAR · ${fmt(progressOf(started.id))} · ${started.title}` : undefined}
+      art={artworkFor(album.artist, album.title)}
+      cover={album.cover}
+      onPress={() => openAlbum(album.id)}
+      onLongPress={onHold}
+    />
+  );
+}
+
 function emptyFor(tab: TabKey, hasFavoriteAlbums: boolean) {
   if (tab === 'albums') {
     return (
@@ -437,6 +625,18 @@ function emptyFor(tab: TabKey, hasFavoriteAlbums: boolean) {
     return (
       <EmptyState icon={<LibraryIcon size={30} color={T.full} />} title="Nenhuma lista ainda">
         Segure uma faixa em qualquer tela para criar a primeira.
+      </EmptyState>
+    );
+  }
+  if (tab === 'podcasts' || tab === 'audiobooks') {
+    const podcast = tab === 'podcasts';
+    return (
+      <EmptyState
+        icon={<LibraryIcon size={30} color={T.full} />}
+        title={podcast ? 'Nenhum podcast' : 'Nenhum audiolivro'}>
+        {podcast
+          ? 'Entram aqui os arquivos com gênero de podcast, os mais longos que 25 minutos, e o que você marcar como podcast segurando um álbum.'
+          : 'Entram aqui os arquivos com gênero de audiolivro, e o que você marcar como audiolivro segurando um álbum.'}
       </EmptyState>
     );
   }
@@ -518,60 +718,90 @@ function NewPlaylist({ visible, onClose }: { visible: boolean; onClose: () => vo
   );
 }
 
+/**
+ * As abas, em chips que rolam.
+ *
+ * Era um segmented control de cinco fatias iguais com um traço de acento correndo
+ * embaixo. Duas coisas o mataram: sete abas não cabem em fatias iguais — "Audiolivros"
+ * não caberia em um sétimo da tela — e a caixa com o traço somava 62 px de vão até o
+ * conteúdo, o que fazia a fileira ler como um bloco solto em cima da tela em vez de um
+ * controle do conteúdo.
+ *
+ * Os chips levam a largura do próprio rótulo, rolam quando passam da tela, e a aba ativa
+ * é a única pintada no acento — não precisa de traço para dizer onde está.
+ */
 function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => void }) {
   const { accent } = usePrefs();
 
-  // A largura do traço só se sabe depois do layout: são fatias iguais da linha, uma por aba.
-  const [width, setWidth] = useState(traceWidth);
-  const slot = width / TABS.length;
-  const at = TABS.findIndex((t) => t.key === current);
-  useEffect(() => {
-    tracePosition.value = withSpring(at, TRACE);
-  }, [at]);
-
-  const slide = useAnimatedStyle(() => ({
-    transform: [{ translateX: tracePosition.value * slot }],
-  }));
-
   return (
-    <View style={{ marginTop: 22, marginBottom: 4 }}>
-      <View style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: R.r13, padding: 4 }}>
-        {TABS.map((t) => {
-          const active = t.key === current;
-          return (
-            <Pressable
-              key={t.key}
-              onPress={() => onPick(t.key)}
-              style={{
-                flex: 1,
-                height: 34,
-                borderRadius: 10,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: active ? '#252019' : 'transparent',
-              }}>
-              <Body size={12} weight={600} numberOfLines={1} color={active ? T.full : T.t42}>
-                {t.label}
-              </Body>
-            </Pressable>
-          );
-        })}
-      </View>
-      {/* Um traço fino no acento marca a aba, como a pílula do design. Ele corre até a
-          aba nova: quatro traços acendendo e apagando não diziam de onde para onde. */}
-      <View
-        onLayout={(e) => {
-          traceWidth = e.nativeEvent.layout.width;
-          setWidth(traceWidth);
-        }}
-        style={{ height: 2, marginTop: 6 }}>
-        {width > 0 && (
-          <Animated.View style={[{ width: slot, height: 2, paddingHorizontal: 6 }, slide]}>
-            <View style={{ flex: 1, borderRadius: 1, backgroundColor: accent }} />
-          </Animated.View>
-        )}
-      </View>
-    </View>
+    <ChipRow style={{ marginTop: 18 }}>
+      {TABS.map((t) => (
+        <Chip
+          key={t.key}
+          label={t.label}
+          on={t.key === current}
+          accent={accent}
+          onPress={() => onPick(t.key)}
+        />
+      ))}
+    </ChipRow>
+  );
+}
+
+/**
+ * A fileira rolável dos chips.
+ *
+ * Sangra para as bordas com a margem negativa e devolve o recuo por dentro: sem isso o
+ * primeiro e o último chip encostam no ar em vez de alinharem com o resto da tela, e o
+ * que rola para fora corta no recuo em vez de na borda.
+ */
+function ChipRow({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: { marginTop?: number };
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={[{ marginHorizontal: -PADDING }, style]}
+      contentContainerStyle={{ gap: 8, paddingHorizontal: PADDING, alignItems: 'center' }}>
+      {children}
+    </ScrollView>
+  );
+}
+
+/** Um chip: aba ou gênero. Ativo vai no acento, com a tinta escura por cima. */
+function Chip({
+  label,
+  on,
+  accent,
+  onPress,
+}: {
+  label: string;
+  on: boolean;
+  accent: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        height: 34,
+        paddingHorizontal: 14,
+        borderRadius: R.r17,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: on ? accent : C.card,
+        borderWidth: 1,
+        borderColor: on ? accent : T.t07,
+      }}>
+      <Body size={12.5} weight={600} numberOfLines={1} color={on ? C.onAccent : T.t72}>
+        {label}
+      </Body>
+    </Pressable>
   );
 }
 
@@ -589,8 +819,14 @@ function AlbumStrip({
   /** Toque longo numa capa. Igual ao da grade: segurar um álbum abre as ações dele. */
   onHold?: (album: Album) => void;
 }) {
+  /*
+    Sem margem própria: o `SectionLabel` aqui dentro já traz os 26 dele.
+
+    Somadas, as duas davam 50 px entre a fileira de abas e a primeira capa — o vão que
+    fazia o seletor parecer solto no alto da tela.
+  */
   return (
-    <View style={{ marginTop: 24 }}>
+    <View>
       <SectionLabel title={title} />
       <ScrollView
         horizontal
