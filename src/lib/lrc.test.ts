@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { lineAt, lineProgress, parseLrc, wordAt } from './lrc.ts';
+import { lineAt, lineProgress, parseLrc } from './lrc.ts';
 
 test('LRC sincronizado', () => {
   const { synced, lines } = parseLrc(
@@ -115,14 +115,6 @@ test('refrão repetido não leva os carimbos por palavra junto', () => {
 
 test('linha sem carimbo por palavra continua sem trechos', () => {
   assert.equal(parseLrc('[00:12.00]uma frase inteira').lines[0].words, null);
-});
-
-test('wordAt', () => {
-  const words = parseLrc('[00:10.00]<00:10.00>um <00:12.00>dois').lines[0].words!;
-  assert.equal(wordAt(words, 9), -1, 'antes da primeira');
-  assert.equal(wordAt(words, 10), 0, 'exatamente no carimbo');
-  assert.equal(wordAt(words, 11.9), 0);
-  assert.equal(wordAt(words, 99), 1, 'depois da última');
 });
 
 test('palavra partida em sílabas não ganha espaço no meio', () => {

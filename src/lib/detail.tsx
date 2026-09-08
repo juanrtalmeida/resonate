@@ -41,6 +41,8 @@ type DetailApi = {
   openArtist: (name: string) => void;
   /** Fecha a camada do topo. */
   close: () => void;
+  /** Fecha tudo o que está por cima: as camadas e o player. Sem voo de volta. */
+  closeAll: () => void;
   /** O Now Playing. Camada única, e acima da barra. */
   playerOpen: boolean;
   openPlayer: () => void;
@@ -73,6 +75,19 @@ export function DetailProvider({ children }: { children: ReactNode }) {
       close: () => {
         chromeExpand();
         setStack((current) => current.slice(0, -1));
+      },
+      /*
+        Sair de tudo de uma vez, sem voo de volta.
+
+        É o toque no destino que já está aberto: "me tira daqui". O voo de fechamento mora
+        dentro de cada `ZoomScreen` e leva a capa de volta ao retângulo de onde ela saiu —
+        aqui não há para onde voar, porque a tela de baixo pode ser outra aba inteira. Um
+        corte é honesto: o destino já está desenhado embaixo.
+      */
+      closeAll: () => {
+        chromeExpand();
+        setPlayerOpen(false);
+        setStack((current) => (current.length ? [] : current));
       },
       playerOpen,
       openPlayer: () => setPlayerOpen(true),

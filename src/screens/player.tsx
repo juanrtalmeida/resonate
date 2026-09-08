@@ -49,7 +49,7 @@ import { RoutePicker, canShowRoutePicker } from '../../modules/audio-route';
 import { chromeReveal } from '@/lib/chrome-scroll';
 import { useDetail } from '@/lib/detail';
 import { canShareToStories } from '@/lib/share';
-import { useElapsed, usePlayer } from '@/lib/player';
+import { usePlayer } from '@/lib/player';
 import { usePrefs, useT } from '@/lib/prefs';
 import type { Track } from '@/lib/scan';
 import { TILT_INTERVAL, TILT_REST, tiltAngles, tiltStep } from '@/lib/tilt';
@@ -1166,9 +1166,6 @@ function LyricsPane({
   lyrics: Lyrics | null;
   onSeek: (seconds: number) => void;
 }) {
-  // A letra sincronizada é o único lugar que realmente precisa do tempo em JavaScript, e
-  // só enquanto o painel está aberto. Re-renderiza daqui para baixo, não a tela inteira.
-  const elapsed = useElapsed();
   const { markLyrics } = useLibrary();
 
   const pick = async () => {
@@ -1183,7 +1180,7 @@ function LyricsPane({
   return (
     <View style={{ flex: 1 }}>
       {/* A key remonta ao trocar de faixa: zera o scroll sem um setState em efeito. */}
-      <LyricsView key={track.id} lyrics={lyrics} elapsed={elapsed} onSeek={onSeek} />
+      <LyricsView key={track.id} lyrics={lyrics} onSeek={onSeek} />
     </View>
   );
 }

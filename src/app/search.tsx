@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -30,8 +30,9 @@ import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
 import { isEmpty, search } from '@/lib/search';
 import { chromeScroll } from '@/lib/chrome-scroll';
+import { useTabTop } from '@/lib/tab-top';
 import { useKeyboardOverlap } from '@/lib/keyboard';
-import type { Album } from '@/lib/scan';
+import type { Album, Track } from '@/lib/scan';
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
@@ -53,6 +54,27 @@ export default function SearchScreen() {
     () => search(query, library?.tracks ?? [], library?.albums ?? []),
     [query, library]
   );
+
+  /**
+   * Tocar daqui é o fim da busca: o teclado sai junto.
+   *
+   * A barra inferior fica no fundo da tela e o teclado passa por cima dela. Sem baixá-lo,
+   * quem achava a faixa e tocava ficava sem o mini player — ele estava lá, atrás do
+   * teclado, e o campo continuava focado porque `keyboardShouldPersistTaps` mantém o toque
+   * na lista sem tirar o foco. As linhas de álbum e de artista já fazem isto por dentro do
+   * voo de zoom (ver `useZoomLaunch`); a de faixa não voa, então pede o mesmo aqui.
+   */
+  // Tocar em Busca já estando nela volta ao topo dos resultados.
+  const list = useRef<ScrollView>(null);
+  useTabTop(
+    'Search',
+    useCallback(() => list.current?.scrollTo({ y: 0, animated: true }), [])
+  );
+
+  const playFrom = (tracks: Track[], index: number) => {
+    Keyboard.dismiss();
+    play(tracks, index);
+  };
 
   const typed = query.trim().length > 0;
   const [focused, setFocused] = useState(false);
@@ -166,7 +188,21 @@ export default function SearchScreen() {
           />
           {typed && (
             <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
-              <Pressable onPress={() => setQuery('')} hitSlop={10}>
+              {/*
+                Limpar também baixa o teclado.
+                
+                A barra inferior mora no fundo da tela e o teclado passa por cima dela: com
+                o campo ainda focado, limpar a busca devolvia a tela vazia e o mini player
+                seguia escondido atrás do teclado, sem gesto nenhum que o trouxesse de
+                volta — a tela vazia não rola, e `keyboardDismissMode="on-drag"` não tem o
+                que arrastar. Quem limpa terminou de digitar.
+              */}
+              <Pressable
+                onPress={() => {
+                  setQuery('');
+                  Keyboard.dismiss();
+                }}
+                hitSlop={10}>
                 <Body size={12.5} color={T.t5}>
                   {t('search.clear')}
                 </Body>
@@ -178,6 +214,7 @@ export default function SearchScreen() {
       </View>
 
       <ScrollView
+        ref={list}
         {...chromeScroll}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -246,7 +283,7 @@ export default function SearchScreen() {
                   track={track}
                   position={index + 1}
                   accent={accent}
-                  onPress={() => play(results.tracks, index)}
+                  onPress={() => playFrom(results.tracks, index)}
                   onLongPress={() => openMenu({ kind: 'track', track })}
                   onQueue={() => enqueueLast([track])}
                   onPlaylist={() => open([track.id])}

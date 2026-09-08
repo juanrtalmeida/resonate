@@ -6,7 +6,7 @@
  * querem exatamente a mesma pílula.
  */
 
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { Pressable, ScrollView } from 'react-native';
 
 import { C, PADDING, R, T } from '@/constants/theme';
@@ -40,29 +40,48 @@ export function ChipRow({
 /** Um chip: aba ou gênero. Ativo vai no acento, com a tinta escura por cima. */
 export function Chip({
   label,
+  icon: Icon,
   on,
   accent,
   onPress,
 }: {
   label: string;
+  /**
+   * O glifo do chip, como componente — não como elemento pronto.
+   *
+   * A cor depende do estado, e um elemento já criado traria a cor de quem o criou: cada
+   * chamador teria de repetir o `on ? C.onAccent : T.t72`. Recebendo o componente, a cor
+   * é decidida aqui, uma vez.
+   *
+   * Opcional porque gênero não tem ícone: os nomes vêm da tag, e inventar um glifo por
+   * gênero seria adivinhar.
+   */
+  icon?: ComponentType<{ size?: number; color?: string }>;
   on: boolean;
   accent: string;
   onPress: () => void;
 }) {
+  const color = on ? C.onAccent : T.t72;
+
   return (
     <Pressable
       onPress={onPress}
       style={{
-        height: 34,
-        paddingHorizontal: 14,
-        borderRadius: R.r17,
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 7,
+        height: 34,
+        // Com ícone o recuo da esquerda encolhe: o glifo já traz o próprio ar.
+        paddingLeft: Icon ? 11 : 14,
+        paddingRight: 14,
+        borderRadius: R.r17,
         justifyContent: 'center',
         backgroundColor: on ? accent : C.card,
         borderWidth: 1,
         borderColor: on ? accent : T.t07,
       }}>
-      <Body size={12.5} weight={600} numberOfLines={1} color={on ? C.onAccent : T.t72}>
+      {Icon ? <Icon size={15} color={color} /> : null}
+      <Body size={12.5} weight={600} numberOfLines={1} color={color}>
         {label}
       </Body>
     </Pressable>

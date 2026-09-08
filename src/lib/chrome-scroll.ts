@@ -72,6 +72,26 @@ export function chromeExpand() {
   chromeCollapsed.value = withTiming(0, { duration: 200 });
 }
 
+/** Última altura de conteúdo vista, para reconhecer quando ele encolhe. */
+const lastContent = makeMutable(0);
+
+/**
+ * O conteúdo da lista mudou de tamanho.
+ *
+ * Encolher devolve a barra inteira. Recolher é gesto de rolagem, e uma tela que deixou de
+ * ter o que rolar não tem como desfazer o gesto: era o que sumia com a barra para sempre
+ * ao limpar uma busca — os resultados iam embora, sobrava o estado vazio, e não havia mais
+ * rolagem nenhuma para pedir a barra de volta.
+ *
+ * Só no encolher. Lista virtualizada **cresce** enquanto se rola, e expandir a cada
+ * crescimento anularia o recolhimento no meio de qualquer rolagem longa.
+ */
+export function chromeContent(height: number) {
+  const before = lastContent.value;
+  lastContent.value = height;
+  if (height < before) chromeExpand();
+}
+
 /** Props de qualquer lista vertical: `<FlatList {...chromeScroll} />`. */
 export const chromeScroll = {
   /*
@@ -101,4 +121,5 @@ export const chromeScroll = {
   showsVerticalScrollIndicator: false,
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
     chromeScrollTo(e.nativeEvent.contentOffset.y),
+  onContentSizeChange: (_width: number, height: number) => chromeContent(height),
 };

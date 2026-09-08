@@ -2,7 +2,7 @@
 
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
-type IconProps = { size?: number; color?: string };
+export type IconProps = { size?: number; color?: string };
 
 /**
  * O triângulo de play, com a correção óptica embutida no viewBox.
@@ -314,6 +314,37 @@ export function Lyrics({ size = 16, color = '#F6F1EA' }: IconProps) {
         stroke={color}
         strokeWidth={1.7}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Pessoa: o artista. */
+export function Person({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Circle cx={9} cy={6} r={3.1} stroke={color} strokeWidth={1.6} />
+      <Path
+        d="M3.4 15.4c0-2.7 2.5-4.5 5.6-4.5s5.6 1.8 5.6 4.5"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** Nota: a faixa. */
+export function Note({ size = 16, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Circle cx={5.6} cy={13} r={2.6} stroke={color} strokeWidth={1.6} />
+      <Path
+        d="M8.2 13V3.4l6.2 1.8"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

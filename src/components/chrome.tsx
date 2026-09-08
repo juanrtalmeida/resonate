@@ -42,6 +42,7 @@ import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs, useT } from '@/lib/prefs';
+import { tabTop } from '@/lib/tab-top';
 import { useZoomLaunch } from '@/lib/zoom';
 import { AlbumArt } from './album-art';
 import { EqBars } from './eq-bars';
@@ -394,6 +395,7 @@ function NavItem({
   const router = useRouter();
   const { accent } = usePrefs();
   const t = useT();
+  const { closeAll } = useDetail();
 
   // Só o item ativo abre o rótulo — a largura anima de 0 a 78, como no design.
   //
@@ -417,7 +419,21 @@ function NavItem({
   return (
     <Pressable
       disabled={disabled}
-      onPress={() => item.href && router.replace(item.href)}
+      /*
+        No destino que já está aberto o toque não navega: ele desfaz o que está por cima.
+
+        `router.replace` para a mesma rota não faz nada — nem fecha a camada de álbum ou de
+        artista, que não são rotas, nem devolve a lista ao topo. Era o toque que parecia
+        morto quando já se estava na Biblioteca.
+      */
+      onPress={() => {
+        if (active) {
+          closeAll();
+          tabTop(item.key);
+          return;
+        }
+        if (item.href) router.replace(item.href);
+      }}
       style={{
         flexDirection: 'row',
         alignItems: 'center',

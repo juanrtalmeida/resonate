@@ -135,20 +135,16 @@ export function parseLrc(raw: string): Lyrics {
  * economizaria microssegundos e custaria clareza.
  */
 export function lineAt(lines: LyricLine[], seconds: number): number {
+  /*
+    Worklet: quem pergunta "que linha é agora" é o relógio da letra, na thread de UI, a
+    cada quadro. Marcado aqui, e não contornado no chamador, pelo mesmo motivo do `alpha`
+    em `constants/theme.ts` — em `node --test` a diretiva é só uma string solta.
+  */
+  'worklet';
   let at = -1;
   for (let i = 0; i < lines.length; i++) {
     const time = lines[i].time;
     if (time === null || time > seconds) break;
-    at = i;
-  }
-  return at;
-}
-
-/** O mesmo, para as palavras de uma linha: -1 antes da primeira. */
-export function wordAt(words: LyricWord[], seconds: number): number {
-  let at = -1;
-  for (let i = 0; i < words.length; i++) {
-    if (words[i].time > seconds) break;
     at = i;
   }
   return at;

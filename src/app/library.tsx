@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -23,7 +23,20 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
-import { Carousel, Grid, Heart, LibraryIcon, Search } from '@/components/icons';
+import {
+  Book,
+  Carousel,
+  Disc,
+  Grid,
+  Heart,
+  LibraryIcon,
+  Mic,
+  Note,
+  Person,
+  Queue,
+  Search,
+  type IconProps,
+} from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { Chip, ChipRow } from '@/components/chip';
 import { SectionLabel } from '@/components/section-label';
@@ -35,6 +48,7 @@ import { artworkFor } from '@/lib/artwork';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
+import { useTabTop } from '@/lib/tab-top';
 import { usePlayer } from '@/lib/player';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
@@ -46,16 +60,19 @@ import { spokenOf, type Spoken } from '@/lib/spoken';
 import { useZoomLaunch } from '@/lib/zoom';
 import type { Album, Track } from '@/lib/scan';
 
-/** Os rótulos são chaves de tradução, resolvidas no render — ver `lib/i18n.ts`. */
+/**
+ * As abas. O rótulo é chave de tradução e o ícone é componente — ver `components/chip.tsx`
+ * para por que o ícone não vem pronto.
+ */
 const TABS = [
-  { key: 'albums', label: 'tab.albums' },
-  { key: 'artists', label: 'tab.artists' },
-  { key: 'tracks', label: 'tab.tracks' },
-  { key: 'playlists', label: 'tab.playlists' },
-  { key: 'liked', label: 'tab.liked' },
-  { key: 'podcasts', label: 'tab.podcasts' },
-  { key: 'audiobooks', label: 'tab.audiobooks' },
-] as const satisfies { key: string; label: Key }[];
+  { key: 'albums', label: 'tab.albums', icon: Disc },
+  { key: 'artists', label: 'tab.artists', icon: Person },
+  { key: 'tracks', label: 'tab.tracks', icon: Note },
+  { key: 'playlists', label: 'tab.playlists', icon: Queue },
+  { key: 'liked', label: 'tab.liked', icon: Heart },
+  { key: 'podcasts', label: 'tab.podcasts', icon: Mic },
+  { key: 'audiobooks', label: 'tab.audiobooks', icon: Book },
+] as const satisfies { key: string; label: Key; icon: ComponentType<IconProps> }[];
 
 type TabKey = (typeof TABS)[number]['key'];
 
@@ -86,6 +103,18 @@ export default function LibraryScreen() {
   const { library, artists, trackById, albumById } = useLibrary();
   const { accent, albumView, setAlbumView, liked, likedAlbums, spoken } = usePrefs();
   const t = useT();
+
+  /*
+    Tocar em Biblioteca já estando nela devolve a lista ao topo — ver `lib/tab-top.ts`.
+
+    O `useCallback` importa: o registro guarda a função, e uma nova identidade a cada
+    render faria o efeito reassinar em toda rolagem.
+  */
+  const list = useRef<FlatList<Row>>(null);
+  useTabTop(
+    'Library',
+    useCallback(() => list.current?.scrollToOffset({ offset: 0, animated: true }), [])
+  );
   const { play, enqueueLast } = usePlayer();
   const { playlists } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
@@ -452,6 +481,7 @@ export default function LibraryScreen() {
   return (
     <>
       <FlatList
+        ref={list}
         {...chromeScroll}
         /*
           Segue `shown`, que é diferido — então a lista **não** muda no commit do toque.
@@ -741,6 +771,7 @@ function Tabs({ current, onPick }: { current: TabKey; onPick: (k: TabKey) => voi
         <Chip
           key={tab.key}
           label={t(tab.label)}
+          icon={tab.icon}
           on={tab.key === current}
           accent={accent}
           onPress={() => onPick(tab.key)}

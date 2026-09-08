@@ -9,7 +9,7 @@
 
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
@@ -21,6 +21,7 @@ import { SectionLabel } from '@/components/section-label';
 import { Body, Display, Mono } from '@/components/text';
 import { ACCENTS, C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { chromeScroll } from '@/lib/chrome-scroll';
+import { useTabTop } from '@/lib/tab-top';
 import { hsl, toHsl } from '@/lib/color';
 import { useLibrary } from '@/lib/library';
 import { usePrefs, useLang, useT, type Treatment } from '@/lib/prefs';
@@ -68,10 +69,18 @@ export default function Settings() {
   const t = useT();
   const lang = useLang();
 
+  // Tocar em Ajustes já estando nela volta ao topo.
+  const list = useRef<ScrollView>(null);
+  useTabTop(
+    'Settings',
+    useCallback(() => list.current?.scrollTo({ y: 0, animated: true }), [])
+  );
+
   const current = TREATMENTS.find((t) => t.key === treatment) ?? TREATMENTS[0];
 
   return (
     <ScrollView
+      ref={list}
       {...chromeScroll}
       contentContainerStyle={{
         paddingTop: insets.top + 24,
