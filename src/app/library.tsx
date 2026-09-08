@@ -33,6 +33,7 @@ import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
+import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
@@ -618,13 +619,13 @@ function StripCell({
   badge?: string;
   onLongPress?: () => void;
 }) {
-  const router = useRouter();
+  const { openAlbum } = useDetail();
   const art = artworkFor(album.artist, album.title);
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
 
   return (
     <Pressable
-      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onPress={() => launch(() => openAlbum(album.id))}
       onLongPress={onLongPress}
       delayLongPress={280}
       style={{ width: 112 }}>
@@ -668,14 +669,14 @@ function AlbumCell({
   count: number;
   onLongPress?: () => void;
 }) {
-  const router = useRouter();
+  const { openAlbum } = useDetail();
   const art = artworkFor(album.artist, album.title);
   // A capa é o retângulo de onde a tela do álbum cresce.
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r17);
 
   return (
     <Pressable
-      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onPress={() => launch(() => openAlbum(album.id))}
       onLongPress={onLongPress}
       delayLongPress={280}
       style={{ width: size }}>
@@ -708,14 +709,14 @@ function ArtistRow({
   artist: ReturnType<typeof useLibrary>['artists'][number];
   onLongPress?: () => void;
 }) {
-  const router = useRouter();
+  const { openArtist } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(26);
   const cover = artist.albums.find((a) => a.cover)?.cover ?? null;
 
   return (
     <Pressable
       onPress={() =>
-        launch(() => router.push(`/artist/${encodeURIComponent(artist.name)}`))
+        launch(() => openArtist(artist.name))
       }
       onLongPress={onLongPress}
       delayLongPress={280}
@@ -849,7 +850,7 @@ function CarouselCard({
   x: SharedValue<number>;
   onLongPress?: () => void;
 }) {
-  const router = useRouter();
+  const { openAlbum } = useDetail();
   // A moldura é a origem do zoom, igual à da grade — abrir daqui cresce do mesmo jeito.
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r21);
 
@@ -880,7 +881,7 @@ function CarouselCard({
   return (
     <Animated.View style={[{ width: size }, card]}>
       <Pressable
-        onPress={() => launch(() => router.push(`/album/${album.id}`))}
+        onPress={() => launch(() => openAlbum(album.id))}
         onLongPress={onLongPress}
         delayLongPress={280}>
         <View

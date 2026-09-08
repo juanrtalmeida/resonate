@@ -45,6 +45,7 @@ import { artworkFor } from '@/lib/artwork';
 import { canPickOutput, pickAudioOutput } from '@/lib/audio-output';
 import { RoutePicker, canShowRoutePicker } from '../../modules/audio-route';
 import { chromeReveal } from '@/lib/chrome-scroll';
+import { useDetail } from '@/lib/detail';
 import { canShareToStories } from '@/lib/share';
 import { useElapsed, usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -78,8 +79,12 @@ const ART_TOP = 22;
  */
 const ROOM = 400 + ART_TOP;
 
-export default function PlayerScreen() {
+/**
+ * O Now Playing, como camada. Não é rota — ver `lib/detail.tsx`.
+ */
+export function PlayerScreen() {
   const insets = useSafeAreaInsets();
+  const { closePlayer } = useDetail();
   const { height: screen } = useWindowDimensions();
   const { track, playing, duration, toggle, next, previous, seekTo, canNext, canPrevious, elapsed } =
     usePlayer();
@@ -161,7 +166,7 @@ export default function PlayerScreen() {
 
   if (!track) {
     return (
-      <ZoomScreen background={C.surface}>
+      <ZoomScreen background={C.surface} onClosed={closePlayer}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Body size={14} color={T.t5}>
             Nada tocando.
@@ -207,7 +212,7 @@ export default function PlayerScreen() {
   });
 
   return (
-    <ZoomScreen background={C.surface} dismissable={!showLyrics}>
+    <ZoomScreen background={C.surface} dismissable={!showLyrics} onClosed={closePlayer}>
       <ChromeReveal />
       {/*
         O fundo é a própria capa, borrada — o mesmo `Backdrop` das telas de álbum e de

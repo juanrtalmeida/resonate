@@ -17,8 +17,10 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Chrome } from '@/components/chrome';
+import { Details, PlayerLayer } from '@/components/details';
 import { C } from '@/constants/theme';
 import { LibraryProvider } from '@/lib/library';
+import { DetailProvider } from '@/lib/detail';
 import { PlayerProvider } from '@/lib/player';
 import { PlaylistsProvider } from '@/lib/playlists';
 import { PrefsProvider } from '@/lib/prefs';
@@ -56,6 +58,7 @@ export default function RootLayout() {
         <LibraryProvider>
           <PlaylistsProvider>
           <PlayerProvider>
+            <DetailProvider>
               <Stack
                 screenOptions={{
                   headerShown: false,
@@ -63,41 +66,22 @@ export default function RootLayout() {
                   contentStyle: { backgroundColor: C.bg },
                 }}>
                 {/*
-                  Estas duas telas fazem a própria transição: o stack não anima
-                  (animation: 'none') e a tela de baixo continua montada atrás
-                  (transparentModal).
-
-                  O contentStyle transparente é obrigatório aqui. O padrão acima pinta
-                  C.bg no container de toda tela, e esse fundo opaco fica *atrás* do
-                  conteúdo que esmaece — durante a animação sobrava um retângulo preto no
-                  lugar da tela anterior.
+                  Álbum, artista e o Now Playing **não** são rotas: são camadas deste
+                  layout, e a ordem entre elas é nossa — ver `lib/detail.tsx`. Este Stack
+                  fica só com as páginas: biblioteca, busca, pastas, ajustes, listas,
+                  onboarding e varredura.
                 */}
-                <Stack.Screen
-                  name="album/[id]"
-                  options={{
-                    presentation: 'transparentModal',
-                    animation: 'none',
-                    contentStyle: { backgroundColor: 'transparent' },
-                  }}
-                />
-                <Stack.Screen
-                  name="artist/[name]"
-                  options={{
-                    presentation: 'transparentModal',
-                    animation: 'none',
-                    contentStyle: { backgroundColor: 'transparent' },
-                  }}
-                />
-                <Stack.Screen
-                  name="player"
-                  options={{
-                    presentation: 'transparentModal',
-                    animation: 'none',
-                    contentStyle: { backgroundColor: 'transparent' },
-                  }}
-                />
               </Stack>
+              {/*
+                A ordem é a pilha: telas do router embaixo, camadas de álbum e artista no
+                meio, barra inferior por cima de tudo — e o player numa janela acima, por
+                ser `transparentModal`.
+              */}
+              <Details />
               <Chrome />
+              {/* Depois da barra: é ela o destino do voo da capa ao minimizar o player. */}
+              <PlayerLayer />
+            </DetailProvider>
           </PlayerProvider>
           </PlaylistsProvider>
         </LibraryProvider>

@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
@@ -22,6 +21,7 @@ import { Body, Display } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
+import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -263,11 +263,11 @@ export default function SearchScreen() {
 
 /** A capa do resultado é a origem do zoom, como na grade da biblioteca. */
 function AlbumResult({ album, onLongPress }: { album: Album; onLongPress?: () => void }) {
-  const router = useRouter();
+  const { openAlbum } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(14);
   return (
     <Pressable
-      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onPress={() => launch(() => openAlbum(album.id))}
       onLongPress={onLongPress}
       delayLongPress={280}
       style={row}>
@@ -302,11 +302,11 @@ function ArtistResult({
   cover: string | null;
   onLongPress?: () => void;
 }) {
-  const router = useRouter();
+  const { openArtist } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(26);
   return (
     <Pressable
-      onPress={() => launch(() => router.push(`/artist/${encodeURIComponent(name)}`))}
+      onPress={() => launch(() => openArtist(name))}
       onLongPress={onLongPress}
       delayLongPress={280}
       style={row}>

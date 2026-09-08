@@ -14,7 +14,7 @@
  */
 
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -38,6 +38,7 @@ import {
   chromeReveal,
   chromeSettle,
 } from '@/lib/chrome-scroll';
+import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -88,33 +89,18 @@ function baseOf(pathname: string): string | null {
 }
 
 /**
- * Se a última rota que não era o player estava sobre um detalhe.
+ * A barra inferior. **Uma instância**, no layout raiz, montada uma vez.
  *
- * Guardada pelo mesmo motivo de `lastBase`, e resolve um caso concreto: em `/player` o
- * `detailOf` devolve falso, então a instância que estava visível — a de dentro da tela de
- * álbum ou de artista — desmontava ao abrir o player e só voltava quando o pathname
- * voltasse a ser `/album/...`, isto é, **depois** do voo. Era a pílula aparecendo só no
- * fim da animação, sem a capa ter para onde ir.
+ * Houve uma segunda, renderizada de dentro das telas de álbum e de artista, porque elas
+ * eram `transparentModal` — janela nativa própria no Android, acima da janela do root, que
+ * a barra do root não alcançava. Duas posições da árvore são duas instâncias: a cada abrir
+ * e fechar o mini player desmontava de um lado e remontava do outro, e a thread de JS
+ * travava 547 ms depois de fechar, perdendo o toque desse vão.
+ *
+ * Aquelas telas viraram camadas deste mesmo layout (`lib/detail.tsx`), e o problema foi
+ * embora na origem em vez de ser aparado.
  */
-let lastOverModal = false;
-
-/** Álbum e artista sobem numa janela própria no Android; o resto, não. */
-function detailOf(pathname: string): boolean {
-  return pathname.startsWith('/album') || pathname.startsWith('/artist');
-}
-
-export function Chrome({
-  /**
-   * Renderizada de dentro de uma tela `transparentModal`, e não do root.
-   *
-   * No Android essas telas sobem numa janela própria, acima de tudo o que está no root —
-   * a barra ficava atrás do conteúdo do álbum e do artista mesmo com música tocando. Ali
-   * a única forma de ficar por cima é ser filha da própria tela.
-   */
-  overModal = false,
-}: {
-  overModal?: boolean;
-}) {
+export function Chrome() {
   const pathname = usePathname();
   const { track } = usePlayer();
   const insets = useSafeAreaInsets();
@@ -130,45 +116,19 @@ export function Chrome({
     if (base) lastBase = base;
   }, [base]);
 
-  const onPlayer = pathname.startsWith('/player');
-  const detail = detailOf(pathname);
-  useEffect(() => {
-    if (!onPlayer) lastOverModal = detail;
-  }, [onPlayer, detail]);
-
   /*
-    `/player` entra na lista, e é de propósito.
-
-    O Now Playing é `transparentModal`: ele cobre a barra numa janela própria, então
-    manter a barra montada embaixo não a mostra. O que isso resolve são duas coisas na
-    saída, quando o player esmaece:
-
-    - a barra já está no lugar quando a capa pousa nela, em vez de aparecer de estalo
-      depois que o voo termina;
-    - a capa de origem continua escondida. `useZoomLaunch` guarda esse "escondido" em
-      estado do componente: desmontando a barra ao abrir o player, ela remontava com a
-      capa visível, e o voo terminava pousando em cima de uma capa idêntica já ali.
+    O player não aparece nesta lista porque não é rota: é camada, desenhada acima desta
+    barra. A barra fica montada embaixo dele — é o que dá à capa um lugar para pousar ao
+    minimizar — e apaga por `chromeReveal`, dirigido pelo progresso do zoom do player.
   */
   const visible =
     pathname.startsWith('/library') ||
-    pathname.startsWith('/album') ||
-    pathname.startsWith('/artist') ||
     pathname.startsWith('/search') ||
     pathname.startsWith('/folders') ||
     pathname.startsWith('/playlist') ||
-    pathname.startsWith('/player') ||
     pathname.startsWith('/settings');
 
-  /*
-    Em `/player`, quem manda é de onde ele foi aberto.
-
-    O player cobre a tela numa janela acima de tudo, e a barra que tem de continuar
-    montada embaixo é a mesma que estava visível antes dele — senão a instância troca no
-    meio do caminho, o `hidden` da capa de origem se perde com ela, e a pílula só reaparece
-    quando o pathname volta.
-  */
-  const modal = onPlayer ? lastOverModal : detail;
-  if (!visible || modal !== overModal) return null;
+  if (!visible) return null;
 
   // Numa tela de detalhe fica aceso o destino de onde ela foi aberta.
   const active = base ?? lastBase;
@@ -207,6 +167,9 @@ function Reveal({
           left: 0,
           right: 0,
           bottom: 0,
+          // Acima das camadas de álbum e artista: elas cobrem a tela inteira e, sem isto,
+          // ficavam com o toque mesmo com a barra desenhada por cima.
+          zIndex: 30,
           paddingHorizontal: 14,
           // O inset já reserva a barra de gestos; o que se somava além dele era vão puro.
           paddingBottom: Math.max(insets.bottom, 16) + 4,
@@ -225,6 +188,18 @@ function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
   // Sem faixa, o colapso é desligado na origem em vez de espalhar `if` pelos estilos.
   const collapse = useDerivedValue(() => (hasTrack ? chromeCollapsed.value : 0));
 
+  /*
+    O mini player monta em prioridade baixa.
+
+    A instância da barra troca a cada abrir e fechar de álbum ou artista, e montar este
+    subárvore — capa com gradientes, barras de equalizador animadas, gesto de arraste — era
+    o grosso dos 547 ms de thread travada depois de fechar. `useDeferredValue` põe o mount
+    num segundo passe que o React agenda em prioridade baixa, e que ele pode ceder a quem
+    estiver animando. A pílula de navegação aparece no primeiro passe, então a barra nunca
+    fica vazia.
+  */
+  const withPlayer = useDeferredValue(hasTrack, false);
+
   const nav = useAnimatedStyle(() => ({
     height: (1 - collapse.value) * NAV_HEIGHT,
     marginTop: (1 - collapse.value) * 13,
@@ -233,7 +208,7 @@ function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
 
   return (
     <View>
-      {hasTrack && <MiniPlayer active={active} collapse={collapse} />}
+      {withPlayer && <MiniPlayer active={active} collapse={collapse} />}
       <Animated.View style={[{ overflow: 'hidden', alignItems: 'center' }, nav]}>
         <View
           style={{
@@ -262,10 +237,10 @@ function MiniPlayer({
   active: string;
   collapse: SharedValue<number>;
 }) {
-  const router = useRouter();
   const { track, playing, toggle, duration, elapsed } = usePlayer();
   const { accent } = usePrefs();
   const { albumById } = useLibrary();
+  const { openPlayer: open } = useDetail();
 
   const art = artworkFor(track!.artist, track!.album);
   const cover = albumById(track!.albumId)?.cover ?? null;
@@ -312,7 +287,7 @@ function MiniPlayer({
   */
   const openPlayer = () => {
     chromeSettle();
-    launch(() => router.push('/player'));
+    launch(open);
   };
 
   // Arrastar o mini player para cima abre o Now Playing, o contrário de arrastá-lo para

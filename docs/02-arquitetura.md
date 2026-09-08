@@ -34,16 +34,19 @@ src/
     scan.tsx              progresso da varredura
     folders.tsx           pastas com música, e as faixas de cada uma
     library.tsx           abas Álbuns/Artistas/Faixas/Listas/Favoritos
-    album/[id].tsx        capa hero, transporte, lista de faixas
-    player.tsx            Now Playing, com a aba de letras
     playlist/[id].tsx     faixas da lista, renomear, apagar
     search.tsx            busca por faixa, álbum e artista
     settings.tsx          tratamento, acento, gerenciar biblioteca
     brand.tsx             folha da marca, sem entrada na navegação
+  screens/                telas que **não** são rotas — camadas, ver detail.tsx
+    album.tsx             capa hero, transporte, lista de faixas
+    artist.tsx            hero com parallax, mais tocadas, carrossel de faixas
+    player.tsx            Now Playing, com a aba de letras
   components/
     album-art.tsx         capa procedural em gradientes
     chrome.tsx            mini player + navegação em pílula
     context-menu.tsx      menu do toque longo, e as ações de cada tipo de item
+    details.tsx           empilha as camadas de álbum, artista e player
     eq-bars.tsx           barras de equalizador animadas
     icons.tsx             ícones SVG copiados do protótipo
     logo.tsx              a marca Nought: Wordmark e Mark
@@ -56,6 +59,7 @@ src/
     track-row.tsx         linha de faixa
   lib/
     artwork.ts            hash determinístico → cores, rotação, iniciais, forma de onda
+    detail.tsx            DetailProvider: que camadas estão abertas
     keyboard.ts           altura que o teclado cobre (o Android não encolhe mais a janela)
     library.tsx           LibraryProvider: biblioteca em memória
     lrc.ts                parser de LRC e localização da linha atual
@@ -78,8 +82,22 @@ src/
 ## Rotas e navegação
 
 O roteamento é file-based (expo-router) com `typedRoutes` ligado. Rotas:
-`/`, `/onboarding`, `/scan`, `/library`, `/album/[id]`, `/folders`, `/player`,
-`/playlist/[id]`, `/search`, `/settings`.
+`/`, `/onboarding`, `/scan`, `/library`, `/folders`, `/playlist/[id]`, `/search`,
+`/settings`, `/brand`.
+
+**Álbum, artista e o Now Playing não são rotas.** São camadas do layout raiz, e a ordem
+entre elas é explícita:
+
+```
+<Stack/>        páginas do router
+<Details/>      álbum e artista, empilháveis
+<Chrome/>       barra inferior
+<PlayerLayer/>  Now Playing, acima da barra
+```
+
+O `DetailProvider` (`lib/detail.tsx`) guarda o que está aberto; o botão voltar do Android é
+atendido pelo `ZoomScreen` de cada camada, que já fechava com animação em vez de desmontar
+seco. O preço é não haver link direto para um álbum.
 
 O layout raiz declara `export const unstable_settings = { initialRouteName: 'index' }`.
 Sem isso o React Navigation adota como rota inicial o primeiro `<Stack.Screen>` declarado
@@ -106,6 +124,40 @@ discriminado: par de álbuns, artista, lista, faixa). A grade de álbuns é uma 
 linhas de dois, e não `numColumns={2}` — que só muda com a `key`, e trocar a `key` a cada
 aba remontava a lista e o cabeçalho com ela, onde as abas moram. Nada remonta mais; o que
 precisa reanimar na troca pede `key={tab}` explicitamente.
+
+### Por que essas três telas são camadas, e não rotas
+
+Elas eram rotas com `presentation: 'transparentModal'`, que no Android é uma **janela
+nativa própria** acima da janela do root. Consequência: a barra inferior do root não
+alcançava por cima de álbum e artista, e cada uma tinha de renderizar a própria
+`<Chrome overModal />`. Duas posições da árvore são duas instâncias — o React não
+reconcilia entre pais distintos —, então a cada abrir e fechar o mini player inteiro
+desmontava de um lado e remontava do outro.
+
+Medido com uma sonda de quadros: **547 ms de thread de JS travada** depois de fechar um
+álbum, em dois blocos, e o toque nesse vão era perdido (não chegava ao `Pressable` — nem
+como toque longo). Com o vão morto de ~900 ms, fechar e tocar em outra coisa não funcionava.
+
+Como camadas, tudo fica na mesma janela e a ordem é nossa: uma barra só, montada uma vez, a
+tela de baixo continua visível atrás (é de onde a transição de zoom vive) e não há troca de
+instância. **Vão morto: ~900 ms → abaixo de 150 ms**, o que resta sendo a própria curva de
+saída.
+
+O que foi tentado antes e não resolve, para ninguém repetir:
+
+| tentativa | resultado |
+|---|---|
+| tirar `transparentModal` e deixar rota normal | uma instância, travamento 255 ms — mas a tela de baixo é destacada e o fechamento acontece sobre fundo preto |
+| `animation: 'fade'` com duração | idem: a tela anterior é destacada de qualquer forma |
+| `detachPreviousScreen: false` | não existe nesta versão do react-native-screens |
+| `containedTransparentModal` | cai para `transparentModal` no Android |
+| `pointerEvents: none` na saída | irrelevante: o toque não chega porque o JS está travado |
+| `useDeferredValue` no mount do MiniPlayer | tira ~200 ms, mas só reagenda o trabalho |
+
+E o detalhe que só apareceu ao migrar: o player **também** tinha de virar camada.
+`transparentModal` desenha dentro do `<Stack>`, que é o primeiro irmão do layout, então as
+camadas de álbum e artista ficavam **por cima** dele — tocar no mini player com um álbum
+aberto abria o player escondido atrás da camada.
 
 Quatro caminhos são **abas**: `/library`, `/search`, `/folders`, `/settings`. Álbum,
 artista e lista são **detalhes** empilhados sobre uma aba, e não acendem destino nenhum:

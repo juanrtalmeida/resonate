@@ -1,4 +1,3 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useDeferredValue, useMemo, useState } from 'react';
 import {
   Dimensions,
@@ -18,7 +17,6 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
-import { Chrome } from '@/components/chrome';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, LibraryIcon, Play, Queue as QueueIcon, Shuffle } from '@/components/icons';
@@ -30,6 +28,7 @@ import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
 import { artGradient, artworkFor } from '@/lib/artwork';
 import { chromeScrollTo } from '@/lib/chrome-scroll';
+import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePrefs } from '@/lib/prefs';
@@ -63,8 +62,11 @@ const { height: SCREEN } = Dimensions.get('window');
 /** Altura do hero, como no Music: pouco menos da metade da tela. */
 const HERO = Math.round(SCREEN * 0.42);
 
-export default function ArtistScreen() {
-  const { name } = useLocalSearchParams<{ name: string }>();
+/**
+ * A tela de artista, como camada. Recebe o nome por prop porque não é mais rota — ver
+ * `lib/detail.tsx`.
+ */
+export function ArtistScreen({ name }: { name: string }) {
   const insets = useSafeAreaInsets();
   const { library, artists } = useLibrary();
   const { playsOf } = usePrefs();
@@ -110,6 +112,7 @@ function Artist({
 }) {
   const insets = useSafeAreaInsets();
   const { accent } = usePrefs();
+  const { close } = useDetail();
   const { play, enqueueLast } = usePlayer();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
@@ -267,8 +270,7 @@ function Artist({
   );
 
   return (
-    <>
-    <ZoomScreen background={C.bg} edgeBack>
+    <ZoomScreen background={C.bg} edgeBack onClosed={close}>
       {/* Hero: alvo do zoom vindo da lista e, depois, o pano de fundo do parallax.
           zIndex 0 porque aqui ele precisa ficar *atrás* da lista, que o cobre ao rolar. */}
       <ZoomTarget
@@ -358,13 +360,6 @@ function Artist({
       {sheet}
       {menu}
     </ZoomScreen>
-    {/*
-      A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no
-      Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
-      do root se cala nestas rotas — ver `overModal` em chrome.tsx.
-    */}
-    <Chrome overModal />
-    </>
   );
 }
 
@@ -481,12 +476,12 @@ function AlbumCard({
   album: ReturnType<typeof useLibrary>['artists'][number]['albums'][number];
   onHold: () => void;
 }) {
-  const router = useRouter();
+  const { openAlbum } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(R.r15);
 
   return (
     <Pressable
-      onPress={() => launch(() => router.push(`/album/${album.id}`))}
+      onPress={() => launch(() => openAlbum(album.id))}
       onLongPress={onHold}
       delayLongPress={280}
       style={{ width: 130 }}>

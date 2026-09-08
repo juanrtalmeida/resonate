@@ -1,11 +1,9 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useDeferredValue } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
-import { Chrome } from '@/components/chrome';
 import { Backdrop } from '@/components/backdrop';
 import { ConfirmIcon, useConfirm } from '@/components/confirm';
 import { ChevronLeft, Heart, Play, Queue, Shuffle } from '@/components/icons';
@@ -13,6 +11,7 @@ import { Body, Display, Mono } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
+import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
 import { chromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
@@ -24,8 +23,11 @@ import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose } from '@/lib/zoom';
 
 const NO_TRACKS: Track[] = [];
 
-export default function AlbumScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+/**
+ * A tela de álbum, como camada. Recebe o id por prop porque não é mais rota — ver
+ * `lib/detail.tsx`.
+ */
+export function AlbumScreen({ id }: { id: string }) {
   const { albumById } = useLibrary();
 
   const album = albumById(id);
@@ -42,8 +44,8 @@ export default function AlbumScreen() {
 }
 
 function AlbumDetail({ album }: { album: Album }) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { openArtist, close } = useDetail();
   const { tracksOf } = useLibrary();
   const { play, enqueueLast } = usePlayer();
   const { accent, isAlbumLiked, toggleAlbumLike } = usePrefs();
@@ -64,10 +66,8 @@ function AlbumDetail({ album }: { album: Album }) {
                                     GestureDetector nativo e shared values próprios)
         Backdrop             9 ms  (o `blurRadius` da capa)
 
-    A barra inferior (`<Chrome overModal />`) valia outros 32 ms e **ficou de fora**: ela
-    é o destino do voo da capa quando o player minimiza, e diferi-la fazia a barra sumir
-    e voltar ao abrir a tela, além de deixar o player sem pílula para onde voltar. Trinta
-    milissegundos não pagam isso.
+    A barra inferior não aparece nesta conta: ela é uma instância só, no layout raiz, e não
+    monta nem desmonta ao abrir esta camada — ver `lib/detail.tsx`.
 
     Com o primeiro commit barato o zoom começa logo, e ele corre na thread de UI — imune
     ao que o JavaScript faça depois. As duas peças chegam com a tela já em movimento, no
@@ -103,7 +103,7 @@ function AlbumDetail({ album }: { album: Album }) {
           {album.title}
         </Display>
         <Pressable
-          onPress={() => router.push(`/artist/${encodeURIComponent(album.artist)}`)}
+          onPress={() => openArtist(album.artist)}
           hitSlop={6}
           style={{ marginTop: 6 }}>
           <Body size={14} color={accent} align="center">
@@ -147,8 +147,7 @@ function AlbumDetail({ album }: { album: Album }) {
   );
 
   return (
-    <>
-    <ZoomScreen background={C.bg} edgeBack>
+    <ZoomScreen background={C.bg} edgeBack onClosed={close}>
       {ready && <Backdrop cover={album.cover} color={art.a} />}
       <FlatList
         {...chromeScroll}
@@ -184,13 +183,6 @@ function AlbumDetail({ album }: { album: Album }) {
       {sheet}
       {menu}
     </ZoomScreen>
-    {/*
-      A barra vem de dentro da tela, não do root: estas telas são `transparentModal` e no
-      Android sobem numa janela própria, acima de tudo o que está lá embaixo. A instância
-      do root se cala nestas rotas — ver `overModal` em chrome.tsx.
-    */}
-    <Chrome overModal />
-    </>
   );
 }
 
