@@ -52,6 +52,7 @@ import {
   Play,
   SearchNav,
   SettingsNav,
+  StatsNav,
 } from './icons';
 import { Body } from './text';
 
@@ -59,6 +60,7 @@ import { Body } from './text';
 const NAV = [
   { key: 'Library', label: 'nav.library', Icon: LibraryIcon, href: '/library' },
   { key: 'Search', label: 'nav.search', Icon: SearchNav, href: '/search' },
+  { key: 'Stats', label: 'nav.stats', Icon: StatsNav, href: '/stats' },
   { key: 'Settings', label: 'nav.settings', Icon: SettingsNav, href: '/settings' },
 ] as const;
 
@@ -82,6 +84,7 @@ let lastBase = 'Library';
 /** O destino que este caminho acende, ou null se ele for uma tela de detalhe. */
 function baseOf(pathname: string): string | null {
   if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/stats')) return 'Stats';
   if (pathname.startsWith('/search')) return 'Search';
   if (pathname.startsWith('/library')) return 'Library';
   return null;
@@ -124,6 +127,7 @@ export function Chrome() {
     pathname.startsWith('/library') ||
     pathname.startsWith('/search') ||
     pathname.startsWith('/playlist') ||
+    pathname.startsWith('/stats') ||
     pathname.startsWith('/settings');
 
   if (!visible) return null;
@@ -420,15 +424,19 @@ function NavItem({
     <Pressable
       disabled={disabled}
       /*
-        No destino que já está aberto o toque não navega: ele desfaz o que está por cima.
+        Todo toque na barra desfaz o que está por cima, e só depois decide para onde ir.
 
-        `router.replace` para a mesma rota não faz nada — nem fecha a camada de álbum ou de
-        artista, que não são rotas, nem devolve a lista ao topo. Era o toque que parecia
-        morto quando já se estava na Biblioteca.
+        `closeAll` fora do ramo do destino ativo é o que conserta o bug: álbum, artista e
+        Now Playing são camadas, não rotas (ver `lib/detail.tsx`), então `router.replace`
+        troca a tela **debaixo** delas e a camada fica aberta por cima. Quem tocava em
+        Busca com um álbum aberto continuava vendo o álbum, com a Busca já montada atrás.
+
+        No destino que já está aberto não há para onde navegar — `router.replace` para a
+        mesma rota não faz nada — e o toque devolve a lista ao topo.
       */
       onPress={() => {
+        closeAll();
         if (active) {
-          closeAll();
           tabTop(item.key);
           return;
         }

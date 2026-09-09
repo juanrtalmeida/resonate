@@ -122,8 +122,7 @@ export default function Onboarding() {
           {t('onboarding.lead')}
         </Display>
         <Body size={14.5} color="rgba(246,241,234,.58)" style={{ marginTop: 14, lineHeight: 21.75 }}>
-          Sem login, sem streaming. O Resonate lê os arquivos que já estão no seu aparelho e
-          deixa cada um deles exatamente onde está.
+          {t('onboarding.pitch')}
         </Body>
 
         <View
@@ -155,15 +154,13 @@ export default function Onboarding() {
 
         {state.kind === 'denied' && (
           <Notice accent={accent} onRetry={refresh} title={t('onboarding.denied')}>
-            Libere o acesso a música nas configurações do sistema e toque aqui para tentar de
-            novo.
+            {t('onboarding.deniedHow')}
           </Notice>
         )}
 
         {state.kind === 'unavailable' && (
           <Notice accent={accent} title={t('onboarding.unavailable')}>
-            A leitura da biblioteca de mídia usa um módulo nativo que o Expo Go não tem. Feche
-            e rode `npx expo run:android`. As pastas escolhidas à mão continuam funcionando.
+            {t('onboarding.unavailableHow')}
           </Notice>
         )}
 

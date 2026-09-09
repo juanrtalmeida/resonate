@@ -27,18 +27,46 @@ import {
 import { AppState, Platform } from 'react-native';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
+import { logPlay } from './db';
+import { keep } from './history';
 import { useLibrary } from './library';
 import * as liveActivity from '../../modules/live-activity';
 import { continuationFor, moveItem, shuffle as shuffleTracks } from './queue';
 import { usePrefs } from './prefs';
 import type { Track } from './scan';
+import {
+  expired,
+  fadeVolume,
+  SLEEP_OFF,
+  startClock,
+  stopsAtTrackEnd,
+  type Sleep,
+} from './sleep';
 import { isSpoken, type SpokenMarks } from './spoken';
+import { portable } from './storage';
 
 type Saved = { trackIds: string[]; index: number; position: number };
 
+/**
+ * Escreve o volume do player.
+ *
+ * Uma função de módulo, e não `player.volume = x` no lugar: o volume é estado do objeto
+ * nativo — como `currentTime` — e o React Compiler lê a atribuição direta como mutação de
+ * um valor de hook. Passar o player para fora tira a escrita do escopo que ele analisa.
+ */
+const setVolume = (target: { volume: number }, value: number): void => {
+  target.volume = value;
+};
+
 const queueFile = () => new File(Paths.document, 'queue.json');
 
-/** Lê a fila persistida e a remapeia para as faixas da biblioteca atual. */
+/**
+ * Lê a fila persistida e a remapeia para as faixas da biblioteca atual.
+ *
+ * Os ids passam por `portable` porque uma fila gravada antes da mudança de `lib/paths.ts`
+ * guarda URIs absolutas: sem a conversão nenhuma delas encontra faixa, e o app abriria sem
+ * mini player depois de uma reinstalação.
+ */
 function restore(trackById: (id: string) => Track | undefined): {
   queue: Track[];
   index: number;
@@ -48,7 +76,7 @@ function restore(trackById: (id: string) => Track | undefined): {
     const file = queueFile();
     if (file.exists) {
       const saved = JSON.parse(file.textSync()) as Saved;
-      const queue = saved.trackIds.map(trackById).filter((t) => !!t);
+      const queue = saved.trackIds.map((id) => trackById(portable(id))).filter((t) => !!t);
       if (queue.length) {
         return {
           queue,
@@ -99,6 +127,10 @@ type PlayerApi = {
    * usa `useElapsed()`, que re-renderiza só a folha que o chama.
    */
   elapsed: SharedValue<number>;
+  /** Temporizador de desligar. Ver `lib/sleep.ts`. */
+  sleep: Sleep;
+  /** Minutos arma o relógio; `'track'` para no fim da faixa; `null` desliga. */
+  setSleep: (choice: number | 'track' | null) => void;
   /** Só para useAudioPlayerStatus em quem precisa do tempo decorrido. */
   player: ReturnType<typeof useAudioPlayer>;
 };
@@ -223,6 +255,94 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [player]
   );
 
+  /*
+    Quanto da faixa atual foi realmente ouvido, para o histórico.
+
+    Somando os passos do relógio, e não `currentTime` no fim: quem busca para trás e ouve
+    o refrão três vezes ouviu três refrões, e quem pula para os últimos trinta segundos
+    não ouviu a faixa inteira. A soma é a única leitura que sobrevive a um seek.
+
+    Em ref, e não em estado: isto é escrito cinco vezes por segundo, e acordar o React
+    nessa cadência é exatamente o que `elapsed` existe para evitar.
+  */
+  const listenedRef = useRef(0);
+
+  /**
+   * Fecha a escuta da faixa que está saindo.
+   *
+   * O contador zera aqui em todo caso — inclusive quando não deu tempo para contar — para
+   * que o que sobrou de uma faixa nunca seja creditado à seguinte.
+   */
+  const logListen = useCallback(() => {
+    const item = nowRef.current;
+    const seconds = listenedRef.current;
+    listenedRef.current = 0;
+    if (!item || !keep(seconds)) return;
+    try {
+      logPlay({
+        at: Date.now(),
+        trackId: item.id,
+        albumId: item.albumId,
+        artist: item.artist,
+        album: item.album,
+        title: item.title,
+        seconds,
+      });
+    } catch {
+      // banco indisponível: perder uma linha de estatística não pode parar a reprodução
+    }
+  }, []);
+
+  /*
+    Temporizador de desligar.
+
+    Em estado, e não em preferências: ele não sobrevive ao fechamento do app de propósito
+    — ver o cabeçalho de `lib/sleep.ts`. A ref existe porque quem precisa dele é o ouvinte
+    de status, assinado uma vez e portanto cego a re-renderizações.
+  */
+  const [sleep, setSleepState] = useState<Sleep>(SLEEP_OFF);
+  const sleepRef = useRef(sleep);
+  useEffect(() => {
+    sleepRef.current = sleep;
+  }, [sleep]);
+
+  /**
+   * Pausa e devolve o volume ao lugar.
+   *
+   * Restaurar é obrigatório: o esmaecimento deixa o player mudo, e sem isto o próximo
+   * play sairia sem som nenhum — um defeito que só apareceria na manhã seguinte.
+   */
+  const sleepNow = useCallback(() => {
+    player.pause();
+    setVolume(player, 1);
+    setSleepState(SLEEP_OFF);
+  }, [player]);
+
+  /**
+   * O relógio, conferido de segundo em segundo.
+   *
+   * Um `setTimeout` até `endsAt` seria mais barato e não serve: o esmaecimento precisa dos
+   * últimos oito segundos, e no Android o cronômetro de um app em segundo plano não é
+   * confiável o bastante para um disparo único. Uma passada por segundo também se corrige
+   * sozinha depois de o sistema suspender o app.
+   */
+  useEffect(() => {
+    if (sleep.kind !== 'clock') return;
+    const tick = setInterval(() => {
+      const now = Date.now();
+      if (expired(sleep, now)) {
+        sleepNow();
+        return;
+      }
+      setVolume(player, fadeVolume((sleep.endsAt - now) / 1000));
+    }, 1000);
+    return () => {
+      clearInterval(tick);
+      // Sair daqui por cancelamento, e não por vencimento, tem de desfazer o esmaecimento.
+      setVolume(player, 1);
+    };
+  }, [sleep, player, sleepNow]);
+
   /** Aponta o player para a faixa e, se for tocar, publica os metadados. */
   const cue = useCallback(
     (item: Track, autoplay: boolean, position = 0) => {
@@ -241,8 +361,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     (next: Track[], at: number, autoplay: boolean) => {
       const item = next[at];
       if (!item) return;
-      // Sair de um episódio guarda onde ele parou, antes de o player apontar para outro.
-      if (item.id !== nowRef.current?.id) remember();
+      // Sair de um episódio guarda onde ele parou, e fecha a escuta dele no histórico,
+      // antes de o player apontar para outro.
+      if (item.id !== nowRef.current?.id) {
+        remember();
+        logListen();
+      }
       setQueue(next);
       setIndex(at);
       nowRef.current = item;
@@ -252,7 +376,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Podcast e audiolivro voltam de onde pararam; canção começa do começo.
       cue(item, autoplay, isSpoken(item, marksRef.current) ? progressRef.current(item.id) : 0);
     },
-    [cue, remember]
+    [cue, remember, logListen]
   );
 
   const step = useCallback(
@@ -290,13 +414,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    * repeat 'one' ainda deve avançar, senão o botão pareceria quebrado.
    */
   const advance = useCallback(() => {
+    // O temporizador "fim da faixa" vence até a repetição: quem o armou pediu para parar
+    // aqui, e repetir a mesma faixa a noite toda é o oposto disso.
+    if (stopsAtTrackEnd(sleepRef.current)) {
+      sleepNow();
+      return;
+    }
     if (repeat === 'one') {
       player.seekTo(0).catch(() => {});
       player.play();
       return;
     }
     step(1);
-  }, [repeat, player, step]);
+  }, [repeat, player, step, sleepNow]);
 
   const advanceRef = useRef(advance);
   useEffect(() => {
@@ -312,17 +442,33 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const elapsed = useSharedValue(0);
   /** Se o último status dizia que estava tocando: é a borda entre tocando e pausado. */
   const wasPlaying = useRef(false);
+  /** A posição do status anterior, para medir o passo do relógio. */
+  const lastTime = useRef(0);
 
   useEffect(() => {
     const sub = player.addListener('playbackStatusUpdate', (status) => {
+      /*
+        Soma o passo do relógio no que já foi ouvido desta faixa.
+
+        Só passos para a frente e menores que o dobro do intervalo de status: um salto
+        maior que isso é um seek, ou o app voltando do segundo plano, e nem um nem outro
+        é tempo de escuta. É o que impede que arrastar a fita até o fim credite a faixa
+        inteira ao histórico.
+      */
+      const listened = status.currentTime - lastTime.current;
+      lastTime.current = status.currentTime;
+      if (status.playing && listened > 0 && listened < 0.5) listenedRef.current += listened;
+
       // Escrever num shared value não re-renderiza nada: os três setState abaixo só
       // disparam quando o valor muda de verdade, e o tempo não passa por eles.
       elapsed.value = status.currentTime;
       setPlaying(status.playing);
       if (status.isLoaded && status.duration > 0) setLoadedDuration(status.duration);
       if (status.didJustFinish) {
-        // Terminou: a marca sai. Antes do avanço, que já troca a faixa de `nowRef`.
+        // Terminou: a marca sai e a escuta entra no histórico. Antes do avanço, que já
+        // troca a faixa de `nowRef`.
         remember(true);
+        logListen();
         wasPlaying.current = false;
         advanceRef.current();
         return;
@@ -335,7 +481,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       wasPlaying.current = status.playing;
     });
     return () => sub.remove();
-  }, [player, elapsed, remember]);
+  }, [player, elapsed, remember, logListen]);
 
   /**
    * Ir para segundo plano também guarda.
@@ -345,10 +491,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') remember();
+      if (state !== 'active') {
+        remember();
+        // A escuta acumulada também: o app pode não voltar. Fecha uma linha e começa
+        // outra se a reprodução continuar — o total de segundos é o mesmo.
+        logListen();
+      }
     });
     return () => sub.remove();
-  }, [remember]);
+  }, [remember, logListen]);
 
   // Carrega no player o que a sessão anterior estava tocando, pausado e na posição certa.
   // Uma vez só: repetir isto no meio da sessão jogaria o usuário de volta ao ponto salvo.
@@ -495,6 +646,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         player.seekTo(at).catch(() => {});
       },
       elapsed,
+      sleep,
+      setSleep: (choice) => {
+        // Desarmar no meio de um esmaecimento tem de devolver o volume na hora, e não só
+        // na limpeza do efeito: entre uma coisa e outra cabe um quadro mudo.
+        setVolume(player, 1);
+        if (choice === null) return setSleepState(SLEEP_OFF);
+        if (choice === 'track') return setSleepState({ kind: 'track' });
+        setSleepState(startClock(choice, Date.now()));
+      },
     }),
     [
       track,
@@ -510,6 +670,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       continuation,
       repeat,
       elapsed,
+      sleep,
     ]
   );
 

@@ -1,0 +1,35 @@
+name: Idea
+description: Something Resonate could do
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing: `docs/07-roadmap-e-divida.md` lists what is already planned, and
+        the **Known limits** section of the README lists what is deliberately absent.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you want to be able to do
+      description: The situation you are in, not the control you imagine. Those differ more often than they look.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround, even an ugly one. It usually says more about the shape of the feature than the request does.
+
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Offline
+      description: >
+        Resonate has no network, no account and no catalogue. Anything that needs one of
+        those is out of scope, however good the idea — cover art lookup, recommendations,
+        scrobbling, lyrics download.
+      options:
+        - label: This works with only what is already on the device
+          required: true

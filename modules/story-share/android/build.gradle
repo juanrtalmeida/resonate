@@ -2,11 +2,11 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'maven-publish'
 
-group = 'com.nossapesca.storyshare'
+group = 'com.yukito.storyshare'
 version = '0.1.0'
 
 android {
-  namespace 'com.nossapesca.storyshare'
+  namespace 'com.yukito.storyshare'
   compileSdk safeExtGet('compileSdkVersion', 36)
 
   defaultConfig {

@@ -19,6 +19,7 @@
     "expo-router": "~57.0.19",
     "expo-sharing": "~57.0.18",
     "expo-splash-screen": "~57.0.8",
+    "expo-sqlite": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.3",
     "react": "19.2.3",
@@ -47,7 +48,12 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "node --test src/lib/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "license": "GPL-3.0-or-later",
   "private": true
 }

@@ -41,6 +41,7 @@ const DICT = {
   // barra inferior
   'nav.library': { pt: 'Biblioteca', en: 'Library', es: 'Biblioteca', ja: 'ライブラリ', zh: '音乐库' },
   'nav.search': { pt: 'Busca', en: 'Search', es: 'Buscar', ja: '検索', zh: '搜索' },
+  'nav.stats': { pt: 'Escuta', en: 'Listening', es: 'Escucha', ja: '再生', zh: '收听' },
   'nav.settings': { pt: 'Ajustes', en: 'Settings', es: 'Ajustes', ja: '設定', zh: '设置' },
 
   // abas da biblioteca
@@ -62,6 +63,8 @@ const DICT = {
     zh: '{tracks} 首 · {albums} 张 · {hours} 小时',
   },
   'lib.recent': { pt: 'Recém-encontrados', en: 'Just found', es: 'Recién encontrados', ja: '最近見つかった', zh: '最近发现' },
+  /** A etiqueta na capa dos recém-encontrados. Caixa alta, uma palavra só. */
+  'lib.newBadge': { pt: 'NOVO', en: 'NEW', es: 'NUEVO', ja: 'NEW', zh: '新' },
   'lib.allAlbums': { pt: 'Todos os álbuns', en: 'All albums', es: 'Todos los álbumes', ja: 'すべてのアルバム', zh: '全部专辑' },
   'lib.likedAlbums': { pt: 'Álbuns curtidos', en: 'Liked albums', es: 'Álbumes favoritos', ja: 'お気に入りのアルバム', zh: '收藏的专辑' },
   'lib.likedTracks': { pt: 'Faixas curtidas', en: 'Liked tracks', es: 'Pistas favoritas', ja: 'お気に入りの曲', zh: '收藏的歌曲' },
@@ -141,6 +144,8 @@ const DICT = {
   'count.folders': { pt: '{n} pastas', en: '{n} folders', es: '{n} carpetas', ja: '{n}フォルダ', zh: '{n} 个文件夹' },
   'count.folders_one': { pt: '1 pasta', en: '1 folder', es: '1 carpeta', ja: '1フォルダ', zh: '1 个文件夹' },
   'count.files': { pt: '{n} arquivos', en: '{n} files', es: '{n} archivos', ja: '{n}ファイル', zh: '{n} 个文件' },
+  /** Só o substantivo, em caixa alta, sob o percentual da varredura. */
+  'count.filesUnit': { pt: 'ARQUIVOS', en: 'FILES', es: 'ARCHIVOS', ja: 'ファイル', zh: '个文件' },
 
   // unidades em caixa alta, no cabeçalho do álbum
   'unit.tracks': { pt: 'FAIXAS', en: 'TRACKS', es: 'PISTAS', ja: '曲', zh: '首' },
@@ -161,6 +166,90 @@ const DICT = {
   'session.resume': { pt: 'Retomar sessão {at}', en: 'Resume session {at}', es: 'Retomar sesión {at}', ja: 'セッション{at}を再開', zh: '继续第 {at} 段' },
   'session.size': { pt: '{n} min', en: '{n} min', es: '{n} min', ja: '{n}分', zh: '{n} 分钟' },
   'session.off': { pt: 'Desligar', en: 'Turn off', es: 'Desactivar', ja: 'オフ', zh: '关闭' },
+
+  // temporizador de desligar
+  'sleep.label': { pt: 'Temporizador', en: 'Sleep timer', es: 'Temporizador', ja: 'スリープタイマー', zh: '睡眠定时' },
+  'sleep.off': { pt: 'Desligado', en: 'Off', es: 'Apagado', ja: 'オフ', zh: '关闭' },
+  'sleep.min': { pt: '{n} min', en: '{n} min', es: '{n} min', ja: '{n}分', zh: '{n} 分钟' },
+  'sleep.track': {
+    pt: 'Fim da faixa',
+    en: 'End of track',
+    es: 'Fin de la pista',
+    ja: '曲の終わりまで',
+    zh: '本曲结束',
+  },
+  'sleep.left': {
+    pt: 'Pausa em {min} min',
+    en: 'Pauses in {min} min',
+    es: 'Pausa en {min} min',
+    ja: 'あと{min}分で一時停止',
+    zh: '{min} 分钟后暂停',
+  },
+  'sleep.leftSeconds': {
+    pt: 'Pausa em {s} s',
+    en: 'Pauses in {s} s',
+    es: 'Pausa en {s} s',
+    ja: 'あと{s}秒で一時停止',
+    zh: '{s} 秒后暂停',
+  },
+  'sleep.atEnd': {
+    pt: 'Pausa quando esta faixa acabar',
+    en: 'Pauses when this track ends',
+    es: 'Pausa cuando termine esta pista',
+    ja: 'この曲が終わったら一時停止',
+    zh: '本曲结束后暂停',
+  },
+
+  // estatísticas de escuta
+  'stats.title': { pt: 'Sua escuta', en: 'Your listening', es: 'Tu escucha', ja: 'あなたの再生', zh: '你的收听' },
+  'stats.open': { pt: 'Estatísticas', en: 'Listening stats', es: 'Estadísticas', ja: '再生の統計', zh: '收听统计' },
+  'stats.openBlurb': {
+    pt: 'Contado no aparelho, do que você ouviu. Nada sai daqui.',
+    en: 'Counted on the device, from what you played. Nothing leaves it.',
+    es: 'Calculado en el dispositivo, con lo que escuchaste. Nada sale de aquí.',
+    ja: '再生した内容から端末内で集計します。外には出ません。',
+    zh: '完全在设备上根据你的播放记录统计，不会外传。',
+  },
+  'stats.span.week': { pt: '7 dias', en: '7 days', es: '7 días', ja: '7日', zh: '7 天' },
+  'stats.span.month': { pt: '30 dias', en: '30 days', es: '30 días', ja: '30日', zh: '30 天' },
+  'stats.span.year': { pt: '1 ano', en: '1 year', es: '1 año', ja: '1年', zh: '1 年' },
+  'stats.span.all': { pt: 'Tudo', en: 'All time', es: 'Todo', ja: 'すべて', zh: '全部' },
+  'stats.pick': { pt: 'Escolher…', en: 'Pick…', es: 'Elegir…', ja: '選ぶ…', zh: '选择…' },
+  'stats.pickHint': {
+    pt: 'Toque num mês. Toque em outro para pegar o intervalo entre os dois.',
+    en: 'Tap a month. Tap another to take the range between the two.',
+    es: 'Toca un mes. Toca otro para tomar el intervalo entre ambos.',
+    ja: '月をタップ。もう一つタップすると、その間の期間になります。',
+    zh: '点一个月份。再点一个可以选中两者之间的区间。',
+  },
+  'stats.range': { pt: '{from} até {to}', en: '{from} to {to}', es: '{from} a {to}', ja: '{from}〜{to}', zh: '{from} 至 {to}' },
+  'stats.hours': { pt: 'horas', en: 'hours', es: 'horas', ja: '時間', zh: '小时' },
+  'stats.minutes': { pt: 'minutos', en: 'minutes', es: 'minutos', ja: '分', zh: '分钟' },
+  'stats.tracksCounted': { pt: 'faixas', en: 'tracks', es: 'pistas', ja: '曲', zh: '首' },
+  'stats.artistsCounted': { pt: 'artistas', en: 'artists', es: 'artistas', ja: 'アーティスト', zh: '艺人' },
+  'stats.when': { pt: 'Quando você ouve', en: 'When you listen', es: 'Cuándo escuchas', ja: '聴く時間帯', zh: '你什么时候听' },
+  'stats.peak': {
+    pt: 'Mais entre {hour}h e {next}h',
+    en: 'Mostly between {hour}:00 and {next}:00',
+    es: 'Sobre todo entre las {hour} y las {next}',
+    ja: '{hour}時から{next}時に集中',
+    zh: '主要在 {hour} 点到 {next} 点',
+  },
+  'stats.topArtists': { pt: 'Mais ouvidos', en: 'Most played artists', es: 'Más escuchados', ja: 'よく聴くアーティスト', zh: '最常听的艺人' },
+  'stats.topAlbums': { pt: 'Álbuns mais ouvidos', en: 'Most played albums', es: 'Álbumes más escuchados', ja: 'よく聴くアルバム', zh: '最常听的专辑' },
+  'stats.topTracks': { pt: 'Faixas mais ouvidas', en: 'Most played tracks', es: 'Pistas más escuchadas', ja: 'よく聴く曲', zh: '最常听的歌曲' },
+  'stats.plays': { pt: '{n} escutas · {min} min', en: '{n} plays · {min} min', es: '{n} escuchas · {min} min', ja: '{n}回 · {min}分', zh: '{n} 次 · {min} 分钟' },
+  'stats.plays_one': { pt: '1 escuta · {min} min', en: '1 play · {min} min', es: '1 escucha · {min} min', ja: '1回 · {min}分', zh: '1 次 · {min} 分钟' },
+  'stats.empty': { pt: 'Nada contado ainda', en: 'Nothing counted yet', es: 'Nada contado aún', ja: 'まだ記録がありません', zh: '还没有记录' },
+  'stats.emptyBody': {
+    pt: 'Uma faixa entra na conta depois de meio minuto tocando. Ouça alguma coisa e volte aqui.',
+    en: 'A track counts after half a minute of playing. Listen to something and come back.',
+    es: 'Una pista cuenta tras medio minuto sonando. Escucha algo y vuelve.',
+    ja: '30秒以上再生すると記録されます。何か聴いてから戻ってきてください。',
+    zh: '播放满半分钟才会计入。听点什么再回来看看。',
+  },
+  'stats.forget': { pt: 'Apagar o histórico', en: 'Erase the history', es: 'Borrar el historial', ja: '履歴を消去', zh: '清除记录' },
+  'stats.forgetDone': { pt: 'Apagado.', en: 'Erased.', es: 'Borrado.', ja: '消去しました。', zh: '已清除。' },
 
   // artista
   'artist.notFound': { pt: 'Artista não encontrado', en: 'Artist not found', es: 'Artista no encontrado', ja: 'アーティストが見つかりません', zh: '找不到艺人' },
@@ -230,6 +319,7 @@ const DICT = {
   'settings.language': { pt: 'Idioma', en: 'Language', es: 'Idioma', ja: '言語', zh: '语言' },
   'settings.languageAuto': { pt: 'Automático', en: 'Automatic', es: 'Automático', ja: '自動', zh: '自动' },
   'settings.library': { pt: 'Biblioteca', en: 'Library', es: 'Biblioteca', ja: 'ライブラリ', zh: '音乐库' },
+
   'settings.rescan': { pt: 'Varrer de novo', en: 'Scan again', es: 'Escanear otra vez', ja: '再スキャン', zh: '重新扫描' },
   'settings.scanned': {
     pt: '{tracks} faixas · última varredura em {date}',
@@ -385,6 +475,13 @@ const DICT = {
   'onboarding.first': { pt: 'Primeira execução', en: 'First run', es: 'Primera vez', ja: '初回起動', zh: '首次运行' },
   'onboarding.lead': { pt: 'Vamos achar o que já está aqui.', en: 'Let us find what is already here.', es: 'Vamos a encontrar lo que ya está aquí.', ja: 'すでにある音楽を探しましょう。', zh: '先找出设备里已有的音乐。' },
   'onboarding.looking': { pt: 'Vendo o que tem no aparelho…', en: 'Seeing what is on the device…', es: 'Viendo qué hay en el dispositivo…', ja: '端末の中を確認中…', zh: '正在查看设备内容…' },
+  'onboarding.pitch': {
+    pt: 'Sem login, sem streaming. O Resonate lê os arquivos que já estão no seu aparelho e deixa cada um deles exatamente onde está.',
+    en: 'No login, no streaming. Resonate reads the files already on your device and leaves every one of them exactly where it is.',
+    es: 'Sin cuenta, sin streaming. Resonate lee los archivos que ya están en tu dispositivo y deja cada uno exactamente donde está.',
+    ja: 'ログインもストリーミングもありません。Resonate は端末にすでにあるファイルを読み、どれも元の場所のままにします。',
+    zh: '无需登录，也不做流媒体。Resonate 读取设备上已有的文件，并让每个文件留在原处。',
+  },
   'onboarding.privacy': {
     pt: 'Nada é enviado. Os arquivos ficam exatamente onde estão.',
     en: 'Nothing is uploaded. The files stay exactly where they are.',
@@ -412,6 +509,20 @@ const DICT = {
   'onboarding.found': { pt: '{files} · {folders}', en: '{files} · {folders}', es: '{files} · {folders}', ja: '{files} · {folders}', zh: '{files} · {folders}' },
   'onboarding.denied': { pt: 'Sem acesso aos arquivos de áudio', en: 'No access to audio files', es: 'Sin acceso a los archivos de audio', ja: '音声ファイルへのアクセスがありません', zh: '没有访问音频文件的权限' },
   'onboarding.unavailable': { pt: 'Este app precisa de um development build', en: 'This app needs a development build', es: 'Esta app necesita un development build', ja: 'このアプリには development build が必要です', zh: '此应用需要 development build' },
+  'onboarding.deniedHow': {
+    pt: 'Libere o acesso a música nas configurações do sistema e toque aqui para tentar de novo.',
+    en: 'Allow access to music in the system settings, then tap here to try again.',
+    es: 'Permite el acceso a la música en los ajustes del sistema y toca aquí para reintentar.',
+    ja: 'システム設定で音楽へのアクセスを許可してから、ここをタップしてやり直してください。',
+    zh: '请在系统设置中允许访问音乐，然后点这里重试。',
+  },
+  'onboarding.unavailableHow': {
+    pt: 'A leitura da biblioteca de mídia usa um módulo nativo que o Expo Go não tem. Feche e rode `npx expo run:android`. As pastas escolhidas à mão continuam funcionando.',
+    en: 'Reading the media library uses a native module that Expo Go does not ship. Close it and run `npx expo run:android`. Folders picked by hand keep working.',
+    es: 'Leer la biblioteca de medios usa un módulo nativo que Expo Go no trae. Ciérralo y ejecuta `npx expo run:android`. Las carpetas elegidas a mano siguen funcionando.',
+    ja: 'メディアライブラリの読み込みには Expo Go に含まれないネイティブモジュールが必要です。終了して `npx expo run:android` を実行してください。手動で選んだフォルダはそのまま使えます。',
+    zh: '读取媒体库需要 Expo Go 不包含的原生模块。请关闭它并运行 `npx expo run:android`。手动选择的文件夹仍然可用。',
+  },
 
   // botões comuns
   'common.cancel': { pt: 'Cancelar', en: 'Cancel', es: 'Cancelar', ja: 'キャンセル', zh: '取消' },

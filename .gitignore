@@ -18,6 +18,20 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Artefatos de build. Um APK commitado inflou este repositório em 34 MB uma vez;
+# o histórico foi reescrito para tirá-lo, e estas linhas existem para não repetir.
+*.apk
+*.aab
+*.ipa
+*.app.zip
+
+# Saída de compilação dos módulos nativos. As pastas /ios e /android da raiz já são
+# ignoradas por serem geradas, mas as de dentro de modules/ não eram — e 137 arquivos
+# de build do story-share estavam versionados.
+modules/*/android/build/
+modules/*/android/.gradle/
+modules/*/ios/build/
+
 # Metro
 .metro-health-check*
 

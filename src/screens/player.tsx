@@ -27,6 +27,7 @@ import {
   Disc,
   Heart,
   Lyrics as LyricsIcon,
+  Moon,
   Next,
   Output,
   Pause,
@@ -58,6 +59,7 @@ import { type Lyrics } from '@/lib/lrc';
 import { forgetLyrics, useLyrics } from '@/lib/lyrics';
 import { CONTINUATIONS, continuationFor } from '@/lib/queue';
 import { importLrc } from '@/lib/scan';
+import { leftOf, SLEEP_MINUTES, type Sleep } from '@/lib/sleep';
 import { useLibrary } from '@/lib/library';
 import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose, useZoomProgress } from '@/lib/zoom';
 
@@ -114,6 +116,18 @@ export function PlayerScreen() {
   useEffect(() => {
     q.value = withTiming(showQueue ? 1 : 0, { duration: 320 });
   }, [showQueue, q]);
+
+  /**
+   * Trava o arrasto para baixo com a letra **ou** a fila abertas.
+   *
+   * A fila é um `ScrollView` comum, sem "bounce" no topo no Android: arrastar para baixo
+   * ali, com nada mais para rolar, deixava o toque livre para o gesto de fechar por baixo
+   * — o player minimizava sem o usuário pedir. Só `lyricsOn` travava antes; a fila lia o
+   * arrasto como se fosse a capa.
+   */
+  const dismissBlocked = useDerivedValue<number>(() =>
+    lyricsOn.value > 0.5 || q.value > 0.5 ? 1 : 0
+  );
 
   // Derivado na thread de UI: a fita e a forma de onda leem isto sem passar pelo React.
   const progress = useDerivedValue(() =>
@@ -234,9 +248,9 @@ export function PlayerScreen() {
     <ZoomScreen
       background={C.surface}
       dismissable
-      /* Arrastar para baixo fecha, menos com a letra aberta: lá o vertical pertence à
-         rolagem do texto. Por shared value para a troca não reconstruir o gesto. */
-      dragBlocked={lyricsOn}
+      /* Arrastar para baixo fecha, menos com a letra ou a fila abertas — ver
+         `dismissBlocked`. Por shared value para a troca não reconstruir o gesto. */
+      dragBlocked={dismissBlocked}
       onClosed={closePlayer}>
       <ChromeReveal />
       {/*
@@ -656,16 +670,12 @@ function CloseButton() {
 const ART_MINI = 92;
 
 /**
- * Os dois relógios são folhas de propósito: `useElapsed` re-renderiza quem o chama a
- * cada 200 ms, e aqui isso custa um texto — não a tela inteira do Now Playing.
- */
-/**
  * O segundo decorrido, e só ele.
  *
- * Vem do shared value, não de `useElapsed()`: aquele é o status do expo-audio, que chega
- * várias vezes por segundo e re-renderizava os dois contadores a cada leitura — trabalho
- * na thread de JS para redesenhar um texto que muda uma vez por segundo. A reação corre
- * na thread de UI e só acorda o React quando o segundo inteiro vira.
+ * Uma folha de propósito, e alimentada pelo shared value. A posição chega várias vezes
+ * por segundo; ler isso em estado do React re-renderizaria os dois contadores a cada
+ * leitura — trabalho na thread de JS para redesenhar um texto que muda uma vez por
+ * segundo. A reação corre na thread de UI e só acorda o React quando o segundo vira.
  */
 function useSecond(): number {
   const { elapsed } = usePlayer();
@@ -738,10 +748,15 @@ function useTilt() {
  * sentido — e o seletor em cartões grandes comia o espaço da própria lista.
  */
 function QueuePanel() {
-  const { track, queue, index, play, removeAt, reorder, toggleShuffle } = usePlayer();
+  const { track, queue, index, play, removeAt, reorder, toggleShuffle, sleep, setSleep } =
+    usePlayer();
   const { library } = useLibrary();
   const { accent, shuffle, repeat, setRepeat, continuation, setContinuation } = usePrefs();
   const t = useT();
+
+  // As opções do temporizador aparecem sob demanda: cinco tempos sempre à vista roubariam
+  // do que a fila tem a mostrar, e armar um sleep timer é raro.
+  const [pickingSleep, setPickingSleep] = useState(false);
 
   const upcoming = queue.slice(index + 1);
 
@@ -794,9 +809,29 @@ function QueuePanel() {
             color={repeat === 'off' ? T.t5 : accent}
           />
         </Mode>
+        <Mode
+          on={sleep.kind !== 'off'}
+          accent={accent}
+          onPress={() => setPickingSleep((open) => !open)}>
+          <Moon size={18} color={sleep.kind === 'off' ? T.t5 : accent} />
+        </Mode>
 
         <View style={{ flex: 1 }} />
+
+        {/* O que está armado, em texto: um ícone aceso não diz quanto falta. */}
+        {sleep.kind !== 'off' && <SleepStatus sleep={sleep} accent={accent} />}
       </View>
+
+      {pickingSleep && (
+        <SleepPicker
+          sleep={sleep}
+          accent={accent}
+          onChoose={(choice) => {
+            setSleep(choice);
+            setPickingSleep(false);
+          }}
+        />
+      )}
 
       {/* Abas do modo de continuação: as quatro opções à vista, sem ciclar às cegas. */}
       <View
@@ -891,6 +926,97 @@ function QueuePanel() {
             {t(continuation === 'off' ? 'player.queueEnds' : 'player.noMatch')}
           </Body>
         )}
+      </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * Quanto falta para a pausa, em texto.
+ *
+ * Um relógio próprio de um segundo, e só enquanto está montado: o tempo do temporizador
+ * não é o tempo da reprodução, e pendurá-lo no status do player faria a conta andar aos
+ * saltos de 200 ms — ou parar junto com o áudio pausado, que é quando ele mais importa.
+ */
+function SleepStatus({ sleep, accent }: { sleep: Sleep; accent: string }) {
+  const t = useT();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (sleep.kind !== 'clock') return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [sleep]);
+
+  if (sleep.kind === 'track') {
+    return (
+      <Body size={11.5} weight={500} color={accent}>
+        {t('sleep.atEnd')}
+      </Body>
+    );
+  }
+
+  const left = leftOf(sleep, now) ?? 0;
+  return (
+    <Body size={11.5} weight={500} color={accent}>
+      {left >= 60
+        ? t('sleep.left', { min: Math.ceil(left / 60) })
+        : t('sleep.leftSeconds', { s: left })}
+    </Body>
+  );
+}
+
+/** Os tempos oferecidos, mais "fim da faixa" e o desligar. */
+function SleepPicker({
+  sleep,
+  accent,
+  onChoose,
+}: {
+  sleep: Sleep;
+  accent: string;
+  onChoose: (choice: number | 'track' | null) => void;
+}) {
+  const t = useT();
+
+  const options: { key: string; label: string; on: boolean; choice: number | 'track' | null }[] = [
+    { key: 'off', label: t('sleep.off'), on: sleep.kind === 'off', choice: null },
+    ...SLEEP_MINUTES.map((n) => ({
+      key: `${n}`,
+      label: t('sleep.min', { n }),
+      on: sleep.kind === 'clock' && sleep.minutes === n,
+      choice: n as number | 'track' | null,
+    })),
+    { key: 'track', label: t('sleep.track'), on: sleep.kind === 'track', choice: 'track' as const },
+  ];
+
+  return (
+    <View style={{ marginTop: 10 }}>
+      <Mono size={9.5} weight={500} tracking={0.14} caps color={T.t42}>
+        {t('sleep.label')}
+      </Mono>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 7, paddingVertical: 8 }}>
+        {options.map((option) => (
+          <Pressable
+            key={option.key}
+            onPress={() => onChoose(option.choice)}
+            style={{
+              height: 32,
+              paddingHorizontal: 14,
+              borderRadius: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: option.on ? alpha(accent, 0.18) : C.card,
+              borderWidth: 1,
+              borderColor: option.on ? alpha(accent, 0.5) : 'transparent',
+            }}>
+            <Body size={12.5} weight={600} color={option.on ? T.full : T.t62}>
+              {option.label}
+            </Body>
+          </Pressable>
+        ))}
       </ScrollView>
     </View>
   );

@@ -1,4 +1,4 @@
-package com.nossapesca.storyshare
+package com.yukito.storyshare
 
 import android.content.Intent
 import android.net.Uri

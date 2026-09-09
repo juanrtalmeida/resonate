@@ -6,9 +6,11 @@
  * inferior numa instância só. Ver `lib/detail.tsx` para o porquê.
  */
 
+import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { useDetail } from '@/lib/detail';
+import { playerOccluding } from '@/lib/zoom';
 import { AlbumScreen } from '@/screens/album';
 import { ArtistScreen } from '@/screens/artist';
 import { PlayerScreen } from '@/screens/player';
@@ -37,14 +39,31 @@ export function Details() {
 /**
  * O Now Playing, acima da barra.
  *
- * Renderizado depois da `<Chrome/>` no layout raiz de propósito: a barra tem de ficar
- * **embaixo** dele, porque é ela o destino do voo da capa quando o player minimiza.
+ * `zIndex: 40`, acima do `zIndex: 30` da barra (`chrome.tsx`) — precisa ficar por cima
+ * dela mesmo enquanto a barra reaparece durante o fechamento, porque é ela o destino do
+ * voo da capa quando o player minimiza.
  */
 export function PlayerLayer() {
   const { playerOpen } = useDetail();
+  // Ver `playerOccluding` em `lib/zoom.tsx`: quem lê é o gesto de borda das camadas
+  // por baixo, para não confundir o toque que atravessa o player saindo com um pedido
+  // de voltar da tela deles.
+  useEffect(() => {
+    playerOccluding.value = playerOpen;
+  }, [playerOpen]);
   if (!playerOpen) return null;
   return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        // Acima do zIndex: 30 da barra (`chrome.tsx`): sem isto a barra, ao reaparecer
+        // durante o fechamento, cobria a capa ainda em voo de volta para o pouso nela.
+        zIndex: 40,
+      }}>
       <PlayerScreen />
     </View>
   );

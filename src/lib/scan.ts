@@ -6,9 +6,12 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
 import { hash } from './artwork';
+import { clearLibrary, importJson, loadLibrary, saveLibrary } from './db';
+import { absolute, portable } from './storage';
 import {
   findTopAtom,
   fromPath,
+  headerBytes,
   id3Length,
   parseDuration,
   parseTags,
@@ -23,7 +26,17 @@ import {
 import { listAudioFiles, type AudioFile } from './sources';
 
 export type Track = {
+  /**
+   * Identidade estável da faixa, e chave de tudo o que se guarda sobre ela: curtidas,
+   * contagem de reprodução, progresso, listas, fila.
+   *
+   * É o caminho do arquivo em **forma portátil** (ver `lib/paths.ts`) — dentro da pasta
+   * do app no iOS vira `doc://…`, e fora dela é o caminho estável de sempre. Era a URI
+   * absoluta, o que amarrava todo esse histórico ao UUID do container do iOS: quando ele
+   * trocava, favoritos, progresso e listas ficavam órfãos.
+   */
   id: string;
+  /** O caminho absoluto de agora, para abrir o arquivo. Nunca vai para o disco assim. */
   uri: string;
   /** Nome do arquivo, mostrado em mono na lista de faixas. */
   file: string;
@@ -77,9 +90,6 @@ export const EMPTY: Library = { tracks: [], albums: [], folders: [], scannedAt: 
 
 const libraryFile = () => new File(Paths.document, 'library.json');
 
-/** Quanto ler do início do arquivo quando o formato não declara o tamanho da tag. */
-const HEADER_BYTES = 256 * 1024;
-
 const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
   const out = new Uint8Array(a.length + b.length);
   out.set(a);
@@ -132,8 +142,8 @@ export async function readTags(uri: string): Promise<{ tags: Tags; duration: num
       if (bytes) return { tags: parseTags(bytes, uri), duration: parseDuration(bytes, size) };
     }
 
-    // ID3 declara o próprio tamanho: lê exatamente isso em vez de chutar.
-    const bytes = read(0, Math.min(id3Length(head) || HEADER_BYTES, size));
+    // Quanto ler é decisão de `headerBytes`, em tags.ts, onde tem teste.
+    const bytes = read(0, headerBytes(head, size));
     return { tags: parseTags(bytes, uri), duration: parseDuration(bytes, size) };
   } catch {
     // content:// sem acesso direto, arquivo removido, permissão negada
@@ -249,8 +259,9 @@ async function toTrack(
   artists.add(tags.artist);
 
   const track: Track = {
-    // A URI já é única por construção — um hash de 32 bits não é.
-    id: f.uri,
+    // O caminho já é único por construção — um hash de 32 bits não é. Portátil, porque
+    // é ele que vai sobreviver a uma troca de container no iOS.
+    id: portable(f.uri),
     uri: f.uri,
     file: f.name,
     folder: f.folder,
@@ -265,12 +276,17 @@ async function toTrack(
 }
 
 /**
- * Letras escolhidas à mão ficam em `lyrics/`, nomeadas pelo hash da URI da faixa.
+ * Letras escolhidas à mão ficam em `lyrics/`, nomeadas pelo hash do id da faixa.
  * É o único jeito de associar um .lrc a uma faixa sem escrever no arquivo do usuário.
+ *
+ * Pelo id, e não pela URI: a URI carrega o caminho do container do iOS, e um hash dela
+ * mudaria de nome a cada reinstalação — a letra importada sumiria sem deixar rastro.
  */
+const lrcName = (track: Track) => `${hash(track.id).toString(36)}.lrc`;
+
 function importedLrc(track: Track): File | null {
   try {
-    const file = new File(Paths.document, 'lyrics', `${hash(track.uri).toString(36)}.lrc`);
+    const file = new File(Paths.document, 'lyrics', lrcName(track));
     return file.exists ? file : null;
   } catch {
     return null;
@@ -284,7 +300,7 @@ export async function importLrc(track: Track): Promise<boolean> {
   try {
     const folder = new Directory(Paths.document, 'lyrics');
     if (!folder.exists) folder.create({ intermediates: true });
-    const target = new File(folder, `${hash(track.uri).toString(36)}.lrc`);
+    const target = new File(folder, lrcName(track));
     if (target.exists) target.delete();
     await picked.result.copy(target);
     return true;
@@ -405,20 +421,65 @@ export async function readLyrics(track: Track): Promise<string | null> {
   return (await readTags(track.uri)).tags.lyrics;
 }
 
-export function load(): Library | null {
+/*
+  A fronteira entre o que estava no disco e o que fica na memória.
+
+  Na memória tudo é caminho absoluto, porque é isso que abre arquivo e desenha imagem. No
+  `library.json` das versões anteriores havia uma mistura: caminhos absolutos amarrados ao
+  container do iOS daquela instalação. `up` normaliza tudo na entrada — e como
+  `toPortable` é idempotente, ela serve de conversão e de migração ao mesmo tempo.
+
+  A ida não mora mais aqui: quem grava agora é `lib/db.ts`, que converte na hora de
+  escrever cada coluna.
+*/
+const up = (library: Library): Library => ({
+  ...library,
+  tracks: library.tracks.map((t) => ({
+    // Uma biblioteca gravada antes desta mudança tem o id absoluto: normalizar aqui é o
+    // que faz curtidas e listas antigas continuarem a encontrar a faixa.
+    ...t,
+    id: portable(t.id),
+    uri: absolute(t.uri),
+    folder: absolute(t.folder),
+  })),
+  albums: library.albums.map((a) => ({
+    ...a,
+    cover: a.cover && absolute(a.cover),
+    trackIds: a.trackIds.map(portable),
+  })),
+  folders: library.folders.map(absolute),
+});
+
+/**
+ * A `library.json` das versões anteriores.
+ *
+ * Existe só para a migração — ver `importJson` em `lib/db.ts`. Depois que ela roda uma
+ * vez o arquivo não está mais lá, e esta função nunca mais devolve nada.
+ */
+function readJson(): Library | null {
   try {
     const file = libraryFile();
     if (!file.exists) return null;
     const parsed = JSON.parse(file.textSync()) as Library;
-    return parsed.tracks?.length ? parsed : null;
+    return parsed.tracks?.length ? up(parsed) : null;
   } catch {
     return null; // JSON corrompido: melhor varrer de novo do que travar o boot
   }
 }
 
+export function load(): Library | null {
+  try {
+    // Uma passada: se houver um JSON de antes, ele entra no banco e some.
+    importJson(readJson);
+    return loadLibrary();
+  } catch {
+    return null; // banco ilegível: melhor varrer de novo do que travar o boot
+  }
+}
+
 export function save(library: Library): void {
   try {
-    libraryFile().write(JSON.stringify(library));
+    saveLibrary(library);
   } catch {
     // sem espaço em disco: a biblioteca em memória continua válida nesta sessão
   }
@@ -426,8 +487,7 @@ export function save(library: Library): void {
 
 export function clear(): void {
   try {
-    const file = libraryFile();
-    if (file.exists) file.delete();
+    clearLibrary();
   } catch {
     // nada a fazer
   }

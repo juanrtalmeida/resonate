@@ -2,23 +2,76 @@
 projeto: Resonate
 tipo: roadmap
 tags: [roadmap, divida-tecnica, ponytail, pendencias, ideias]
-atualizado: 2026-09-06
+atualizado: 2026-09-08
 ---
 
 # Roadmap e dívida do Resonate
 
-Resonate é o player de música offline descrito em `01-contexto.md`. Tudo o que estava
-planejado — fase 1 e fase 2 — está entregue. Este arquivo registra o que sobrou de ideia
-e os atalhos deliberados que o código carrega.
+Resonate é o player de música offline descrito em `01-contexto.md`. Este arquivo registra
+o que sobrou de ideia e os atalhos deliberados que o código carrega.
+
+## O que foi entregue depois da fase 2
+
+As quatro ideias que estavam listadas aqui saíram, junto de uma migração de
+armazenamento:
+
+- **Reordenar faixas dentro de uma lista.** No modo de edição da lista, com o mesmo
+  pegador de arraste da fila — a `QueueRow` é literalmente a mesma linha. Ver
+  `lib/playlists.tsx` (`moveTrack`) e `app/playlist/[id].tsx`.
+- **Fila visível e editável.** Já existia desde a fase 2, dentro do próprio Now Playing.
+- **Temporizador de desligar.** Cinco a sessenta minutos, ou fim da faixa, com
+  esmaecimento de oito segundos antes da pausa. `lib/sleep.ts` é puro e testado; quem
+  conta os minutos é o `PlayerProvider`.
+- **Estatísticas de escuta.** Um destino da barra inferior (`app/stats.tsx`) sobre a
+  tabela `plays` do banco. `lib/history.ts` é a agregação, pura e testada.
+- **A biblioteca saiu do JSON e foi para o SQLite** (`lib/db.ts`).
 
 ## O que ficou para depois
 
-Nenhum item do plano original está pendente. O que resta é ideia, não dívida:
+- **As telas consultarem o banco em vez de receberem a lista pronta.** A biblioteca está
+  em SQLite, mas continua materializada em memória no boot; ver o `ponytail:` em
+  `loadLibrary`. É a metade que falta da migração, e é ela que tira o teto das ~20 mil
+  faixas.
+- **Varredura incremental.** O banco já permite: comparar `mtime` e reler só o que mudou,
+  em vez de reler o acervo inteiro a cada varredura. Hoje toda varredura é completa.
+- **Equalizador.** Tentado duas vezes nesta rodada, não entregue. Ver abaixo.
 
-- **Reordenar faixas dentro de uma lista.** Hoje elas ficam na ordem em que foram
-  adicionadas.
-- **Fila visível e editável.** O app tem fila; não há tela para ver ou reordenar.
-- **Equalizador**, **temporizador de desligar**, **estatísticas de escuta.**
+## O equalizador, e por que ele ainda não existe
+
+Equalizar é filtrar o sinal, e filtrar exige estar no caminho do som. O `expo-audio` não
+oferece nem uma coisa nem outra: não expõe a sessão de áudio do ExoPlayer que embrulha, e
+não tem grafo onde entrar.
+
+**Primeira tentativa — módulo nativo no Android.** `android.media.audiofx.Equalizer` sobre
+a sessão `0`, a mistura de saída do aparelho. Funciona onde o fabricante deixa, e o preço
+é alto: equaliza o som de *todos* os apps, boa parte do Android 9+ recusa, e no iOS não há
+equivalente. Escrito e descartado.
+
+**Segunda tentativa — trocar o motor por `react-native-audio-api`.** Com a reprodução num
+grafo Web Audio nosso, cada banda vira um `BiquadFilterNode` no caminho do sinal: mesmo
+DSP nas duas plataformas e nada dependendo do fabricante. A biblioteca compila com o SDK
+57 e a RN 0.86, o app sobe, a biblioteca carrega, a fila restaura e o `play()` muda o
+estado — **mas a posição não avança**. Não é o grafo: desligando o roteamento o sintoma
+continua igual.
+
+O que **não** foi descartado antes de reverter, e é por onde recomeçar:
+
+1. **O arquivo de teste era FLAC.** Se o binário pré-compilado vier sem FFmpeg, ou sem
+   FLAC, o sintoma é exatamente este — o container abre, a posição é reportada uma vez, e
+   nenhuma amostra decodifica. **Testar com MP3 e M4A é o primeiro passo.**
+2. **`babel.config.js` e `metro.config.js` não existem neste projeto.** A biblioteca usa um
+   runtime de worklets próprio; vale conferir se ela pede alguma configuração que os
+   padrões do Expo não cobrem.
+3. **`AVAudioEngine` no Simulador do iOS.** É o motor dela, e é instável ali; o
+   `expo-audio` usa `AVPlayer`, que funciona. Pode ser que só num aparelho real se veja a
+   verdade.
+
+O trabalho está escrito e foi revertido para não deixar o app sem tocar música. Refazê-lo
+é reaplicar cinco arquivos — `lib/player.tsx`, `lib/audio-graph.ts`, `lib/eq.ts`,
+`lib/eq.test.ts` e `components/equalizer.tsx`.
+
+O que a troca traria junto, além do equalizador: **próxima e anterior na notificação**,
+registradas aqui como impossíveis com o `expo-audio` 57.
 
 ## Dívida deliberada marcada no código
 
@@ -29,7 +82,8 @@ caminho de saída. Para listar: `grep -rn "ponytail:" src/`.
 |---|---|---|
 | `lib/player.tsx` | troca de faixa por `replace()` não é gapless | quando `AudioPlaylist` ganhar controles de tela de bloqueio |
 | `lib/player.tsx` | notificação só com seek, sem próxima/anterior | quando `expo-audio` expuser esses controles |
-| `lib/scan.ts` | biblioteca inteira em memória, num JSON só | acima de ~20 mil faixas, migrar para `expo-sqlite` |
+| `lib/db.ts` | biblioteca materializada em memória | acima de ~20 mil faixas, as telas consultam o banco |
+| `lib/db.ts` | esquema com `CREATE TABLE IF NOT EXISTS`, sem versão | no dia em que uma coluna existente mudar |
 | `lib/sources.ts` | um `getInfo()` por arquivo no Android | se a listagem inicial ficar lenta demais |
 | `lib/tags.ts` | APE, WMA e ID3v2.2 não cobertos | se aparecerem arquivos desses formatos |
 | `lib/tags.ts` | OGG com cabeçalho de comentários em várias páginas | se houver arquivos assim na prática |
@@ -51,11 +105,14 @@ caminho de saída. Para listar: `grep -rn "ponytail:" src/`.
 - **`.lrc` ao lado do arquivo não é legível no Android.** `READ_MEDIA_AUDIO` dá acesso a
   arquivos de mídia, não a arquivos comuns. Ali a letra embutida na tag é a única fonte.
   `lrcFile()` trata a falha em silêncio.
-- **Não dá para escolher um `.lrc` avulso** para uma faixa sem letra. O protótipo desenha
-  o botão; implementá-lo exige decidir onde guardar o arquivo e como associá-lo à faixa.
+- **O histórico de escuta não distingue quem ouviu.** Um aparelho, um histórico. Não há
+  conta, e não vai haver.
 
 ## Pendências de validação
 
 Nada disso roda sem um development build e arquivos reais. O roteiro está em
-`06-plataformas.md`. O item de maior risco é o formato das URIs do MediaStore no Android
-(`file://` vs `content://`), descrito lá.
+`06-plataformas.md`. Dois itens de maior risco:
+
+- **O formato das URIs do MediaStore no Android** (`file://` vs `content://`), descrito lá.
+- **Nada do que entrou nesta rodada foi visto no Android.** Varredura, banco, histórico,
+  temporizador e reordenação de listas foram exercitados só no Simulador do iOS.

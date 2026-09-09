@@ -360,7 +360,7 @@ export default function LibraryScreen() {
         <AlbumStrip
           title={t('lib.recent')}
           albums={albums.slice(0, 8)}
-          badge="NOVO"
+          badge={t('lib.newBadge')}
           onHold={(album) => openMenu({ kind: 'album', album })}
         />
       )}
@@ -921,6 +921,7 @@ function ArtistRow({
   artist: ReturnType<typeof useLibrary>['artists'][number];
   onLongPress?: () => void;
 }) {
+  const t = useT();
   const { openArtist } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(26);
   const cover = artist.albums.find((a) => a.cover)?.cover ?? null;
@@ -947,7 +948,7 @@ function ArtistRow({
           {artist.name}
         </Body>
         <Body size={11.5} color={T.t42} style={{ marginTop: 2 }}>
-          {artist.albums.length} {artist.albums.length === 1 ? 'álbum' : 'álbuns'}
+          {t('count.albums', { n: artist.albums.length })}
         </Body>
       </View>
     </Pressable>

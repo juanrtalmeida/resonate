@@ -150,7 +150,7 @@ export function PlaylistSheet({
                       {playlist.name}
                     </Body>
                     <Mono size={10.5} color={T.t4} style={{ marginTop: 3 }}>
-                      {playlist.trackIds.length} FAIXAS
+                      {playlist.trackIds.length} {t('unit.tracks')}
                     </Mono>
                   </View>
                   {/* Um alvo redondo em vez de um "+" solto: diz onde tocar e mostra

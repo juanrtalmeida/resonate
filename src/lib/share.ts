@@ -28,7 +28,7 @@
  * Instagram poder lê-la. Não existe mais.
  */
 
-import { Platform } from 'react-native';
+import { PixelRatio, Platform } from 'react-native';
 
 import { canOpenStory } from '../../modules/story-share';
 
@@ -58,14 +58,27 @@ export const canShareToStories = canOpenStory;
  * Sem `resize` a captura sai no tamanho nativo da View — que é o que a etiqueta quer, e
  * o alfa fora dos cantos arredondados vem de graça no PNG. O card achatado, esse sim,
  * precisa dos 1080x1920 que o Instagram pede.
+ *
+ * **`width` e `height` do view-shot são pontos, não pixels.** Pedir 1080x1920 direto
+ * saía multiplicado pela densidade da tela: 3240x5760 num aparelho @3x, um PNG de 20 MB
+ * indo para a folha de compartilhamento. Dividir pela densidade é o que faz o arquivo ter
+ * a resolução pedida.
+ *
+ * O card achatado sai em JPEG: ele é opaco por construção — fundo, capa, nome e marca já
+ * assados — e um PNG de 1080x1920 disso são megabytes de gradiente sem nada a ganhar. A
+ * etiqueta continua PNG, que ali o alfa dos cantos é o ponto.
  */
 async function capture(ref: React.RefObject<unknown>, resize: boolean): Promise<string> {
   const { captureRef } = await import('react-native-view-shot');
+  if (!resize) return captureRef(ref, { format: 'png', quality: 1, result: 'tmpfile' });
+
+  const density = PixelRatio.get();
   return captureRef(ref, {
-    format: 'png',
-    quality: 1,
+    format: 'jpg',
+    quality: 0.92,
     result: 'tmpfile',
-    ...(resize ? { width: OUT_WIDTH, height: OUT_HEIGHT } : null),
+    width: OUT_WIDTH / density,
+    height: OUT_HEIGHT / density,
   });
 }
 
@@ -118,9 +131,9 @@ async function toSheet(file: string, title: string): Promise<boolean> {
     const Sharing = await import('expo-sharing');
     if (!(await Sharing.isAvailableAsync())) return false;
     await Sharing.shareAsync(file, {
-      mimeType: 'image/png',
+      mimeType: 'image/jpeg',
       dialogTitle: title,
-      UTI: 'public.png',
+      UTI: 'public.jpeg',
     });
     return true;
   } catch {

@@ -9,6 +9,7 @@ import { NO_EDITS, type Edits, type TrackEdit } from './edits';
 import { resolveLang, translate, type Key, type Lang } from './i18n';
 import type { Continuation } from './queue';
 import type { SpokenMarks } from './spoken';
+import { absolute, portable, portableAll, portableKeys } from './storage';
 
 export type Treatment = 'ember' | 'vinyl' | 'wave';
 
@@ -98,11 +99,39 @@ function read(): Prefs {
   try {
     const file = prefsFile();
     if (!file.exists) return DEFAULTS;
-    return migrate({ ...DEFAULTS, ...(JSON.parse(file.textSync()) as Partial<Prefs>) });
+    return up(migrate({ ...DEFAULTS, ...(JSON.parse(file.textSync()) as Partial<Prefs>) }));
   } catch {
     return DEFAULTS;
   }
 }
+
+/*
+  Caminhos, na entrada e na saída.
+
+  Quase tudo aqui é chaveado pelo id da faixa, que é o caminho dela em forma portátil —
+  ver `lib/paths.ts`. Este arquivo é anterior a essa decisão, então as chaves de uma
+  instalação existente são URIs absolutas amarradas ao container antigo do iOS. Converter
+  na leitura é o que faz curtidas, contagens e progresso continuarem a encontrar a faixa
+  depois de o container mudar; como `toPortable` é idempotente, converter de novo não
+  custa nada e não corrói.
+
+  `sources` é o caso oposto: a interface e a varredura falam em caminho absoluto, porque é
+  com ele que se compara pasta. Então ele desce portátil e sobe absoluto — e é o único.
+
+  `granted`, `likedAlbums`, `spoken` e `sessions` passam intactos: SAF e ids de álbum já
+  são estáveis, e as conversões os deixam como estão.
+*/
+const up = (prefs: Prefs): Prefs => ({
+  ...prefs,
+  liked: portableAll(prefs.liked),
+  heard: portableAll(prefs.heard),
+  plays: portableKeys(prefs.plays),
+  progress: portableKeys(prefs.progress),
+  edits: { ...prefs.edits, tracks: portableKeys(prefs.edits.tracks) },
+  sources: prefs.sources.map(absolute),
+});
+
+const down = (prefs: Prefs): Prefs => ({ ...prefs, sources: prefs.sources.map(portable) });
 
 /**
  * Curtida de álbum morava na mesma lista das faixas. Separar sem perder o que já estava
@@ -177,7 +206,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
       try {
-        prefsFile().write(JSON.stringify(next));
+        prefsFile().write(JSON.stringify(down(next)));
       } catch {
         // sem espaço em disco: vale só para esta sessão
       }

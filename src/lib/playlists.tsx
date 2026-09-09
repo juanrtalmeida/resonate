@@ -7,11 +7,13 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import { hash } from './artwork';
+import { moveItem } from './queue';
+import { absolute, portable, portableAll } from './storage';
 
 export type Playlist = {
   id: string;
   name: string;
-  /** URIs das faixas, na ordem em que foram adicionadas. */
+  /** Ids das faixas, na ordem escolhida pelo usuário. Ver `Track.id` em `lib/scan.ts`. */
   trackIds: string[];
   createdAt: number;
   /** Capa escolhida pelo usuário, já copiada para dentro do app. */
@@ -20,12 +22,26 @@ export type Playlist = {
 
 const file = () => new File(Paths.document, 'playlists.json');
 
+/*
+  Os ids de faixa e a capa passam pela conversão de caminho — ver `lib/paths.ts`. Uma
+  lista montada antes dessa mudança guarda URIs absolutas amarradas ao container antigo
+  do iOS, e sem isto ela abriria vazia depois de uma reinstalação: as faixas existem, mas
+  com outro id. `toPortable` é idempotente, então isto vale de migração e de rotina.
+*/
+const up = (p: Playlist): Playlist => ({
+  ...p,
+  trackIds: portableAll(p.trackIds),
+  cover: p.cover ? absolute(p.cover) : p.cover,
+});
+
+const down = (p: Playlist): Playlist => ({ ...p, cover: p.cover ? portable(p.cover) : p.cover });
+
 function read(): Playlist[] {
   try {
     const f = file();
     if (!f.exists) return [];
     const parsed = JSON.parse(f.textSync()) as Playlist[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(up) : [];
   } catch {
     return [];
   }
@@ -74,6 +90,13 @@ type PlaylistsApi = {
   /** Não duplica: uma faixa aparece uma vez por lista. */
   addTracks: (id: string, trackIds: string[]) => void;
   removeTrack: (id: string, trackId: string) => void;
+  /**
+   * Move uma faixa de posição dentro da lista.
+   *
+   * A ordem de uma lista é escolha de quem a montou — é o que separa uma lista de um
+   * filtro. Até aqui ela era a ordem de inserção, e não havia como mudá-la.
+   */
+  moveTrack: (id: string, from: number, to: number) => void;
   /** Abre o seletor do sistema e guarda a imagem escolhida como capa. */
   pickCover: (id: string) => Promise<void>;
   clearCover: (id: string) => void;
@@ -87,7 +110,7 @@ export function PlaylistsProvider({ children }: { children: ReactNode }) {
   const commit = useCallback((next: Playlist[]) => {
     setPlaylists(next);
     try {
-      file().write(JSON.stringify(next));
+      file().write(JSON.stringify(next.map(down)));
     } catch {
       // sem espaço em disco: vale só para esta sessão
     }
@@ -119,6 +142,10 @@ export function PlaylistsProvider({ children }: { children: ReactNode }) {
         })),
       removeTrack: (id, trackId) =>
         patch(id, (p) => ({ ...p, trackIds: p.trackIds.filter((t) => t !== trackId) })),
+      // `moveItem` é o mesmo da fila: reordenar uma lista e reordenar a fila são a mesma
+      // operação, e ele já não muta e já ignora índice fora do intervalo.
+      moveTrack: (id, from, to) =>
+        patch(id, (p) => ({ ...p, trackIds: moveItem(p.trackIds, from, to) })),
       pickCover: async (id) => {
         const uri = await copyCover(id);
         if (uri) patch(id, (p) => ({ ...p, cover: uri }));

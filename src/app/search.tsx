@@ -301,6 +301,7 @@ export default function SearchScreen() {
 
 /** A capa do resultado é a origem do zoom, como na grade da biblioteca. */
 function AlbumResult({ album, onLongPress }: { album: Album; onLongPress?: () => void }) {
+  const t = useT();
   const { openAlbum } = useDetail();
   const { ref, launch, style: originStyle } = useZoomLaunch(14);
   return (
@@ -323,7 +324,7 @@ function AlbumResult({ album, onLongPress }: { album: Album; onLongPress?: () =>
           {album.title}
         </Body>
         <Body size={11.5} color={T.t42} numberOfLines={1} style={{ marginTop: 2 }}>
-          {album.artist} · {album.trackIds.length} faixas
+          {album.artist} · {t('count.tracks', { n: album.trackIds.length })}
         </Body>
       </View>
     </Pressable>

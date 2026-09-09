@@ -8,6 +8,8 @@ import test from 'node:test';
 import {
   findTopAtom,
   fromPath,
+  HEADER_BYTES,
+  headerBytes,
   parseDuration,
   parseTags,
   pictureFromApic,
@@ -211,6 +213,50 @@ test('duração MP3 CBR sem Xing', () => {
   // 128 kbps: 160000 bytes = 10 s.
   const bytes = cat([0xff, 0xfb, 0x90, 0x00], new Uint8Array(64));
   assert.equal(parseDuration(bytes, 160000), 10);
+});
+
+// -------------------------------------------------- janela lida do cabeçalho
+
+/**
+ * Um MP3 com tag ID3 grande — o formato de todo arquivo com capa embutida — seguido do
+ * primeiro frame MPEG com Xing.
+ *
+ * É a forma exata do bug que `headerBytes` existe para não deixar voltar: lendo só o que
+ * a tag declara, o frame fica fora do buffer e a faixa aparece sem duração.
+ */
+const mp3WithBigTag = () => {
+  const art = new Uint8Array(60_000); // finge uma capa
+  const frames = cat(id3Frame('TIT2', 'Nightglass', true), 'APIC', synchsafe(art.length), [0, 0], art);
+  const tag = cat('ID3', [4, 0, 0], synchsafe(frames.length), frames);
+  // 383 frames * 1152 / 44100 = 10,0 s
+  const frame = cat([0xff, 0xfb, 0x90, 0x00], new Uint8Array(32), 'Xing', be32(1), be32(383));
+  return { file: cat(tag, frame), tagLength: tag.length };
+};
+
+test('a janela do cabeçalho alcança o primeiro frame MPEG', () => {
+  const { file, tagLength } = mp3WithBigTag();
+  const head = file.slice(0, 12);
+  const window = headerBytes(head, file.length);
+
+  assert.ok(window > tagLength, 'a janela precisa passar do fim da tag');
+  assert.equal(Math.round(parseDuration(file.slice(0, window), file.length)! * 10) / 10, 10);
+});
+
+test('regressão: ler só a tag ID3 perdia a duração', () => {
+  const { file, tagLength } = mp3WithBigTag();
+  // Era isto que `readTags` fazia. Fica no teste para nomear o que não pode voltar.
+  assert.equal(parseDuration(file.slice(0, tagLength), file.length), null);
+});
+
+test('sem tag ID3 a janela é o teto, limitada pelo arquivo', () => {
+  const small = cat([0xff, 0xfb, 0x90, 0x00], new Uint8Array(64));
+  assert.equal(headerBytes(small.slice(0, 12), small.length), small.length);
+  assert.equal(headerBytes(small.slice(0, 12), 9_000_000), HEADER_BYTES);
+});
+
+test('a janela nunca passa do tamanho do arquivo', () => {
+  const { file } = mp3WithBigTag();
+  assert.equal(headerBytes(file.slice(0, 12), 100), 100);
 });
 
 // -------------------------------------------------------------------- letras

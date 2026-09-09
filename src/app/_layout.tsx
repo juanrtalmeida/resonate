@@ -79,7 +79,10 @@ export default function RootLayout() {
               */}
               <Details />
               <Chrome />
-              {/* Depois da barra: é ela o destino do voo da capa ao minimizar o player. */}
+              {/*
+                O `zIndex` de cada camada (`details.tsx`, `chrome.tsx`) é quem decide a
+                pilha, não a ordem aqui — mas a ordem ainda segue a pilha para leitura.
+              */}
               <PlayerLayer />
             </DetailProvider>
           </PlayerProvider>

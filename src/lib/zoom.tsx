@@ -33,8 +33,10 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   interpolate,
+  makeMutable,
   measure,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedRef,
   useAnimatedStyle,
   useSharedValue,
@@ -134,6 +136,19 @@ export function useZoomLaunch(radius: number) {
 
 const HIDDEN = { opacity: 0 } as const;
 
+/**
+ * O player existe (aberto ou ainda descendo), em shared value — escrito por `PlayerLayer`.
+ *
+ * Enquanto ele fecha, o toque atravessa de propósito (`leaving`, abaixo): é o que tira o
+ * vão morto depois do fim da animação. Mas por baixo dele pode haver a borda de uma tela
+ * de álbum ou artista com `edgeBack`, e um arrasto para fechar o player que termina perto
+ * da borda esquerda ativava o gesto dela por engano — puxando o `progress` de quem está
+ * embaixo sem o usuário pedir. A capa dessa tela "flutuava" solta e o resto sumia, porque
+ * só ela escapa do `ZoomFade`. Com este sinal, `edge` (abaixo) ignora o toque enquanto o
+ * player ainda existe, e ele só some de vez quando a camada é desmontada.
+ */
+export const playerOccluding = makeMutable(false);
+
 type Zoom = {
   progress: SharedValue<number>;
   from: Rect | null;
@@ -219,6 +234,25 @@ export function ZoomScreen({
   // Shared value, não ref: este guard é lido dentro dos worklets do gesto, que rodam na
   // thread de UI e não enxergam refs do JavaScript.
   const closing = useSharedValue(false);
+
+  /**
+   * Outra rede de segurança: se algo puxou `progress` para baixo enquanto o player cobria
+   * esta tela — um gesto perdido por baixo dele, por exemplo, ver `playerOccluding` — e
+   * ela não está fechando por conta própria, ela volta a 1 assim que o player some.
+   *
+   * Sem isto o efeito ficava preso: nada mais pedia `progress` de volta, e a tela ficava
+   * com a capa flutuando (ela não passa por `ZoomFade`) e o resto apagado. Instantâneo, e
+   * não animado — é conserto de um estado que não devia existir, não uma transição.
+   */
+  useAnimatedReaction(
+    () => playerOccluding.value,
+    (occluding, was) => {
+      if (was && !occluding && !closing.value && progress.value < 1) {
+        progress.value = 1;
+      }
+    }
+  );
+
   /**
    * O mesmo "fechando", em estado, porque `pointerEvents` é prop e não estilo animado.
    *
@@ -271,6 +305,12 @@ export function ZoomScreen({
     .activeOffsetX([-9999, 12])
     .onBegin(() => {
       stale.value += 1;
+    })
+    // O player, por cima, some do toque um pouco antes de desmontar de verdade (ver
+    // `playerOccluding`) — sem isto, um arrasto que termina perto da borda esquerda
+    // ativava esta borda por baixo dele.
+    .onTouchesMove((_e, manager) => {
+      if (playerOccluding.value) manager.fail();
     })
     .onUpdate((e) => {
       if (closing.value || e.translationX <= 0) return;

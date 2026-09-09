@@ -1,0 +1,41 @@
+# Os três comandos que o README manda rodar, rodados a cada push.
+#
+# Nada aqui compila o app: um build nativo precisa do SDK do Android ou de um runner
+# macOS, leva dezenas de minutos e não pega o tipo de erro que este projeto costuma ter.
+# O que pega são os tipos em modo strict, as regras do React Compiler e os testes de
+# leitura de tag — e esses três rodam em Node puro, em menos de um minuto.
+#
+# Sem passo de geração de tipos: `.expo/types/` e `expo-env.d.ts` não estão no
+# repositório, e os três comandos passam sem eles. O que se perde é só a checagem de
+# rota tipada nos <Link> — o resto é conferido igual.
+name: check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Um push novo cancela a verificação do anterior no mesmo branch.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A versão sai do .nvmrc. O piso é 22.18: é onde o `node --test` passou a ler .ts
+      # sem flag, que é como o script de teste está escrito.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test

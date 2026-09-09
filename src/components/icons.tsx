@@ -182,6 +182,25 @@ export function SearchNav({ size = 21, color = 'currentColor' }: IconProps) {
   );
 }
 
+/**
+ * Barras da aba de estatísticas.
+ *
+ * Três alturas diferentes, e não um gráfico completo: no tamanho da barra inferior o que
+ * se lê é a silhueta, e barras iguais viram um traço só.
+ */
+export function StatsNav({ size = 21, color = 'currentColor' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 21 21" fill="none">
+      <Path
+        d="M4.6 16.4V11M10.5 16.4V5.2M16.4 16.4v-7.6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 export function SettingsNav({ size = 21, color = 'currentColor' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 22 22" fill="none">
@@ -284,6 +303,25 @@ export function DragHandle({ size = 18, color = 'rgba(246,241,234,.42)' }: IconP
   return (
     <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
       <Path d="M4 6.2h10M4 9h10M4 11.8h10" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/**
+ * Lua do temporizador de desligar.
+ *
+ * Um crescente recortado de um círculo, e não um arco desenhado: o traço de um arco
+ * afina nas pontas e some contra o fundo escuro nos 18 px em que este ícone vive.
+ */
+export function Moon({ size = 18, color = '#F6F1EA' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M15.2 11.3A6.8 6.8 0 016.7 2.8a6.8 6.8 0 108.5 8.5z"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }

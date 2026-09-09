@@ -1,7 +1,8 @@
-/** A biblioteca em memória, carregada do JSON no boot. */
+/** A biblioteca em memória, carregada do banco no boot. Ver `lib/db.ts`. */
 
 import { createContext, use, useCallback, useMemo, useState, type ReactNode } from 'react';
 
+import { deleteTracks, setHasLyrics } from './db';
 import { applyEdits } from './edits';
 import { usePrefs } from './prefs';
 import { clear, load, save, type Album, type Library, type Track } from './scan';
@@ -78,22 +79,31 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         save(next);
         setLibrary(next);
       },
-      markLyrics: (trackId) =>
-        setLibrary((prev) => {
-          if (!prev) return prev;
-          const next = {
-            ...prev,
-            tracks: prev.tracks.map((t) => (t.id === trackId ? { ...t, hasLyrics: true } : t)),
-          };
-          save(next);
-          return next;
-        }),
+      /*
+        Um UPDATE de uma linha, e não a biblioteca inteira de volta ao disco.
+
+        Enquanto isto era um `library.json`, importar um `.lrc` reescrevia o índice
+        completo — todas as faixas, todos os álbuns — para acender um selo numa. O mesmo
+        vale para `removeTracks` abaixo.
+      */
+      markLyrics: (trackId) => {
+        setHasLyrics(trackId);
+        setLibrary((prev) =>
+          prev
+            ? {
+                ...prev,
+                tracks: prev.tracks.map((t) => (t.id === trackId ? { ...t, hasLyrics: true } : t)),
+              }
+            : prev
+        );
+      },
       /*
         Álbum que ficou sem faixa nenhuma sai junto: um álbum vazio na grade é uma capa
         que abre numa tela em branco. A varredura seguinte reconstrói tudo de qualquer
         forma — isto é só para a tela não mentir enquanto ela não acontece.
       */
-      removeTracks: (trackIds) =>
+      removeTracks: (trackIds) => {
+        deleteTracks(trackIds);
         setLibrary((prev) => {
           if (!prev) return prev;
           const gone = new Set(trackIds);
@@ -102,10 +112,9 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
           const albums = prev.albums
             .map((a) => ({ ...a, trackIds: a.trackIds.filter((id) => !gone.has(id)) }))
             .filter((a) => a.trackIds.length > 0);
-          const next = { ...prev, tracks: kept, albums };
-          save(next);
-          return next;
-        }),
+          return { ...prev, tracks: kept, albums };
+        });
+      },
       reset: () => {
         clear();
         setLibrary(null);

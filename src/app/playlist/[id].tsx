@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, TextInput, View } from 'react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
@@ -8,6 +9,7 @@ import { Backdrop } from '@/components/backdrop';
 import { EmptyState } from '@/components/empty-state';
 import { ChevronLeft, Play, Plus, Shuffle } from '@/components/icons';
 import { Body, Display, Mono } from '@/components/text';
+import { QueueRow } from '@/components/queue-row';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
@@ -45,13 +47,24 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
   const { play, enqueueLast } = usePlayer();
   const { accent } = usePrefs();
   const t = useT();
-  const { rename, remove, removeTrack, pickCover, clearCover } = usePlaylists();
+  const { rename, remove, removeTrack, moveTrack, pickCover, clearCover } = usePlaylists();
   const { open, sheet } = usePlaylistSheet();
   const { open: openMenu, menu } = useItemMenu();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(playlist.name);
   // Renomear abre o teclado sobre a lista — a janela não encolhe sozinha no edge-to-edge.
   const keyboard = useKeyboardOverlap();
+
+  /*
+    Quem está na mão e para onde aponta, para as linhas vizinhas abrirem espaço.
+
+    Compartilhados com a `QueueRow`, que é a mesma linha da fila do Now Playing. Reordenar
+    uma lista e reordenar a fila são a mesma operação, e o arraste dela já resolve o que é
+    difícil: o pegador não compete com a rolagem, o alvo salta de posição inteira, e a
+    linha ativa viaja por cima das outras.
+  */
+  const activeAt = useSharedValue(-1);
+  const targetAt = useSharedValue(-1);
 
   // Faixas que sumiram numa nova varredura simplesmente não aparecem.
   const tracks = playlist.trackIds.map(trackById).filter((t) => !!t);
@@ -134,7 +147,7 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
           </Display>
         )}
         <Mono size={11} tracking={0.06} color={T.t62} style={{ marginTop: 9 }}>
-          {tracks.length} FAIXAS · {fmt(total).replace(':', 'M ')}S
+          {tracks.length} {t('unit.tracks')} · {fmt(total).replace(':', 'M ')}S
         </Mono>
       </View>
 
@@ -219,36 +232,66 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
           paddingBottom: Math.max(CHROME_HEIGHT + insets.bottom, keyboard + 24),
           paddingHorizontal: PADDING,
         }}
-        renderItem={({ item, index }) => (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <TrackRow
-                track={item}
-                position={index + 1}
-                accent={accent}
-                onPress={() => play(tracks, index)}
-                onLongPress={() => openMenu({ kind: 'track', track: item })}
-                onQueue={() => enqueueLast([item])}
-                onPlaylist={() => open([item.id])}
-              />
-            </View>
-            {editing && (
-              <Pressable
-                onPress={() => removeTrack(playlist.id, item.id)}
-                hitSlop={10}
-                style={{ paddingHorizontal: 12 }}>
-                <Body size={20} color={T.t5}>
-                  ×
-                </Body>
-              </Pressable>
-            )}
-          </View>
-        )}
+        /*
+          Duas linhas para dois modos.
+
+          Fora da edição vale a `TrackRow` de sempre, com os gestos de enfileirar e de
+          mandar para outra lista. Em edição vale a linha da fila: mais baixa, com o × e
+          com o pegador de arraste. Trocar a linha inteira em vez de pendurar um pegador
+          na `TrackRow` evita dois gestos de arraste disputando o mesmo dedo — o dela é
+          horizontal, o de reordenar é vertical, e conviver custaria mais do que separar.
+
+          A posição vem de `playlist.trackIds`, não de `tracks`: uma faixa que sumiu numa
+          varredura nova não aparece na lista, e mover pelo índice do que está visível
+          reordenaria a entrada errada.
+        */
+        renderItem={({ item, index }) =>
+          editing ? (
+            <QueueRow
+              track={item}
+              at={index}
+              count={tracks.length}
+              activeAt={activeAt}
+              targetAt={targetAt}
+              onPress={() => play(tracks, index)}
+              onRemove={() => removeTrack(playlist.id, item.id)}
+              onMove={(from, to) =>
+                moveTrack(playlist.id, playlist.trackIds.indexOf(tracks[from].id), positionOf(playlist, tracks, to))
+              }
+            />
+          ) : (
+            <TrackRow
+              track={item}
+              position={index + 1}
+              accent={accent}
+              onPress={() => play(tracks, index)}
+              onLongPress={() => openMenu({ kind: 'track', track: item })}
+              onQueue={() => enqueueLast([item])}
+              onPlaylist={() => open([item.id])}
+            />
+          )
+        }
       />
       {sheet}
       {menu}
     </View>
   );
+}
+
+/**
+ * Onde a faixa cai em `trackIds`, dado o índice dela na lista visível.
+ *
+ * Os dois só coincidem quando toda faixa da lista existe na biblioteca. Depois de uma
+ * varredura que perdeu arquivos eles se descolam, e mover pelo índice visível moveria a
+ * entrada errada — ou, no fim da lista, jogaria a faixa antes das que sumiram.
+ */
+function positionOf(
+  playlist: Playlist,
+  visible: { id: string }[],
+  to: number
+): number {
+  const target = visible[to];
+  return target ? playlist.trackIds.indexOf(target.id) : playlist.trackIds.length - 1;
 }
 
 /** Embaralha sem mutar, como na tela de álbum. */

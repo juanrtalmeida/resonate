@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How to build and run it
+    url: https://github.com/juanrtalmeida/resonate/blob/master/CONTRIBUTING.md
+    about: It does not run in Expo Go. Read this before opening an issue about the app not starting.
+  - name: Why it works the way it does
+    url: https://github.com/juanrtalmeida/resonate/blob/master/docs/03-decisoes.md
+    about: The technical decisions, with their context and their cost. In Portuguese.

@@ -64,7 +64,7 @@ export default function Scan() {
           {Math.round(pct * 100)}%
         </Display>
         <Mono size={10.5} weight={500} tracking={0.1} color={T.t42} style={{ marginTop: 6 }}>
-          {progress.done} ARQUIVOS
+          {progress.done} {t('count.filesUnit')}
         </Mono>
       </View>
 

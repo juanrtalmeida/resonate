@@ -1,0 +1,71 @@
+name: Bug
+description: Something the app got wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Resonate reads files nobody else can see, so the details about *your* files are
+        usually what makes a report reproducible. Please don't attach the audio itself.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android — device
+        - Android — emulator
+        - iOS — device
+        - iOS — simulator
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS version
+      placeholder: Android 15 · iOS 26.2
+
+  - type: input
+    id: build
+    attributes:
+      label: How you built it
+      description: A development build from `expo run:*`, or an EAS build?
+      placeholder: npx expo run:android
+
+  - type: checkboxes
+    id: formats
+    attributes:
+      label: File formats involved
+      options:
+        - label: FLAC
+        - label: MP3
+        - label: M4A / M4B / AAC
+        - label: OGG / Opus
+        - label: WAV / AIFF
+        - label: Other, or not sure
+
+  - type: textarea
+    id: tags
+    attributes:
+      label: What the tags look like
+      description: >
+        Only if the bug is about metadata, cover art, duration, lyrics or how tracks were
+        grouped. Title, artist, album artist, track number, genre — as some other tag
+        editor shows them. Plus the file name and the folder it sits in.
+      render: text
+
+  - type: input
+    id: size
+    attributes:
+      label: Library size
+      description: Roughly how many tracks the scan found.
+      placeholder: ~4000 tracks

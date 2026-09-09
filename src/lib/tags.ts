@@ -82,6 +82,33 @@ export function id3Length(b: Uint8Array): number {
   return 10 + synchsafe(b, 6);
 }
 
+/** Quanto ler do início do arquivo quando o formato não declara o tamanho da tag. */
+export const HEADER_BYTES = 256 * 1024;
+
+/**
+ * Sobra lida depois do fim da tag ID3, onde mora o primeiro frame MPEG.
+ *
+ * 2 KB: o header do frame são 4 bytes e o Xing/Info fica nos ~200 seguintes, mas há
+ * arquivos com bytes nulos entre a tag e o primeiro sync, e o padding do ID3 nem sempre
+ * entra no tamanho declarado.
+ */
+export const FRAME_SLACK = 2048;
+
+/**
+ * Quantos bytes ler do começo do arquivo, dados os 12 primeiros e o tamanho dele.
+ *
+ * Uma função à parte, e pura, porque foi aqui que um bug morou sem ser visto: a versão
+ * anterior lia **exatamente** o tamanho declarado pela tag ID3, e com isso o primeiro
+ * frame MPEG — que começa no byte seguinte ao fim dela — ficava fora do buffer. Todo MP3
+ * tagueado ficava sem duração no iOS. `parseTags` e `parseDuration` estavam certos; quem
+ * errava era a janela entregue a eles, e essa decisão não tinha teste porque vivia dentro
+ * do caminho de I/O.
+ */
+export function headerBytes(head: Uint8Array, size: number): number {
+  const id3 = id3Length(head);
+  return Math.min(id3 ? id3 + FRAME_SLACK : HEADER_BYTES, size);
+}
+
 export function parseId3(b: Uint8Array): Partial<Tags> | null {
   const total = id3Length(b);
   if (!total) return null;
