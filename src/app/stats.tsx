@@ -17,26 +17,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Chip, ChipRow } from '@/components/chip';
 import { EmptyState } from '@/components/empty-state';
-import { Note, Trash } from '@/components/icons';
+import { ChevronLeft, ChevronRight, Note, Trash } from '@/components/icons';
+import { Press } from '@/components/press';
 import { SectionLabel } from '@/components/section-label';
 import { Body, Display, Mono } from '@/components/text';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
-import { chromeScroll } from '@/lib/chrome-scroll';
+import { useChromeScroll } from '@/lib/chrome-scroll';
 import { useTabTop } from '@/lib/tab-top';
 import { clearHistory, playSpan, playsBetween } from '@/lib/db';
 import {
+  addMonths,
   boundsOf,
   byHour,
+  compareDays,
   compareMonths,
-  monthOf,
+  dayKey,
+  dayOf,
+  daysWithPlays,
+  monthGrid,
+  monthOfDay,
   peakHour,
   rolling,
-  sameMonth,
+  sameDay,
   SPANS,
   topAlbums,
   topArtists,
   topTracks,
   totals,
+  type Day,
   type Month,
   type Period,
   type Play,
@@ -70,7 +78,7 @@ export default function StatsScreen() {
   );
 
   const [period, setPeriod] = useState<Period>(() => rolling('month'));
-  /** O painel de meses fica escondido até alguém pedir: é a escolha rara. */
+  /** O calendário fica escondido até alguém pedir: é a escolha rara. */
   const [picking, setPicking] = useState(false);
   /**
    * O instante em que a tela leu o banco.
@@ -92,45 +100,53 @@ export default function StatsScreen() {
     }
   }, [period, readAt]);
 
+  /** O dia de hoje, do mesmo relógio que a consulta usou. */
+  const today = useMemo(() => dayOf(readAt), [readAt]);
+
   /**
-   * Os meses que o seletor oferece, do mais recente para o mais antigo.
+   * Os dias que o calendário deixa alcançar.
    *
-   * Saem do próprio histórico: oferecer 2019 a quem instalou o app semana passada é
-   * oferecer telas vazias. Sem escuta nenhuma, o seletor nem aparece.
+   * O piso é a primeira escuta registrada: deixar navegar até 2019 quem instalou o app
+   * semana passada é oferecer folhas vazias do calendário. O teto é **hoje** — um relógio
+   * adiantado num aparelho já gravou escuta com data no futuro, e um dia que ainda não
+   * aconteceu não tem o que mostrar.
+   *
+   * Sem escuta nenhuma não há limite a calcular, e o chip do seletor nem aparece.
    */
-  const months = useMemo<Month[]>(() => {
+  const reach = useMemo(() => {
     let span;
     try {
       span = playSpan();
     } catch {
-      return [];
+      return null;
     }
-    if (!span) return [];
-    const out: Month[] = [];
-    // Nunca além do mês de agora: um relógio adiantado num aparelho já gravou escuta com
-    // data no futuro, e oferecer esse mês seria oferecer uma tela que não existe.
-    const here = monthOf(readAt);
-    const newest = monthOf(span.last);
-    const last = compareMonths(newest, here) <= 0 ? newest : here;
-    for (let m = monthOf(span.first); compareMonths(m, last) <= 0; ) {
-      out.push(m);
-      m = m.month === 11 ? { year: m.year + 1, month: 0 } : { year: m.year, month: m.month + 1 };
-    }
-    return out.reverse();
-  }, [readAt]);
+    if (!span) return null;
+    const first = dayOf(span.first);
+    return { first: compareDays(first, today) <= 0 ? first : today, last: today };
+  }, [today]);
 
-  const monthName = (m: Month) =>
-    new Date(m.year, m.month, 1).toLocaleDateString(localeOf(lang), {
+  /**
+   * O dia em texto. O ano só aparece quando não é o corrente — "12 de set de 2026" repetido
+   * em toda escolha é ruído, e sem ele um dia de outro ano viraria o dia deste.
+   */
+  const dayName = (d: Day) =>
+    new Date(d.year, d.month, d.day).toLocaleDateString(localeOf(lang), {
+      day: 'numeric',
       month: 'short',
-      year: 'numeric',
+      ...(d.year === today.year ? {} : { year: 'numeric' }),
     });
 
-  const custom = period.kind === 'months';
+  const custom = period.kind === 'days';
   const customLabel = !custom
     ? t('stats.pick')
-    : sameMonth(period.from, period.to)
-      ? monthName(period.from)
-      : t('stats.range', { from: monthName(period.from), to: monthName(period.to) });
+    : sameDay(period.from, period.to)
+      ? dayName(period.from)
+      : t('stats.range', {
+          from: dayName(compareDays(period.from, period.to) <= 0 ? period.from : period.to),
+          to: dayName(compareDays(period.from, period.to) <= 0 ? period.to : period.from),
+        });
+
+  const scroll = useChromeScroll();
 
   const summary = totals(plays);
   const hours = byHour(plays);
@@ -138,9 +154,9 @@ export default function StatsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView
+      <Animated.ScrollView
         ref={list}
-        {...chromeScroll}
+        {...scroll}
         contentContainerStyle={{
           paddingTop: insets.top + 26,
           paddingBottom: CHROME_HEIGHT + insets.bottom,
@@ -155,11 +171,12 @@ export default function StatsScreen() {
         </Body>
 
         {/*
-          Os atalhos de sempre, e um chip que abre a escolha por mês.
+          Os atalhos de sempre, e um chip que abre o calendário.
 
           As duas formas convivem porque respondem a perguntas diferentes: "últimos 30
-          dias" não exige escolha nenhuma, e "agosto" é o que se quer para comparar dois
-          meses — uma janela corrida nunca dá isso, porque muda de conteúdo todo dia.
+          dias" não exige escolha nenhuma, e "do dia 12 ao 19" é o recorte que não recua
+          com o relógio — uma janela corrida nunca dá isso, porque muda de conteúdo todo
+          dia.
         */}
         <ChipRow style={{ marginTop: 16 }}>
           {SPANS.map((option) => (
@@ -174,7 +191,7 @@ export default function StatsScreen() {
               }}
             />
           ))}
-          {months.length > 0 && (
+          {reach && (
             <Chip
               label={customLabel}
               on={custom}
@@ -184,27 +201,27 @@ export default function StatsScreen() {
           )}
         </ChipRow>
 
-        {picking && (
-          <MonthPicker
-            months={months}
+        {picking && reach && (
+          <DayPicker
             period={period}
+            reach={reach}
+            readAt={readAt}
             accent={accent}
-            name={monthName}
-            onPick={(month) => {
+            onPick={(day) => {
               /*
-                O primeiro toque escolhe um mês; o segundo estende até ele.
+                O primeiro toque escolhe um dia; o segundo estende o período até ele.
 
-                Tocar de novo no mesmo mês volta ao mês sozinho, senão não haveria como
-                desfazer um intervalo sem sair do painel.
+                Tocar de novo no mesmo dia volta ao dia sozinho, senão não haveria como
+                desfazer um intervalo sem sair do calendário.
               */
               setPeriod((current) => {
-                if (current.kind !== 'months') return { kind: 'months', from: month, to: month };
-                if (sameMonth(current.from, current.to)) {
-                  return sameMonth(current.from, month)
+                if (current.kind !== 'days') return { kind: 'days', from: day, to: day };
+                if (sameDay(current.from, current.to)) {
+                  return sameDay(current.from, day)
                     ? current
-                    : { kind: 'months', from: current.from, to: month };
+                    : { kind: 'days', from: current.from, to: day };
                 }
-                return { kind: 'months', from: month, to: month };
+                return { kind: 'days', from: day, to: day };
               });
             }}
           />
@@ -244,77 +261,276 @@ export default function StatsScreen() {
             />
           </Animated.View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </View>
   );
 }
 
 /**
- * Os meses com escuta, em grade, com o intervalo escolhido aceso.
+ * O calendário de onde saem os dois dias do período.
  *
- * Uma grade e não um seletor de datas do sistema: o histórico é do aparelho e cresce mês
- * a mês, então a granularidade útil é o mês — e uma grade de meses existentes não permite
- * escolher um período vazio, o que um calendário permitiria.
+ * Um mês por vez, com setas para virar a folha — e não a lista de todos os dias com
+ * escuta, que numa biblioteca de um ano seriam trezentas pílulas. A grade também é o que
+ * dá contexto à escolha: "sábado a domingo" é uma pergunta que só existe quando se vê a
+ * semana.
+ *
+ * A escolha era por mês inteiro. A grade de meses tinha uma vantagem de graça — ela só
+ * oferecia meses que existiam, então não havia como escolher um período vazio. Aqui isso
+ * volta como informação e não como proibição: o dia com escuta leva um ponto embaixo, e o
+ * dia vazio continua escolhível, porque "não ouvi nada naquela semana" também é resposta.
  */
-function MonthPicker({
-  months,
+function DayPicker({
   period,
+  reach,
+  readAt,
   accent,
-  name,
   onPick,
 }: {
-  months: Month[];
   period: Period;
+  /** O primeiro e o último dia que o calendário deixa alcançar, pontas incluídas. */
+  reach: { first: Day; last: Day };
+  /** O instante da leitura do banco: muda quando o histórico é apagado, e remarca a grade. */
+  readAt: number;
   accent: string;
-  name: (m: Month) => string;
-  onPick: (m: Month) => void;
+  onPick: (d: Day) => void;
 }) {
   const t = useT();
+  const lang = useLang();
 
-  /** Se o mês cai dentro do que está escolhido — as pontas incluídas. */
-  const inside = (m: Month) => {
-    if (period.kind !== 'months') return false;
-    const [first, last] =
-      compareMonths(period.from, period.to) <= 0
+  /**
+   * A folha aberta. Começa no mês do que está escolhido, senão no último alcançável —
+   * abrir o calendário em janeiro de 2025 para quem quer ontem seria uma navegação inútil.
+   */
+  const [shown, setShown] = useState<Month>(() =>
+    monthOfDay(period.kind === 'days' ? period.to : reach.last)
+  );
+
+  /**
+   * Os dias com escuta do mês aberto.
+   *
+   * Consultado por mês, e não o histórico inteiro de uma vez: são no máximo 31 dias para
+   * marcar, e o banco é local. Vive aqui dentro porque o componente só monta quando o
+   * calendário abre — na tela fechada esta consulta não acontece.
+   *
+   * `readAt` entra nas dependências sem aparecer no corpo, e é de propósito: o banco não
+   * avisa quem está montado, então apagar o histórico avança esse valor e é ele que manda
+   * remarcar a grade. É o mesmo papel que ele tem no `plays` da tela.
+   */
+  const marks = useMemo(() => {
+    try {
+      const from = new Date(shown.year, shown.month, 1).getTime();
+      const to = new Date(shown.year, shown.month + 1, 1).getTime() - 1;
+      return daysWithPlays(playsBetween(from, to));
+    } catch {
+      return new Set<string>();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, readAt]);
+
+  const cells = useMemo(() => monthGrid(shown), [shown]);
+
+  /** Até onde as setas vão. Fora disso não há folha para virar. */
+  const canBack = compareMonths(shown, monthOfDay(reach.first)) > 0;
+  const canForward = compareMonths(shown, monthOfDay(reach.last)) < 0;
+
+  /** As pontas do período, já em ordem — a escolha pode ter sido feita de trás para a frente. */
+  const ends =
+    period.kind === 'days'
+      ? compareDays(period.from, period.to) <= 0
         ? [period.from, period.to]
-        : [period.to, period.from];
-    return compareMonths(m, first) >= 0 && compareMonths(m, last) <= 0;
-  };
+        : [period.to, period.from]
+      : null;
 
-  const edge = (m: Month) =>
-    period.kind === 'months' && (sameMonth(m, period.from) || sameMonth(m, period.to));
+  const inside = (d: Day) =>
+    !!ends && compareDays(d, ends[0]) >= 0 && compareDays(d, ends[1]) <= 0;
+  const edge = (d: Day) => !!ends && (sameDay(d, ends[0]) || sameDay(d, ends[1]));
+  /** Fora do alcance: dia anterior à primeira escuta, ou depois de hoje. */
+  const beyond = (d: Day) =>
+    compareDays(d, reach.first) < 0 || compareDays(d, reach.last) > 0;
+
+  const monthLabel = new Date(shown.year, shown.month, 1).toLocaleDateString(localeOf(lang), {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  /**
+   * As iniciais dos dias da semana, do domingo em diante — na língua do usuário, e tiradas
+   * do próprio `Date`. Uma tabela nossa por idioma teria de crescer a cada idioma novo, e
+   * o `Intl` já sabe disso em todos eles.
+   *
+   * `narrow` dá uma letra em português e em inglês, e o caractere certo em japonês e em
+   * chinês, que não têm "inicial".
+   */
+  const weekdays = useMemo(() => {
+    const locale = localeOf(lang);
+    // 4 de janeiro de 2026 é um domingo: a semana inteira sai a partir dele.
+    return Array.from({ length: 7 }, (_, i) =>
+      new Date(2026, 0, 4 + i).toLocaleDateString(locale, { weekday: 'narrow' })
+    );
+  }, [lang]);
 
   return (
     <View style={{ marginTop: 14 }}>
-      <Body size={12} color={T.t42} style={{ lineHeight: 17, marginBottom: 10 }}>
+      <Body size={12} color={T.t42} style={{ lineHeight: 17, marginBottom: 12 }}>
         {t('stats.pickHint')}
       </Body>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-        {months.map((m) => {
-          const on = inside(m);
-          return (
-            <Pressable
-              key={`${m.year}-${m.month}`}
-              onPress={() => onPick(m)}
-              style={{
-                paddingHorizontal: 12,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-                // A ponta do intervalo é o acento cheio; o miolo é o acento apagado.
-                backgroundColor: edge(m) ? accent : on ? alpha(accent, 0.18) : C.card,
-                borderWidth: 1,
-                borderColor: on ? alpha(accent, 0.5) : 'transparent',
-              }}>
-              <Body size={12.5} weight={600} color={edge(m) ? C.onAccent : on ? T.full : T.t62}>
-                {name(m)}
-              </Body>
-            </Pressable>
-          );
-        })}
+
+      {/* A folha aberta, entre as duas setas. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 10,
+        }}>
+        <Arrow
+          back
+          enabled={canBack}
+          onPress={() => setShown((m) => addMonths(m, -1))}
+          label={t('stats.prevMonth')}
+        />
+        {/* `capitalize` porque o `Intl` devolve "setembro" em minúscula em pt e es. */}
+        <Body size={13.5} weight={600} style={{ textTransform: 'capitalize' }}>
+          {monthLabel}
+        </Body>
+        <Arrow
+          enabled={canForward}
+          onPress={() => setShown((m) => addMonths(m, 1))}
+          label={t('stats.nextMonth')}
+        />
+      </View>
+
+      <View style={{ flexDirection: 'row' }}>
+        {weekdays.map((initial, at) => (
+          <View key={at} style={{ flex: 1, alignItems: 'center', paddingBottom: 6 }}>
+            <Mono size={9} weight={500} tracking={0.12} caps color={T.t34}>
+              {initial}
+            </Mono>
+          </View>
+        ))}
+      </View>
+
+      {/*
+        Sete colunas por `flexBasis`, e não por largura calculada da tela: a grade vive
+        dentro do recuo do conteúdo, e medir a tela para descobrir a largura dela erraria
+        pelo recuo. `flexWrap` quebra a linha a cada sete de 1/7.
+      */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 4 }}>
+        {cells.map((day, at) =>
+          day === null ? (
+            <View key={`gap${at}`} style={{ width: `${100 / 7}%`, height: CELL }} />
+          ) : (
+            <DayCell
+              key={dayKey(day)}
+              day={day}
+              accent={accent}
+              on={inside(day)}
+              end={edge(day)}
+              played={marks.has(dayKey(day))}
+              disabled={beyond(day)}
+              onPress={() => onPick(day)}
+            />
+          )
+        )}
       </View>
     </View>
+  );
+}
+
+/** Altura de uma célula do calendário. 40 é o alvo de toque mínimo confortável. */
+const CELL = 40;
+
+function DayCell({
+  day,
+  accent,
+  on,
+  end,
+  played,
+  disabled,
+  onPress,
+}: {
+  day: Day;
+  accent: string;
+  /** Dentro do período escolhido, pontas incluídas. */
+  on: boolean;
+  /** Uma das duas pontas do período. */
+  end: boolean;
+  /** Teve escuta: leva o ponto. */
+  played: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View style={{ width: `${100 / 7}%`, height: CELL, padding: 2 }}>
+      <Press
+        onPress={onPress}
+        disabled={disabled}
+        style={{
+          flex: 1,
+          borderRadius: R.r13,
+          alignItems: 'center',
+          justifyContent: 'center',
+          // A ponta do intervalo é o acento cheio; o miolo é o acento apagado.
+          backgroundColor: end ? accent : on ? alpha(accent, 0.18) : 'transparent',
+          borderWidth: 1,
+          borderColor: on ? alpha(accent, 0.5) : 'transparent',
+        }}
+        dim={0.24}>
+        <Body size={12.5} weight={end ? 600 : 500} color={end ? C.onAccent : on ? T.full : T.t72}>
+          {day.day}
+        </Body>
+        {/*
+          O ponto do dia com escuta. Fica **fora** do fluxo: como irmão do número ele
+          empurrava o número para cima e a coluna deixava de alinhar entre um dia com
+          escuta e um sem.
+        */}
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 5,
+            width: 3,
+            height: 3,
+            borderRadius: 1.5,
+            backgroundColor: played ? (end ? C.onAccent : accent) : 'transparent',
+          }}
+        />
+      </Press>
+    </View>
+  );
+}
+
+/** Seta de virar o mês. Desabilitada quando não há folha do lado. */
+function Arrow({
+  back = false,
+  enabled,
+  onPress,
+  label,
+}: {
+  back?: boolean;
+  enabled: boolean;
+  onPress: () => void;
+  label: string;
+}) {
+  return (
+    <Press
+      onPress={onPress}
+      disabled={!enabled}
+      accessibilityLabel={label}
+      hitSlop={8}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: C.card,
+      }}>
+      {back ? (
+        <ChevronLeft size={15} color={T.t72} />
+      ) : (
+        <ChevronRight size={15} color={T.t72} />
+      )}
+    </Press>
   );
 }
 

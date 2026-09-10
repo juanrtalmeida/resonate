@@ -216,12 +216,14 @@ const DICT = {
   'stats.span.all': { pt: 'Tudo', en: 'All time', es: 'Todo', ja: 'すべて', zh: '全部' },
   'stats.pick': { pt: 'Escolher…', en: 'Pick…', es: 'Elegir…', ja: '選ぶ…', zh: '选择…' },
   'stats.pickHint': {
-    pt: 'Toque num mês. Toque em outro para pegar o intervalo entre os dois.',
-    en: 'Tap a month. Tap another to take the range between the two.',
-    es: 'Toca un mes. Toca otro para tomar el intervalo entre ambos.',
-    ja: '月をタップ。もう一つタップすると、その間の期間になります。',
-    zh: '点一个月份。再点一个可以选中两者之间的区间。',
+    pt: 'Toque num dia. Toque em outro para pegar o período entre os dois. O ponto marca os dias com escuta.',
+    en: 'Tap a day. Tap another to take the period between the two. The dot marks days with listening.',
+    es: 'Toca un día. Toca otro para tomar el período entre ambos. El punto marca los días con escucha.',
+    ja: '日をタップ。もう一つタップすると、その間の期間になります。点は再生のあった日です。',
+    zh: '点一天。再点一天可以选中两者之间的时段。圆点标记有收听记录的日子。',
   },
+  'stats.prevMonth': { pt: 'Mês anterior', en: 'Previous month', es: 'Mes anterior', ja: '前の月', zh: '上个月' },
+  'stats.nextMonth': { pt: 'Mês seguinte', en: 'Next month', es: 'Mes siguiente', ja: '次の月', zh: '下个月' },
   'stats.range': { pt: '{from} até {to}', en: '{from} to {to}', es: '{from} a {to}', ja: '{from}〜{to}', zh: '{from} 至 {to}' },
   'stats.hours': { pt: 'horas', en: 'hours', es: 'horas', ja: '時間', zh: '小时' },
   'stats.minutes': { pt: 'minutos', en: 'minutes', es: 'minutos', ja: '分', zh: '分钟' },
@@ -314,7 +316,34 @@ const DICT = {
 
   // ajustes
   'settings.title': { pt: 'Ajustes', en: 'Settings', es: 'Ajustes', ja: '設定', zh: '设置' },
+
+  // interface nativa — ver `lib/native-ui.ts`
+  'settings.interface': { pt: 'Interface', en: 'Interface', es: 'Interfaz', ja: 'インターフェース', zh: '界面' },
+  'settings.nativeUI': {
+    pt: 'Usar a interface do aparelho',
+    en: "Use the device's interface",
+    es: 'Usar la interfaz del dispositivo',
+    ja: '端末のインターフェースを使う',
+    zh: '使用设备原生界面',
+  },
+  'settings.nativeUIBlurb': {
+    pt: 'Desenha a barra, o Now Playing, as folhas e esta tela com os componentes do sistema: Liquid Glass no iOS, Material Design no Android. Desligado, vale o desenho do Resonate.',
+    en: 'Draws the bar, Now Playing, the sheets and this screen with the system components: Liquid Glass on iOS, Material Design on Android. Off, Resonate’s own design applies.',
+    es: 'Dibuja la barra, Now Playing, las hojas y esta pantalla con los componentes del sistema: Liquid Glass en iOS, Material Design en Android. Apagado, vale el diseño de Resonate.',
+    ja: 'バー、再生画面、シート、この画面をシステムの部品で描きます。iOS では Liquid Glass、Android では Material Design。オフなら Resonate 自身のデザインになります。',
+    zh: '用系统组件绘制底栏、播放页、底部面板和本页面：iOS 上是 Liquid Glass，Android 上是 Material Design。关闭时使用 Resonate 自己的设计。',
+  },
+  'settings.nativeUIUnavailable': {
+    pt: 'Este aparelho não traz o Liquid Glass: ele pede iOS 26 e um app compilado com o SDK dele.',
+    en: 'This device has no Liquid Glass: it needs iOS 26 and an app built against its SDK.',
+    es: 'Este dispositivo no trae Liquid Glass: requiere iOS 26 y una app compilada con su SDK.',
+    ja: 'この端末には Liquid Glass がありません。iOS 26 と、その SDK でビルドしたアプリが必要です。',
+    zh: '此设备没有 Liquid Glass：它需要 iOS 26，以及用该 SDK 编译的应用。',
+  },
+
   'settings.nowPlaying': { pt: 'Now Playing', en: 'Now Playing', es: 'Now Playing', ja: '再生画面', zh: '播放页' },
+  /** Rótulo da linha que escolhe o tratamento, na versão nativa dos Ajustes. */
+  'settings.treatment': { pt: 'Tratamento', en: 'Treatment', es: 'Tratamiento', ja: '見せ方', zh: '呈现方式' },
   'settings.accent': { pt: 'Cor de acento', en: 'Accent color', es: 'Color de acento', ja: 'アクセントカラー', zh: '强调色' },
   'settings.language': { pt: 'Idioma', en: 'Language', es: 'Idioma', ja: '言語', zh: '语言' },
   'settings.languageAuto': { pt: 'Automático', en: 'Automatic', es: 'Automático', ja: '自動', zh: '自动' },
@@ -346,6 +375,80 @@ const DICT = {
     zh: '播放列表和收藏会一起清除。设备上的音乐文件不会被删除，之后可以重新扫描。',
   },
   'settings.version': { pt: 'Versão {version}', en: 'Version {version}', es: 'Versión {version}', ja: 'バージョン {version}', zh: '版本 {version}' },
+
+  // Busca dentro das letras. Ver `db.searchLyrics` e `search.verseOf`.
+  'search.inLyrics': { pt: 'Nas letras', en: 'In lyrics', es: 'En las letras', ja: '歌詞の中', zh: '歌词中' },
+
+  // Cópia da própria escuta. Ver `lib/backup.ts`.
+  'backup.title': { pt: 'Cópia da sua escuta', en: 'Back up your listening', es: 'Copia de tu escucha', ja: '再生データのバックアップ', zh: '备份你的收听数据' },
+  'backup.blurb': {
+    pt: 'Curtidas, contagens, progresso, listas e o histórico com data, num arquivo só. O app não tem conta — esta é a única cópia que existe, e ela é sua. A senha do servidor não vai no arquivo.',
+    en: 'Likes, play counts, progress, playlists and the dated history, in a single file. The app has no account — this is the only copy there is, and it is yours. The server password is not included.',
+    es: 'Favoritos, conteos, progreso, listas y el historial con fecha, en un solo archivo. La app no tiene cuenta: esta es la única copia que existe, y es tuya. La contraseña del servidor no se incluye.',
+    ja: 'お気に入り、再生回数、再生位置、プレイリスト、日付つきの履歴を 1 つのファイルに。このアプリにアカウントはありません — これが唯一の控えで、あなたのものです。サーバーのパスワードは含まれません。',
+    zh: '收藏、播放次数、进度、播放列表和带日期的历史，全部存进一个文件。这个应用没有账号 — 这是唯一的副本，而且属于你。服务器密码不会写入文件。',
+  },
+  'backup.export': { pt: 'Exportar', en: 'Export', es: 'Exportar', ja: '書き出す', zh: '导出' },
+  'backup.import': { pt: 'Importar', en: 'Import', es: 'Importar', ja: '読み込む', zh: '导入' },
+  'backup.exportFailed': { pt: 'Não foi possível exportar.', en: "Couldn't export.", es: 'No se pudo exportar.', ja: '書き出せませんでした。', zh: '导出失败。' },
+  'backup.importFailed': { pt: 'Esse arquivo não é uma cópia do Resonate.', en: "That file isn't a Resonate backup.", es: 'Ese archivo no es una copia de Resonate.', ja: 'そのファイルは Resonate のバックアップではありません。', zh: '该文件不是 Resonate 的备份。' },
+  'backup.imported': {
+    pt: 'Restaurado: {playlists} listas e {plays} escutas novas.',
+    en: 'Restored: {playlists} playlists and {plays} new plays.',
+    es: 'Restaurado: {playlists} listas y {plays} escuchas nuevas.',
+    ja: '復元しました: プレイリスト {playlists} 件、新しい再生 {plays} 件。',
+    zh: '已恢复：{playlists} 个播放列表，{plays} 条新的播放记录。',
+  },
+
+  // Recortes automáticos da aba de Faixas. Ver `lib/smart.ts`.
+  'smart.all': { pt: 'Tudo', en: 'All', es: 'Todo', ja: 'すべて', zh: '全部' },
+  'smart.unplayed': { pt: 'Nunca ouvidas', en: 'Never played', es: 'Nunca escuchadas', ja: '未再生', zh: '从未播放' },
+  'smart.most': { pt: 'Mais tocadas', en: 'Most played', es: 'Más escuchadas', ja: 'よく聴く曲', zh: '最常播放' },
+  'smart.forgotten': { pt: 'Esquecidas', en: 'Forgotten', es: 'Olvidadas', ja: '久しく聴いていない', zh: '久未播放' },
+  'smart.week': { pt: 'Desta semana', en: 'This week', es: 'De esta semana', ja: '今週', zh: '本周' },
+
+  // Nivelamento de volume por ReplayGain. Ver `lib/gain.ts`.
+  'settings.leveling': { pt: 'Volume', en: 'Volume', es: 'Volumen', ja: '音量', zh: '音量' },
+  'settings.levelingBlurb': {
+    pt: 'Usa o ReplayGain gravado na tag para deixar álbuns de masterizações diferentes na mesma altura. Arquivo sem a tag toca no volume cheio.',
+    en: 'Uses the ReplayGain written in the tag so albums with different masterings play at the same loudness. A file without the tag plays at full volume.',
+    es: 'Usa el ReplayGain de la etiqueta para que álbumes con masterizaciones distintas suenen al mismo volumen. Un archivo sin la etiqueta suena a volumen completo.',
+    ja: 'タグに記録された ReplayGain を使い、マスタリングの異なるアルバムを同じ音量に揃えます。タグのないファイルは最大音量で再生されます。',
+    zh: '使用标签中记录的 ReplayGain，让不同母带处理的专辑听起来音量一致。没有该标签的文件按满音量播放。',
+  },
+  'leveling.off': { pt: 'Desligado', en: 'Off', es: 'Apagado', ja: 'オフ', zh: '关闭' },
+  'leveling.album': { pt: 'Por álbum', en: 'By album', es: 'Por álbum', ja: 'アルバム単位', zh: '按专辑' },
+  'leveling.track': { pt: 'Por faixa', en: 'By track', es: 'Por pista', ja: '曲単位', zh: '按单曲' },
+
+  // Streaming do próprio usuário, por OpenSubsonic. Ver `lib/subsonic.ts`.
+  'settings.streaming': { pt: 'Seu streaming', en: 'Your streaming', es: 'Tu streaming', ja: 'あなたのストリーミング', zh: '你的流媒体' },
+  'streaming.blurb': {
+    pt: 'Conecte um servidor OpenSubsonic — Navidrome, Airsonic, Gonic — e o acervo dele entra na mesma biblioteca dos seus arquivos. Os dois caminhos valem juntos.',
+    en: 'Connect an OpenSubsonic server — Navidrome, Airsonic, Gonic — and its collection joins the same library as your files. Both paths work together.',
+    es: 'Conecta un servidor OpenSubsonic — Navidrome, Airsonic, Gonic — y su colección entra en la misma biblioteca que tus archivos. Ambos caminos valen juntos.',
+    ja: 'OpenSubsonic サーバー（Navidrome、Airsonic、Gonic）に接続すると、その音源がお使いのファイルと同じライブラリに入ります。両方を並行して使えます。',
+    zh: '连接一个 OpenSubsonic 服务器（Navidrome、Airsonic、Gonic），它的曲库会并入你本地文件所在的同一个音乐库。两条路可以并存。',
+  },
+  'streaming.url': { pt: 'Endereço', en: 'Address', es: 'Dirección', ja: 'アドレス', zh: '地址' },
+  'streaming.user': { pt: 'Usuário', en: 'Username', es: 'Usuario', ja: 'ユーザー名', zh: '用户名' },
+  'streaming.password': { pt: 'Senha', en: 'Password', es: 'Contraseña', ja: 'パスワード', zh: '密码' },
+  'streaming.connect': { pt: 'Conectar', en: 'Connect', es: 'Conectar', ja: '接続', zh: '连接' },
+  'streaming.testing': { pt: 'Conectando…', en: 'Connecting…', es: 'Conectando…', ja: '接続中…', zh: '连接中…' },
+  'streaming.connected': { pt: 'Conectado. Agora sincronize o acervo.', en: 'Connected. Now sync the collection.', es: 'Conectado. Ahora sincroniza la colección.', ja: '接続しました。次に音源を同期してください。', zh: '已连接。现在同步曲库。' },
+  'streaming.sync': { pt: 'Sincronizar', en: 'Sync', es: 'Sincronizar', ja: '同期', zh: '同步' },
+  'streaming.syncing': { pt: 'Sincronizando…', en: 'Syncing…', es: 'Sincronizando…', ja: '同期中…', zh: '同步中…' },
+  'streaming.synced': { pt: '{tracks} faixas do servidor na biblioteca.', en: '{tracks} tracks from the server in your library.', es: '{tracks} pistas del servidor en la biblioteca.', ja: 'サーバーの {tracks} 曲がライブラリに入りました。', zh: '服务器的 {tracks} 首歌曲已进入音乐库。' },
+  'streaming.listing': { pt: 'Listando álbuns… {total}', en: 'Listing albums… {total}', es: 'Listando álbumes… {total}', ja: 'アルバムを取得中… {total}', zh: '正在列出专辑… {total}' },
+  'streaming.progress': { pt: 'Álbum {at} de {total} · {tracks} faixas', en: 'Album {at} of {total} · {tracks} tracks', es: 'Álbum {at} de {total} · {tracks} pistas', ja: 'アルバム {at}/{total} · {tracks} 曲', zh: '专辑 {at}/{total} · {tracks} 首' },
+  'streaming.disconnect': { pt: 'Desconectar e tirar da biblioteca', en: 'Disconnect and remove from library', es: 'Desconectar y quitar de la biblioteca', ja: '切断してライブラリから外す', zh: '断开连接并从音乐库移除' },
+  'streaming.server': { pt: 'Servidor', en: 'Server', es: 'Servidor', ja: 'サーバー', zh: '服务器' },
+  'streaming.error.credentials': { pt: 'Usuário ou senha não conferem.', en: "Username or password doesn't match.", es: 'El usuario o la contraseña no coinciden.', ja: 'ユーザー名またはパスワードが違います。', zh: '用户名或密码不正确。' },
+  'streaming.error.timeout': { pt: 'O servidor não respondeu em tempo.', en: "The server didn't answer in time.", es: 'El servidor no respondió a tiempo.', ja: 'サーバーが時間内に応答しませんでした。', zh: '服务器未在时限内响应。' },
+  'streaming.error.unreachable': { pt: 'Não encontrei o servidor nesse endereço.', en: "Couldn't reach a server at that address.", es: 'No encontré el servidor en esa dirección.', ja: 'そのアドレスにサーバーが見つかりません。', zh: '在该地址找不到服务器。' },
+  'streaming.error.badResponse': { pt: 'O endereço respondeu, mas não como um servidor Subsonic.', en: 'The address answered, but not like a Subsonic server.', es: 'La dirección respondió, pero no como un servidor Subsonic.', ja: 'そのアドレスは応答しましたが、Subsonic サーバーではないようです。', zh: '该地址有响应，但不像是 Subsonic 服务器。' },
+  'streaming.error.server': { pt: 'O servidor recusou: {message}', en: 'The server refused: {message}', es: 'El servidor rechazó: {message}', ja: 'サーバーが拒否しました: {message}', zh: '服务器拒绝了：{message}' },
+  'streaming.error.unknown': { pt: 'Algo deu errado ao falar com o servidor.', en: 'Something went wrong talking to the server.', es: 'Algo falló al hablar con el servidor.', ja: 'サーバーとの通信で問題が起きました。', zh: '与服务器通信时出错。' },
+  'streaming.unavailable': { pt: 'Indisponível — servidor desconectado', en: 'Unavailable — server disconnected', es: 'No disponible — servidor desconectado', ja: '利用できません — サーバー未接続', zh: '不可用 — 服务器已断开' },
   'settings.hue': { pt: 'Matiz', en: 'Hue', es: 'Tono', ja: '色相', zh: '色相' },
   'settings.saturation': { pt: 'Saturação', en: 'Saturation', es: 'Saturación', ja: '彩度', zh: '饱和度' },
 

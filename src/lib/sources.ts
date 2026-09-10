@@ -211,16 +211,78 @@ export function foldersOf(files: AudioFile[]): Folder[] {
 }
 
 /**
+ * Traz para dentro do app o que o seletor de arquivos devolveu — **movendo** quando o que
+ * ele devolveu já é uma cópia nossa.
+ *
+ * ## Por que isso existe
+ *
+ * O seletor do iOS é criado pelo `expo-file-system` com `asCopy: true`
+ * (`ios/FilePickingUtils.swift`). Isso quer dizer que **o próprio iOS já copiou** o arquivo
+ * para o container do app antes de nos entregar a URL, e que somos nós os responsáveis por
+ * ela: o delegate do Expo repassa a URL e não apaga nada.
+ *
+ * Copiar a partir dali criava uma **segunda** cópia. O arquivo passava a ocupar o dobro
+ * dentro do app — a nossa, em Documents, e a do seletor, no diretório temporário, que o
+ * iOS só recolhe quando lhe convém e que aparece no armazenamento do aparelho até lá.
+ * Importar um álbum de 400 MB custava 800 MB.
+ *
+ * Mover resolve na origem: as duas pontas estão no mesmo volume, então é um rename — nada
+ * é lido, nada é escrito duas vezes, e não sobra o que limpar.
+ *
+ * ## Por que não é sempre um move
+ *
+ * No Android o seletor é `ACTION_OPEN_DOCUMENT`, que devolve um `content://` apontando
+ * para o arquivo **original do usuário**. Mover ali tiraria a música do lugar dela — é
+ * exatamente o que `01-contexto.md` promete que o app nunca faz. O discriminador é o
+ * esquema: cópia do seletor do iOS é `file://` dentro do nosso container; SAF é
+ * `content://`. Na dúvida, copia — o comportamento antigo, que desperdiça espaço mas não
+ * mexe no que é do usuário.
+ */
+async function adopt(file: File, target: Directory | File): Promise<void> {
+  if (Platform.OS === 'ios' && file.uri.startsWith('file://')) {
+    await file.move(target, { overwrite: true });
+    return;
+  }
+  await file.copy(target, { overwrite: true });
+}
+
+/**
  * iOS: traz arquivos de fora do sandbox para Documents, onde a varredura enxerga.
- * Devolve quantos foram copiados.
+ * Devolve quantos entraram.
+ *
+ * **Não traz o que já está lá.** A pasta do app é visível no Files.app
+ * (`UIFileSharingEnabled`), então o seletor mostra a própria pasta do Resonate entre os
+ * lugares de onde importar — e é o lugar mais óbvio, porque é onde a música do usuário
+ * está. Importar dali copiava o arquivo para a raiz de Documents ao lado do que já existia
+ * em `Documents/Music/`, e a varredura, que é recursiva, achava os dois: peso dobrado e a
+ * faixa repetida na biblioteca.
+ *
+ * A comparação é pelo **nome**, e não por conteúdo. Com `asCopy: true` o que chega às
+ * nossas mãos é sempre uma cópia temporária nova, então não há como comparar caminho de
+ * origem; e hash de arquivo inteiro custaria ler cada FLAC de 40 MB para decidir. Nome
+ * igual dentro da mesma biblioteca é indício suficiente — e o custo de errar é pequeno nos
+ * dois sentidos: pular um arquivo homônimo de verdade, ou não pular nada.
  */
 export async function importFiles(): Promise<number> {
   const picked = await File.pickFileAsync({ multipleFiles: true, mimeTypes: ['audio/*'] });
   if (picked.canceled) return 0;
+
+  // A lista em cache basta: ela é o que a biblioteca conhece agora.
+  const known = new Set((await listAudioFiles()).map((f) => f.name.toLowerCase()));
+
   let n = 0;
   for (const file of picked.result) {
     try {
-      await file.copy(Paths.document, { overwrite: true });
+      if (known.has(file.name.toLowerCase())) {
+        /*
+          Já está na biblioteca. A cópia que o seletor fez é nossa para limpar — deixá-la
+          seria justamente o desperdício que este caminho existe para não ter.
+        */
+        if (Platform.OS === 'ios' && file.uri.startsWith('file://')) file.delete();
+        continue;
+      }
+      await adopt(file, Paths.document);
+      known.add(file.name.toLowerCase());
       n++;
     } catch {
       // arquivo sem permissão de leitura ou nome duplicado: segue para o próximo
@@ -229,3 +291,10 @@ export async function importFiles(): Promise<number> {
   if (n) cached = null;
   return n;
 }
+
+/**
+ * O mesmo `adopt`, para quem escolhe um arquivo que não é música — o `.lrc` da letra e a
+ * capa de uma lista. O vazamento era idêntico nos dois; uma capa de vários megabytes
+ * duplicada é o mesmo desperdício em escala menor.
+ */
+export { adopt as adoptPicked };

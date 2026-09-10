@@ -3,15 +3,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  addMonths,
   boundsOf,
   byHour,
   byWeekday,
+  compareDays,
+  dayKey,
+  dayOf,
+  daysWithPlays,
   keep,
   MIN_LISTEN,
+  monthGrid,
+  monthLength,
   peakHour,
   compareMonths,
   monthOf,
   rolling,
+  sameDay,
   sameMonth,
   startOf,
   topAlbums,
@@ -58,36 +66,75 @@ test('a janela corrida vai do recuo até agora', () => {
   assert.deepEqual(boundsOf(rolling('all'), now), { from: 0, to: now });
 });
 
-test('meses escolhidos viram o intervalo do calendário local', () => {
-  const b = boundsOf({ kind: 'months', from: { year: 2026, month: 7 }, to: { year: 2026, month: 7 } }, 0);
+test('um dia escolhido cobre o dia inteiro do calendário local', () => {
+  const d = { year: 2026, month: 7, day: 12 };
+  const b = boundsOf({ kind: 'days', from: d, to: d }, 0);
   assert.equal(new Date(b.from).getMonth(), 7);
-  assert.equal(new Date(b.from).getDate(), 1);
+  assert.equal(new Date(b.from).getDate(), 12);
   assert.equal(new Date(b.from).getHours(), 0);
-  // Último instante de agosto: 31 às 23:59:59.999.
-  assert.equal(new Date(b.to).getMonth(), 7);
-  assert.equal(new Date(b.to).getDate(), 31);
-  assert.equal(new Date(b.to + 1).getMonth(), 8);
+  assert.equal(new Date(b.from).getMinutes(), 0);
+  // Último instante do dia 12: 23:59:59.999.
+  assert.equal(new Date(b.to).getDate(), 12);
+  assert.equal(new Date(b.to).getHours(), 23);
+  assert.equal(new Date(b.to + 1).getDate(), 13);
 });
 
-test('fevereiro fecha no dia certo, bissexto ou não', () => {
-  const leap = boundsOf({ kind: 'months', from: { year: 2028, month: 1 }, to: { year: 2028, month: 1 } }, 0);
-  assert.equal(new Date(leap.to).getDate(), 29);
-  const plain = boundsOf({ kind: 'months', from: { year: 2026, month: 1 }, to: { year: 2026, month: 1 } }, 0);
-  assert.equal(new Date(plain.to).getDate(), 28);
+test('dois dias escolhidos vão da meia-noite do primeiro ao fim do último', () => {
+  const b = boundsOf(
+    { kind: 'days', from: { year: 2026, month: 7, day: 12 }, to: { year: 2026, month: 7, day: 19 } },
+    0
+  );
+  assert.equal(new Date(b.from).getDate(), 12);
+  assert.equal(new Date(b.from).getHours(), 0);
+  assert.equal(new Date(b.to).getDate(), 19);
+  assert.equal(new Date(b.to + 1).getDate(), 20);
+  // Oito dias inclusive, e não sete: as duas pontas contam.
+  assert.equal(Math.round((b.to + 1 - b.from) / 86_400_000), 8);
+});
+
+test('o último dia do mês fecha na virada, e fevereiro respeita o bissexto', () => {
+  const jan = { year: 2026, month: 0, day: 31 };
+  const b = boundsOf({ kind: 'days', from: jan, to: jan }, 0);
+  assert.equal(new Date(b.to + 1).getMonth(), 1);
+  assert.equal(new Date(b.to + 1).getDate(), 1);
+
+  const leap = { year: 2028, month: 1, day: 29 };
+  const l = boundsOf({ kind: 'days', from: leap, to: leap }, 0);
+  assert.equal(new Date(l.to).getDate(), 29);
+  assert.equal(new Date(l.to + 1).getMonth(), 2);
 });
 
 test('um intervalo escolhido de trás para a frente vale igual', () => {
-  const forward = boundsOf({ kind: 'months', from: { year: 2026, month: 5 }, to: { year: 2026, month: 8 } }, 0);
-  const backward = boundsOf({ kind: 'months', from: { year: 2026, month: 8 }, to: { year: 2026, month: 5 } }, 0);
-  assert.deepEqual(forward, backward);
+  const a = { year: 2026, month: 5, day: 3 };
+  const b = { year: 2026, month: 8, day: 21 };
+  assert.deepEqual(
+    boundsOf({ kind: 'days', from: a, to: b }, 0),
+    boundsOf({ kind: 'days', from: b, to: a }, 0)
+  );
 });
 
 test('o intervalo cruza o ano sem buraco', () => {
-  const b = boundsOf({ kind: 'months', from: { year: 2025, month: 11 }, to: { year: 2026, month: 0 } }, 0);
+  const b = boundsOf(
+    {
+      kind: 'days',
+      from: { year: 2025, month: 11, day: 30 },
+      to: { year: 2026, month: 0, day: 2 },
+    },
+    0
+  );
   assert.equal(new Date(b.from).getFullYear(), 2025);
   assert.equal(new Date(b.from).getMonth(), 11);
   assert.equal(new Date(b.to).getFullYear(), 2026);
-  assert.equal(new Date(b.to).getMonth(), 0);
+  assert.equal(new Date(b.to).getDate(), 2);
+  assert.equal(Math.round((b.to + 1 - b.from) / 86_400_000), 4);
+});
+
+test('comparação e identidade de dias', () => {
+  assert.ok(compareDays({ year: 2025, month: 11, day: 31 }, { year: 2026, month: 0, day: 1 }) < 0);
+  assert.ok(compareDays({ year: 2026, month: 3, day: 2 }, { year: 2026, month: 3, day: 1 }) > 0);
+  assert.equal(compareDays({ year: 2026, month: 3, day: 9 }, { year: 2026, month: 3, day: 9 }), 0);
+  assert.equal(sameDay({ year: 2026, month: 3, day: 9 }, { year: 2026, month: 3, day: 9 }), true);
+  assert.equal(sameDay({ year: 2026, month: 3, day: 9 }, { year: 2026, month: 2, day: 9 }), false);
 });
 
 test('comparação e identidade de meses', () => {
@@ -98,8 +145,64 @@ test('comparação e identidade de meses', () => {
   assert.equal(sameMonth({ year: 2026, month: 3 }, { year: 2025, month: 3 }), false);
 });
 
-test('monthOf devolve o mês local do instante', () => {
+test('monthOf e dayOf devolvem o mês e o dia locais do instante', () => {
   assert.deepEqual(monthOf(at(0, 12)), { year: 2026, month: 0 });
+  assert.deepEqual(dayOf(at(0, 12)), { year: 2026, month: 0, day: 4 });
+});
+
+test('a chave do dia é zero-padded e ordena como o calendário', () => {
+  assert.equal(dayKey({ year: 2026, month: 0, day: 4 }), '2026-01-04');
+  assert.equal(dayKey({ year: 2026, month: 11, day: 25 }), '2026-12-25');
+  const keys = [
+    dayKey({ year: 2026, month: 9, day: 2 }),
+    dayKey({ year: 2026, month: 1, day: 28 }),
+    dayKey({ year: 2026, month: 1, day: 9 }),
+  ].sort();
+  assert.deepEqual(keys, ['2026-02-09', '2026-02-28', '2026-10-02']);
+});
+
+test('addMonths vira a folha sem mexer no dia, e atravessa o ano', () => {
+  assert.deepEqual(addMonths({ year: 2026, month: 0 }, 1), { year: 2026, month: 1 });
+  assert.deepEqual(addMonths({ year: 2026, month: 11 }, 1), { year: 2027, month: 0 });
+  assert.deepEqual(addMonths({ year: 2026, month: 0 }, -1), { year: 2025, month: 11 });
+  assert.deepEqual(addMonths({ year: 2026, month: 5 }, -18), { year: 2024, month: 11 });
+});
+
+test('o tamanho do mês cobre 30, 31 e os dois fevereiros', () => {
+  assert.equal(monthLength({ year: 2026, month: 0 }), 31);
+  assert.equal(monthLength({ year: 2026, month: 3 }), 30);
+  assert.equal(monthLength({ year: 2026, month: 1 }), 28);
+  assert.equal(monthLength({ year: 2028, month: 1 }), 29);
+});
+
+test('a grade do mês alinha o dia 1º debaixo do dia da semana dele', () => {
+  const m = { year: 2026, month: 1 }; // 1º de fevereiro de 2026 é domingo
+  const cells = monthGrid(m);
+  assert.equal(new Date(2026, 1, 1).getDay(), 0);
+  assert.equal(cells[0]?.day, 1);
+  assert.equal(cells.length, 28);
+
+  // Março de 2026 começa no domingo também; janeiro começa numa quinta.
+  const jan = monthGrid({ year: 2026, month: 0 });
+  const lead = new Date(2026, 0, 1).getDay();
+  assert.equal(lead, 4);
+  assert.deepEqual(jan.slice(0, lead), [null, null, null, null]);
+  assert.equal(jan[lead]?.day, 1);
+  assert.equal(jan.length, lead + 31);
+  assert.equal(jan[jan.length - 1]?.day, 31);
+});
+
+test('os dias com escuta saem do próprio histórico', () => {
+  const days = daysWithPlays([
+    play({ at: at(0, 21) }),
+    play({ at: at(0, 3) }),
+    play({ at: at(2, 15) }),
+  ]);
+  assert.equal(days.size, 2);
+  assert.ok(days.has(dayKey(dayOf(at(0, 21)))));
+  assert.ok(days.has(dayKey(dayOf(at(2, 15)))));
+  assert.equal(days.has(dayKey(dayOf(at(1, 12)))), false);
+  assert.equal(daysWithPlays([]).size, 0);
 });
 
 test('totais contam distintos, não linhas', () => {

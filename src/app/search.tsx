@@ -17,6 +17,7 @@ import { AlbumArt } from '@/components/album-art';
 import { Search as SearchIcon } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { SectionLabel } from '@/components/section-label';
+import { searchLyrics } from '@/lib/db';
 import { Body, Display } from '@/components/text';
 import { TrackRow } from '@/components/track-row';
 import { C, CHROME_HEIGHT, PADDING, R, T, alpha } from '@/constants/theme';
@@ -28,15 +29,15 @@ import { usePrefs, useT } from '@/lib/prefs';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { useZoomLaunch } from '@/lib/zoom';
-import { isEmpty, search } from '@/lib/search';
-import { chromeScroll } from '@/lib/chrome-scroll';
+import { fold, isEmpty, search, verseOf } from '@/lib/search';
+import { useChromeScroll } from '@/lib/chrome-scroll';
 import { useTabTop } from '@/lib/tab-top';
 import { useKeyboardOverlap } from '@/lib/keyboard';
 import type { Album, Track } from '@/lib/scan';
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
-  const { library, artists } = useLibrary();
+  const { library, artists, trackById } = useLibrary();
   const { accent } = usePrefs();
   const t = useT();
   const { play, enqueueLast } = usePlayer();
@@ -49,6 +50,28 @@ export default function SearchScreen() {
     atrás do teclado e não há rolagem que os alcance.
   */
   const keyboard = useKeyboardOverlap();
+
+  /**
+   * Faixas achadas pela **letra**, com o verso que as achou.
+   *
+   * Consulta o banco em vez da biblioteca em memória: a letra é o que D11 mantém fora do
+   * índice justamente para não carregar megabytes no boot. Ver `db.searchLyrics`.
+   *
+   * A partir de três caracteres. Com um ou dois, `LIKE '%a%'` casa quase toda letra do
+   * acervo e o resultado não diz nada — além de varrer a tabela inteira a cada tecla.
+   */
+  const verses = useMemo(() => {
+    const needle = fold(query.trim());
+    if (needle.length < 3) return [];
+    try {
+      return searchLyrics(needle, 12)
+        .map((row) => ({ track: trackById(row.trackId), verse: verseOf(row.text, needle) }))
+        // Faixa que saiu da biblioteca mas cuja letra ficou no índice.
+        .filter((r): r is { track: Track; verse: string } => !!r.track);
+    } catch {
+      return [];
+    }
+  }, [query, trackById]);
 
   const results = useMemo(
     () => search(query, library?.tracks ?? [], library?.albums ?? []),
@@ -70,6 +93,8 @@ export default function SearchScreen() {
     'Search',
     useCallback(() => list.current?.scrollTo({ y: 0, animated: true }), [])
   );
+
+  const scroll = useChromeScroll();
 
   const playFrom = (tracks: Track[], index: number) => {
     Keyboard.dismiss();
@@ -213,9 +238,9 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <Animated.ScrollView
         ref={list}
-        {...chromeScroll}
+        {...scroll}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{
@@ -274,6 +299,33 @@ export default function SearchScreen() {
           </View>
         )}
 
+        {/*
+          As letras vêm **depois** das faixas: quem digita um título quer o título, e quem
+          digita um verso não acha nada nas seções de cima — então a seção só aparece
+          quando ela tem o que mostrar, e não compete pelo topo.
+        */}
+        {verses.length > 0 && (
+          <View>
+            <SectionLabel title={t('search.inLyrics')} />
+            {verses.map(({ track, verse }, index) => (
+              <Animated.View key={track.id} entering={found(index)}>
+                <TrackRow
+                  track={track}
+                  position={index + 1}
+                  accent={accent}
+                  // O verso no lugar de "artista · álbum": é ele que explica por que esta
+                  // faixa apareceu, e é o que a pessoa reconhece.
+                  subtitle={verse}
+                  onPress={() => playFrom(verses.map((v) => v.track), index)}
+                  onLongPress={() => openMenu({ kind: 'track', track })}
+                  onQueue={() => enqueueLast([track])}
+                  onPlaylist={() => open([track.id])}
+                />
+              </Animated.View>
+            ))}
+          </View>
+        )}
+
         {results.tracks.length > 0 && (
           <View>
             <SectionLabel title={t('tab.tracks')} />
@@ -292,7 +344,7 @@ export default function SearchScreen() {
             ))}
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
       {sheet}
       {menu}
     </View>

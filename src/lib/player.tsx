@@ -28,6 +28,7 @@ import { AppState, Platform } from 'react-native';
 import { useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 import { logPlay } from './db';
+import { gainVolume } from './gain';
 import { keep } from './history';
 import { useLibrary } from './library';
 import * as liveActivity from '../../modules/live-activity';
@@ -139,7 +140,7 @@ const Ctx = createContext<PlayerApi | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const { library, trackById, albumById } = useLibrary();
-  const { accent, continuation, repeat, shuffle, setShuffle, countPlay, mark, progressOf, spoken } =
+  const { accent, continuation, repeat, shuffle, setShuffle, countPlay, mark, progressOf, spoken, leveling } =
     usePrefs();
 
   /**
@@ -179,7 +180,43 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     progressRef.current = progressOf;
     marksRef.current = spoken;
   }, [mark, progressOf, spoken]);
+
+  /**
+   * A preferência de nivelamento, por ref e pelo mesmo motivo das três acima.
+   *
+   * Ela é lida de dentro de `cue`, e pôr o valor nas dependências dele o recriaria quando
+   * o usuário mexesse no ajuste — o que re-dispara o efeito de restauração da fila e
+   * devolve o player à faixa da sessão anterior. Quem faz a troca valer na hora é o efeito
+   * logo abaixo, que não passa por `cue`.
+   */
+  const levelingRef = useRef(leveling);
+  useEffect(() => {
+    levelingRef.current = leveling;
+  }, [leveling]);
   const player = useAudioPlayer(null, { updateInterval: 200 });
+  /**
+   * O fator de nivelamento da faixa que está no player, de 0 a 1.
+   *
+   * Numa ref, e não em estado: ele é lido de dentro de `cue` e do relógio do sleep timer,
+   * e virar estado poria um re-render no caminho de cada troca de faixa. Ver `lib/gain.ts`.
+   */
+  const level = useRef(1);
+
+  /**
+   * O volume final do player: o esmaecimento do sleep timer **vezes** o nivelamento.
+   *
+   * Multiplicar, e não um dos dois vencer, é o ponto. Os dois mexem no mesmo `volume` por
+   * razões independentes — um nivela a faixa, o outro adormece a reprodução —, e quem
+   * escrevesse por último apagaria o outro: o sleep devolveria o volume cheio numa faixa
+   * que devia tocar a 40%, ou o nivelamento cancelaria o esmaecimento no meio dele.
+   */
+  const applyVolume = useCallback(
+    (fade: number) => {
+      setVolume(player, fade * level.current);
+    },
+    [player]
+  );
+
 
   // A fila da sessão anterior é lida de forma síncrona no primeiro render — assim o
   // mini player já aparece montado, sem um quadro vazio antes.
@@ -312,11 +349,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    * Restaurar é obrigatório: o esmaecimento deixa o player mudo, e sem isto o próximo
    * play sairia sem som nenhum — um defeito que só apareceria na manhã seguinte.
    */
+  /**
+   * Mexer no ajuste vale para a faixa que já está tocando.
+   *
+   * Sem isto a troca só apareceria na faixa seguinte — o usuário desligaria o nivelamento
+   * e não ouviria diferença nenhuma, o que lê como ajuste quebrado. Recalcula da faixa
+   * atual, e não de `cue`, justamente para não recriar `cue` (ver `levelingRef`).
+   */
+  useEffect(() => {
+    level.current = track
+      ? gainVolume({ track: track.trackGain, album: track.albumGain }, leveling)
+      : 1;
+    applyVolume(1);
+  }, [leveling, track, applyVolume]);
+
   const sleepNow = useCallback(() => {
     player.pause();
-    setVolume(player, 1);
+    applyVolume(1);
     setSleepState(SLEEP_OFF);
-  }, [player]);
+  }, [player, applyVolume]);
 
   /**
    * O relógio, conferido de segundo em segundo.
@@ -334,19 +385,41 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         sleepNow();
         return;
       }
-      setVolume(player, fadeVolume((sleep.endsAt - now) / 1000));
+      applyVolume(fadeVolume((sleep.endsAt - now) / 1000));
     }, 1000);
     return () => {
       clearInterval(tick);
-      // Sair daqui por cancelamento, e não por vencimento, tem de desfazer o esmaecimento.
-      setVolume(player, 1);
+      // Sair daqui por cancelamento, e não por vencimento, tem de desfazer o esmaecimento
+      // — devolvendo o volume ao **nivelado**, não a 1.
+      applyVolume(1);
     };
-  }, [sleep, player, sleepNow]);
+  }, [sleep, player, sleepNow, applyVolume]);
 
-  /** Aponta o player para a faixa e, se for tocar, publica os metadados. */
+  /**
+   * Aponta o player para a faixa e, se for tocar, publica os metadados.
+   *
+   * `uri` vazia quer dizer faixa remota sem servidor que a resolva — `absolute()` devolve
+   * string vazia quando não há sessão, ou quando o id dela é de outro servidor (o usuário
+   * trocou o endereço, e o id do servidor mudou com ele). Ver `lib/storage.ts`.
+   *
+   * Sair antes de `player.replace('')` é o que evita o pior comportamento: o expo-audio
+   * aceita a string, falha ao carregar e **descarrega a faixa que estava tocando** — um
+   * toque numa faixa indisponível parava a música que estava boa. Assim o player fica onde
+   * está, e a tela já mostra a faixa como indisponível.
+   */
   const cue = useCallback(
     (item: Track, autoplay: boolean, position = 0) => {
+      if (!item.uri) return;
       player.replace(item.uri);
+      /*
+        O nivelamento é da faixa, então ele muda aqui — antes de tocar, e não num efeito
+        que chegaria um quadro depois com o áudio já no volume errado.
+      */
+      level.current = gainVolume(
+        { track: item.trackGain, album: item.albumGain },
+        levelingRef.current
+      );
+      applyVolume(1);
       if (position > 0) player.seekTo(position).catch(() => {});
       if (autoplay || lockActive.current) publish(item);
       if (autoplay) {
@@ -354,7 +427,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         player.play();
       }
     },
-    [player, publish]
+    [player, publish, applyVolume]
   );
 
   const load = useCallback(

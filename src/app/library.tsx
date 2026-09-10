@@ -39,6 +39,8 @@ import {
 } from '@/components/icons';
 import { EmptyState } from '@/components/empty-state';
 import { Chip, ChipRow } from '@/components/chip';
+import { lastPlayedAt } from '@/lib/db';
+import { smartList, SMART_KEYS, type SmartKey } from '@/lib/smart';
 import { SectionLabel } from '@/components/section-label';
 import { GridSkeleton, RowSkeleton, TrackSkeleton } from '@/components/skeleton';
 import { Body, Display, Mono } from '@/components/text';
@@ -47,7 +49,7 @@ import { C, CHROME_HEIGHT, PADDING, R, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
-import { chromeScroll } from '@/lib/chrome-scroll';
+import { useChromeScroll } from '@/lib/chrome-scroll';
 import { useTabTop } from '@/lib/tab-top';
 import { usePlayer } from '@/lib/player';
 import { useItemMenu } from '@/components/context-menu';
@@ -101,7 +103,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { library, artists, trackById, albumById } = useLibrary();
-  const { accent, albumView, setAlbumView, liked, likedAlbums, spoken } = usePrefs();
+  const { accent, albumView, setAlbumView, liked, likedAlbums, spoken, playsOf } = usePrefs();
   const t = useT();
 
   /*
@@ -198,6 +200,24 @@ export default function LibraryScreen() {
   }, [tracks]);
 
   const [genre, setGenre] = useState<string | null>(null);
+
+  /**
+   * O recorte automático da aba de Faixas. Ver `lib/smart.ts`.
+   *
+   * Só ali: nas outras abas a pergunta é sobre álbum ou artista, e "nunca ouvidas" não
+   * quer dizer nada sobre um artista inteiro.
+   */
+  const [smart, setSmart] = useState<SmartKey>('all');
+
+  /**
+   * O "agora" dos recortes, lido uma vez.
+   *
+   * Em estado, e não `Date.now()` dentro do `useMemo`: o lint recusa impureza ali, com
+   * razão — dois renders seguidos devolveriam janelas diferentes sem nada ter mudado. É o
+   * mesmo `readAt` da tela de Escuta, e ficar algumas horas velho não muda a resposta de
+   * uma janela de sete ou cento e oitenta dias.
+   */
+  const [readAt] = useState(() => Date.now());
   // Uma varredura nova pode não ter mais o gênero escolhido: o filtro não pode sobreviver
   // ao que ele filtra, senão a aba fica permanentemente vazia sem dizer por quê.
   const picked = genre && genres.some((g) => g.name === genre) ? genre : null;
@@ -207,6 +227,24 @@ export default function LibraryScreen() {
     () => (picked ? new Set(tracks.filter((t) => t.genre?.trim() === picked).map((t) => t.id)) : null),
     [tracks, picked]
   );
+  /**
+   * Quando cada faixa tocou por último. Um `GROUP BY` no banco, uma vez por biblioteca.
+   *
+   * Fora do `useMemo` do recorte para não repetir a consulta a cada troca de chip.
+   *
+   * `library` entra nas dependências sem aparecer no corpo, e é de propósito: o banco não
+   * avisa quem está montado, e é uma varredura nova — que troca a biblioteca — o momento
+   * em que estas datas mudam de conjunto. Mesmo papel que `readAt` tem na tela de Escuta.
+   */
+  const lastPlayed = useMemo(() => {
+    try {
+      return lastPlayedAt();
+    } catch {
+      return new Map<string, number>(); // banco indisponível: os recortes ficam vazios
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library]);
+
   const genreTracks = useMemo(
     () => (ofGenre ? tracks.filter((t) => ofGenre.has(t.id)) : tracks),
     [tracks, ofGenre]
@@ -345,6 +383,27 @@ export default function LibraryScreen() {
       )}
 
       {/*
+        Os recortes automáticos, só na aba de Faixas — e abaixo da fileira de gênero, que
+        eles compõem em vez de substituir. Ver `lib/smart.ts`.
+
+        Segue `tab` e não `shown`, como a fileira de gênero: a fileira é urgente junto com
+        as abas, e é o conteúdo que pode chegar no quadro seguinte.
+      */}
+      {tab === 'tracks' && tracks.length > 0 && (
+        <ChipRow style={{ marginTop: 10 }}>
+          {SMART_KEYS.map((key) => (
+            <Chip
+              key={key}
+              label={t(`smart.${key}` as Key)}
+              on={smart === key}
+              accent={accent}
+              onPress={() => setSmart(key)}
+            />
+          ))}
+        </ChipRow>
+      )}
+
+      {/*
         Daqui para baixo é conteúdo, e é só isto que se move na troca de aba. O título e
         as abas ficam de fora: o traço de acento corre até a aba nova e nada mais sai do
         lugar.
@@ -431,7 +490,24 @@ export default function LibraryScreen() {
   const carousel = shown === 'albums' && albumView === 'carousel';
 
   /** As faixas que uma linha de faixa toca: a aba diz qual das duas listas é. */
-  const listTracks = shown === 'liked' ? likedTracks : genreTracks;
+  /**
+   * As faixas que uma linha de faixa toca: a aba diz qual das duas listas é, e na aba de
+   * Faixas o recorte automático se aplica **por cima** do filtro de gênero.
+   *
+   * Compõem de propósito: "nunca ouvidas do Indie Folk" é uma pergunta melhor que
+   * qualquer uma das duas sozinha, e sai de graça porque o recorte recebe a lista já
+   * filtrada.
+   */
+  const listTracks = useMemo(() => {
+    if (shown === 'liked') return likedTracks;
+    if (shown !== 'tracks' || smart === 'all') return genreTracks;
+    return smartList(smart, {
+      tracks: genreTracks,
+      playsOf,
+      lastPlayed,
+      now: readAt,
+    });
+  }, [shown, smart, likedTracks, genreTracks, playsOf, lastPlayed, readAt]);
 
   /*
     Uma FlatList só, para as cinco abas.
@@ -477,12 +553,13 @@ export default function LibraryScreen() {
   }, [shown, albumView, genreAlbums, genreArtists, playlists, shows, listTracks]);
 
   const empty = <Empty tab={shown} hasFavoriteAlbums={favoriteAlbums.length > 0} />;
+  const scroll = useChromeScroll();
 
   return (
     <>
-      <FlatList
+      <Animated.FlatList<Row>
         ref={list}
-        {...chromeScroll}
+        {...scroll}
         /*
           Segue `shown`, que é diferido — então a lista **não** muda no commit do toque.
 

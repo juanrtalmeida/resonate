@@ -39,6 +39,7 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedRef,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -428,18 +429,44 @@ export function ZoomFade({
   const progress = zoom?.progress;
   const from = zoom?.from ?? null;
 
-  const fade = useAnimatedStyle(() => {
-    if (!progress) return { opacity: 1 };
-    return {
-      opacity: from ? interpolate(progress.value, [0, 0.5, 1], [0, 0, 1]) : progress.value,
-    };
-  });
+  const fade = useAnimatedStyle(() => ({
+    opacity: progress ? fadeAt(progress.value, from) : 1,
+  }));
 
   return (
     <Animated.View pointerEvents={pointerEvents} style={[style, fade]}>
       {children}
     </Animated.View>
   );
+}
+
+/**
+ * A curva do esmaecimento, num lugar só: `ZoomFade` a aplica, `useZoomFade` a devolve.
+ *
+ * Sem `from` — o zoom que não nasce de um retângulo, como o do player aberto pela fila —
+ * o esmaecimento é o próprio progresso.
+ */
+function fadeAt(progress: number, from: Rect | null): number {
+  'worklet';
+  return from ? interpolate(progress, [0, 0.5, 1], [0, 0, 1]) : progress;
+}
+
+/**
+ * A opacidade que o `ZoomFade` está aplicando, como valor em vez de estilo.
+ *
+ * Existe por causa do vidro: opacidade zero num ancestral de um `GlassView` não o deixa
+ * translúcido, o deixa **sem efeito nenhum** — e no Now Playing tudo o que não é a capa
+ * vive dentro de um `ZoomFade`, que começa exatamente em zero. Quem desenha material ali
+ * precisa saber disso para só pedir o vidro quando ele já tem como aparecer. Ver `fade` em
+ * `components/panel.tsx`.
+ *
+ * Fora de um `ZoomScreen` devolve 1: sem zoom não há esmaecimento.
+ */
+export function useZoomFade(): SharedValue<number> {
+  const zoom = use(Ctx);
+  const progress = zoom?.progress;
+  const from = zoom?.from ?? null;
+  return useDerivedValue(() => (progress ? fadeAt(progress.value, from) : 1));
 }
 
 /**

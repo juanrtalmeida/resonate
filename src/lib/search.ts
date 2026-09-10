@@ -50,5 +50,29 @@ export function search(query: string, tracks: Track[], albums: Album[]): Results
   return { albums: matchedAlbums, artists: [...artists], tracks: matchedTracks };
 }
 
+/**
+ * O verso que casou, recortado da letra inteira.
+ *
+ * Uma linha, e não o parágrafo: o resultado precisa mostrar *por que* aquela faixa
+ * apareceu, e a letra inteira num item de lista não cabe nem ajuda. A linha é a unidade
+ * natural de uma letra, e é o que a pessoa lembra.
+ *
+ * Recebe a letra bruta e o trecho **já normalizado** — a busca casou sobre a forma sem
+ * acento, então localizar aqui tem de usar a mesma forma, ou "coracao" não seria achado na
+ * linha que escreve "coração".
+ *
+ * `.lrc` traz marcas de tempo no começo de cada linha; elas saem, senão o resultado
+ * mostraria "[00:42.10] a linha".
+ */
+export function verseOf(text: string, needle: string): string {
+  const lines = text.split(/\r?\n/);
+  const found = lines.find((line) => fold(line).includes(needle));
+  const line = (found ?? lines[0] ?? '').replace(/^\s*\[[^\]]*\]\s*/, '').trim();
+  return line;
+}
+
+/** Uma faixa achada pela letra, com o verso que a achou. */
+export type Verse = { trackId: string; verse: string };
+
 export const isEmpty = (r: Results) =>
   !r.albums.length && !r.artists.length && !r.tracks.length;

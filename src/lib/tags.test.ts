@@ -267,6 +267,59 @@ const usltFrame = (descriptor: string, text: string, v4: boolean) => {
   return cat('USLT', v4 ? synchsafe(payload.length) : be32(payload.length), [0, 0], payload);
 };
 
+/**
+ * TXXX: encoding, descrição terminada em NUL, valor. É onde o ReplayGain mora num MP3.
+ */
+const txxxFrame = (key: string, value: string, v4: boolean) => {
+  const payload = cat([3], key, [0], value);
+  return cat('TXXX', v4 ? synchsafe(payload.length) : be32(payload.length), [0, 0], payload);
+};
+
+test('ID3 TXXX separa a descrição do valor, e acha o ReplayGain', () => {
+  const frames = cat(
+    id3Frame('TIT2', 'Faixa', true),
+    txxxFrame('replaygain_track_gain', '-7.53 dB', true),
+    txxxFrame('replaygain_album_gain', '-9.20 dB', true),
+    // Um TXXX que não é ReplayGain não pode virar ganho nenhum.
+    txxxFrame('MusicBrainz Album Id', 'abc-123', true)
+  );
+  const bytes = cat('ID3', [4, 0, 0], synchsafe(frames.length), frames);
+  const t = parseTags(bytes, 'file:///Music/a.mp3');
+  assert.equal(t.title, 'Faixa');
+  // Cru: o leitor devolve o texto da tag, e quem converte é `lib/gain.ts`.
+  assert.equal(t.trackGain, '-7.53 dB');
+  assert.equal(t.albumGain, '-9.20 dB');
+});
+
+/** Um FLAC mínimo: STREAMINFO vazio e o bloco de comentários como último. */
+const flacWith = (fields: string[]) => {
+  const comment = vorbisBlock(fields);
+  return cat(
+    'fLaC',
+    [0, 0, 0, 34],
+    new Uint8Array(34),
+    [0x84, (comment.length >> 16) & 255, (comment.length >> 8) & 255, comment.length & 255],
+    comment
+  );
+};
+
+test('Vorbis REPLAYGAIN, e sem a tag os dois ficam null', () => {
+  const t = parseTags(
+    flacWith([
+      'TITLE=Faixa',
+      'REPLAYGAIN_TRACK_GAIN=-4.10 dB',
+      'REPLAYGAIN_ALBUM_GAIN=-6.00 dB',
+    ]),
+    'file:///Music/a.flac'
+  );
+  assert.equal(t.trackGain, '-4.10 dB');
+  assert.equal(t.albumGain, '-6.00 dB');
+
+  const without = parseTags(flacWith(['TITLE=Faixa']), 'file:///Music/b.flac');
+  assert.equal(without.trackGain, null);
+  assert.equal(without.albumGain, null);
+});
+
 test('ID3 USLT pula o descritor', () => {
   const frames = cat(
     id3Frame('TIT2', 'Faixa', true),

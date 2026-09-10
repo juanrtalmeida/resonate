@@ -45,20 +45,28 @@ const DAY = 86_400_000;
 export type Bounds = { from: number; to: number };
 
 /**
- * O período consultado: uma janela que corre com o relógio, ou meses escolhidos à mão.
+ * O período consultado: uma janela que corre com o relógio, ou dois dias escolhidos à mão.
  *
  * As duas formas coexistem porque respondem a perguntas diferentes. "Últimos 30 dias" é
- * a pergunta de sempre e não exige escolha nenhuma; "agosto" é a pergunta de quem quer
- * comparar dois meses, e uma janela corrida nunca dá isso — ela muda de conteúdo a cada
- * dia que passa.
+ * a pergunta de sempre e não exige escolha nenhuma; "do dia 12 ao dia 19" é a pergunta de
+ * quem quer um recorte que não recua com o relógio — uma janela corrida nunca dá isso,
+ * porque muda de conteúdo a cada dia que passa.
+ *
+ * A escolha era por mês, e a granularidade não bastava: uma viagem, um fim de semana ou a
+ * semana de lançamento de um disco não começam no dia 1º. Dois dias descrevem qualquer um
+ * desses recortes, e o mês inteiro continua a um gesto de distância — primeiro dia,
+ * último dia.
  */
 export type Period =
   | { kind: 'rolling'; span: Span }
-  /** Meses inteiros, do começo do primeiro ao fim do último. `to` é inclusivo. */
-  | { kind: 'months'; from: Month; to: Month };
+  /** Dias inteiros, da meia-noite do primeiro ao fim do último. `to` é inclusivo. */
+  | { kind: 'days'; from: Day; to: Day };
 
 /** Um mês, com o mês de 0 a 11 como no `Date`. */
 export type Month = { year: number; month: number };
+
+/** Um dia do calendário. `month` de 0 a 11 e `day` de 1 a 31, como no `Date`. */
+export type Day = { year: number; month: number; day: number };
 
 export const rolling = (span: Span): Period => ({ kind: 'rolling', span });
 
@@ -82,27 +90,81 @@ export const monthOf = (at: number): Month => {
   return { year: d.getFullYear(), month: d.getMonth() };
 };
 
+export const sameDay = (a: Day, b: Day): boolean =>
+  a.year === b.year && a.month === b.month && a.day === b.day;
+
+/** Ordem no calendário. Negativo quando `a` vem antes. */
+export const compareDays = (a: Day, b: Day): number =>
+  a.year - b.year || a.month - b.month || a.day - b.day;
+
+export const dayOf = (at: number): Day => {
+  const d = new Date(at);
+  return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
+};
+
+export const monthOfDay = (d: Day): Month => ({ year: d.year, month: d.month });
+
+/**
+ * Chave estável de um dia, para `Set` e `Map`.
+ *
+ * Zero-padded para a chave ordenar como o calendário ordena — o seletor marca os dias com
+ * escuta a partir de um `Set` destas, e uma chave que ordena de graça evita um comparador
+ * separado quando se quer o primeiro ou o último.
+ */
+export const dayKey = (d: Day): string =>
+  `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+
+/** Quantos dias tem o mês. Dia 0 do mês seguinte é o último dia deste. */
+export const monthLength = (m: Month): number => new Date(m.year, m.month + 1, 0).getDate();
+
+/**
+ * Anda `delta` meses. Pela conta em meses absolutos, e não por `setMonth`: somar 1 a 31 de
+ * janeiro com `Date` devolve 3 de março, porque fevereiro não tem 31 — e o seletor só
+ * quer virar a folha do calendário, não mexer no dia.
+ */
+export function addMonths(m: Month, delta: number): Month {
+  const total = m.year * 12 + m.month + delta;
+  return { year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
+}
+
+/**
+ * As células de um mês em grade de sete colunas.
+ *
+ * Os `null` da frente são os dias da semana anterior: sem eles o dia 1º cai debaixo da
+ * coluna errada e a grade inteira mente. A semana começa no domingo, como `Date.getDay` e
+ * como `byWeekday` — um começo só, em vez de dois que precisariam concordar.
+ *
+ * Sem `null` no fim: a grade quebra por `flexWrap`, e célula vazia no rabo não alinha
+ * nada que já não esteja alinhado.
+ */
+export function monthGrid(m: Month): (Day | null)[] {
+  const lead = new Date(m.year, m.month, 1).getDay();
+  const cells: (Day | null)[] = Array.from({ length: lead }, () => null);
+  for (let day = 1; day <= monthLength(m); day++) cells.push({ year: m.year, month: m.month, day });
+  return cells;
+}
+
 /**
  * O intervalo de um período.
  *
- * Em hora **local**, e não UTC: quem escolhe "agosto" quer o agosto do relógio dele. O
- * `Date` com ano e mês já resolve isso, inclusive o fim do mês — dia 0 do mês seguinte é
- * o último dia deste, e sem precisar saber quantos dias ele tem.
+ * Em hora **local**, e não UTC: quem escolhe o dia 12 quer o dia 12 do relógio dele. O
+ * `Date` com ano, mês e dia já resolve isso, inclusive a virada de mês e de ano — dia
+ * `day + 1` de um dia 31 cai no primeiro do mês seguinte sem precisar saber onde estava.
  */
 export function boundsOf(period: Period, now: number): Bounds {
   if (period.kind === 'rolling') return { from: startOf(period.span, now), to: now };
 
-  // Fora de ordem é escolha válida: quem toca em setembro e depois em julho quis o
+  // Fora de ordem é escolha válida: quem toca no dia 19 e depois no dia 12 quis o
   // intervalo, não uma seleção inválida.
   const [first, last] =
-    compareMonths(period.from, period.to) <= 0
+    compareDays(period.from, period.to) <= 0
       ? [period.from, period.to]
       : [period.to, period.from];
 
   return {
-    from: new Date(first.year, first.month, 1).getTime(),
-    // Meia-noite do primeiro dia do mês seguinte, menos um milissegundo.
-    to: new Date(last.year, last.month + 1, 1).getTime() - 1,
+    from: new Date(first.year, first.month, first.day).getTime(),
+    // Meia-noite do dia seguinte ao último, menos um milissegundo.
+    to: new Date(last.year, last.month, last.day + 1).getTime() - 1,
   };
 }
 
@@ -183,6 +245,20 @@ export function byHour(plays: Play[]): number[] {
   const hours = new Array<number>(24).fill(0);
   for (const play of plays) hours[new Date(play.at).getHours()] += play.seconds;
   return hours;
+}
+
+/**
+ * Os dias que tiveram escuta, por `dayKey`.
+ *
+ * O seletor marca esses dias com um ponto. Sem a marca, um calendário deixa escolher
+ * qualquer intervalo — inclusive um sem escuta nenhuma — e o usuário só descobre o vazio
+ * depois de escolher. Era a vantagem que a grade de meses tinha de graça, porque ela só
+ * oferecia meses que existiam; aqui ela volta como informação em vez de como proibição.
+ */
+export function daysWithPlays(plays: Play[]): Set<string> {
+  const days = new Set<string>();
+  for (const play of plays) days.add(dayKey(dayOf(play.at)));
+  return days;
 }
 
 /** Segundos por dia da semana, começando no domingo, como `Date.getDay`. */

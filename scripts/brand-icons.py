@@ -13,6 +13,31 @@ maskable, para respeitar a safe zone.
 O antialiasing é analítico — cobertura pela distância ao raio, uma passada na resolução
 final. Supersampling de 4x num ícone de 1024 seriam 16 milhões de amostras em Python
 puro, e isso levava minutos.
+
+## Uma marca só, em todo lugar
+
+O ícone era **ink sobre gradiente ember** enquanto a splash, o logotipo e o favicon eram
+**anel ember com núcleo gold**. Eram duas marcas: o app na gaveta não parecia o app que
+abria. Agora todos os quatro são a mesma coisa — anel ember, núcleo gold, sobre o
+gradiente escuro quente, que é o fundo que o app tem por dentro.
+
+## Ícone é quadrado cheio e opaco
+
+O `icon.png` desenhava os próprios cantos arredondados e deixava transparência fora deles.
+Isso é errado nas duas plataformas, e era a borda branca: o iOS aplica a **máscara dele**
+sobre o que a gente entrega, e o que sobrava fora do nosso canto — transparente, composto
+contra branco — aparecia como quatro falhas claras nas quinas. O raio também não era o da
+Apple (0,285 do lado, num arco circular, contra ~0,2237 num squircle contínuo), então o
+nosso canto ficava *dentro* da máscara e a arte não chegava até a borda: era o "não pegando
+tudo".
+
+A regra é entregar o quadrado inteiro, sem canto e sem alfa, e deixar a máscara para o
+sistema. Daí `opaque=True` na maioria dos alvos: eles saem em color type 2 (RGB, sem canal
+alfa), que é também o que a App Store exige de um ícone de app.
+
+Quem continua com alfa é só quem é *desenhado sobre outra coisa*: a splash (sobre o
+`backgroundColor` do app.json) e o foreground do adaptive icon do Android (sobre o
+background dele, que é outro PNG).
 """
 
 import math
@@ -23,17 +48,27 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent.parent / 'assets' / 'images'
 
 EMBER = (0xF2, 0x65, 0x3A)
-EMBER_LITE = (0xFF, 0x8A, 0x5C)
-EMBER_DEEP = (0xB3, 0x3C, 0x1E)
 GOLD = (0xE8, 0xB4, 0x4A)
 INK = (0x12, 0x10, 0x0E)
 DARK_WARM = (0x2A, 0x17, 0x10)
 CREAM = (0xF6, 0xF1, 0xEA)
 
 
-def write_png(path: Path, size: int, pixels: bytes) -> None:
+def write_png(path: Path, size: int, pixels: bytes, opaque: bool) -> None:
+    """
+    `pixels` é sempre RGBA. `opaque` grava em color type 2, descartando o canal alfa.
+
+    Descartar é seguro porque os alvos opacos são justamente os que têm fundo: alfa vale 1
+    em todos os pixels deles. Não é uma conversão com perda, é a remoção de um canal que
+    só carrega 255.
+    """
+    step = 4
+    if opaque:
+        pixels = b''.join(pixels[i : i + 3] for i in range(0, len(pixels), 4))
+        step = 3
+
     raw = b''.join(
-        b'\x00' + pixels[y * size * 4 : (y + 1) * size * 4] for y in range(size)
+        b'\x00' + pixels[y * size * step : (y + 1) * size * step] for y in range(size)
     )
 
     def chunk(tag: bytes, data: bytes) -> bytes:
@@ -44,9 +79,10 @@ def write_png(path: Path, size: int, pixels: bytes) -> None:
             + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF)
         )
 
+    color_type = 2 if opaque else 6
     path.write_bytes(
         b'\x89PNG\r\n\x1a\n'
-        + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0))
+        + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, color_type, 0, 0, 0))
         + chunk(b'IDAT', zlib.compress(raw, 9))
         + chunk(b'IEND', b'')
     )
@@ -80,7 +116,6 @@ def render(
     ring: tuple,
     core: tuple | None,
     symbol_ratio: float,
-    squircle: bool,
 ) -> bytes:
     mark = size * symbol_ratio
     origin = (size - mark) / 2
@@ -90,7 +125,6 @@ def render(
     r_ring = 24 * unit
     half = 4 * unit  # metade do traço 8
     r_core = 7 * unit if core else 0.0
-    corner = size * 0.285
 
     out = bytearray(size * size * 4)
     at = 0
@@ -102,21 +136,10 @@ def render(
             if background == 'none':
                 col, alpha = (0.0, 0.0, 0.0), 0.0
             else:
-                if background == 'ember':
-                    # 150deg: da diagonal superior esquerda para a inferior direita.
-                    t = (px + py) / (2 * size)
-                    col = (
-                        mix(EMBER_LITE, EMBER, t / 0.44)
-                        if t < 0.44
-                        else mix(EMBER, EMBER_DEEP, (t - 0.44) / 0.56)
-                    )
-                else:  # dark: radial em 20% 0%
-                    d = math.hypot(px - size * 0.2, py) / (size * 1.2)
-                    col = mix(DARK_WARM, INK, d / 0.62)
+                # dark: radial quente em 20% 0%, o mesmo fundo que as telas do app têm.
+                d = math.hypot(px - size * 0.2, py) / (size * 1.2)
+                col = tuple(float(c) for c in mix(DARK_WARM, INK, d / 0.62))
                 alpha = 1.0
-                if squircle:
-                    alpha = squircle_alpha(px, py, size, corner)
-                    col = tuple(float(c) for c in col)
 
             d = math.hypot(px - cx, py - cy)
             # O anel é a diferença de dois discos: o de fora menos o de dentro.
@@ -137,44 +160,39 @@ def render(
     return bytes(out)
 
 
-def squircle_alpha(x, y, side, radius):
-    """Alfa do canto arredondado. Fora dos cantos é 1."""
-    cx = radius if x < radius else side - radius if x > side - radius else None
-    cy = radius if y < radius else side - radius if y > side - radius else None
-    if cx is None or cy is None:
-        return 1.0
-    return coverage(math.hypot(x - cx, y - cy), radius)
-
-
 JOBS = [
-    # nome, lado, fundo, anel, núcleo, símbolo, squircle
-    ('icon.png', 1024, 'ember', INK, INK, 0.57, True),
-    ('apple-touch-icon.png', 180, 'ember', INK, INK, 0.57, True),
-    ('icon-192.png', 192, 'ember', INK, INK, 0.57, True),
-    ('icon-512.png', 512, 'ember', INK, INK, 0.57, True),
-    ('maskable-512.png', 512, 'ember', INK, INK, 0.44, True),
-    ('favicon.png', 64, 'dark', EMBER, GOLD, 0.62, False),
+    # nome, lado, fundo, anel, núcleo, símbolo, opaco
+    #
+    # Nenhum destes desenha canto: a máscara é do sistema. Ver o cabeçalho.
+    ('icon.png', 1024, 'dark', EMBER, GOLD, 0.57, True),
+    ('apple-touch-icon.png', 180, 'dark', EMBER, GOLD, 0.57, True),
+    ('icon-192.png', 192, 'dark', EMBER, GOLD, 0.57, True),
+    ('icon-512.png', 512, 'dark', EMBER, GOLD, 0.57, True),
+    # Maskable: o navegador recorta em círculo, e 0.44 mantém a marca dentro da safe zone.
+    ('maskable-512.png', 512, 'dark', EMBER, GOLD, 0.44, True),
+    ('favicon.png', 64, 'dark', EMBER, GOLD, 0.62, True),
+    # A splash é desenhada sobre o `backgroundColor` do app.json: alfa fica.
     ('splash-icon.png', 512, 'none', EMBER, GOLD, 0.9, False),
     # Adaptive icon: o fundo é um PNG à parte, e o Android recorta a máscara dele.
-    ('android-icon-background.png', 432, 'ember', None, None, 0.0, False),
-    ('android-icon-foreground.png', 432, 'none', INK, INK, 0.45, False),
+    ('android-icon-background.png', 432, 'dark', None, None, 0.0, True),
+    ('android-icon-foreground.png', 432, 'none', EMBER, GOLD, 0.45, False),
+    # O monocromático é tingido pelo sistema no tema dinâmico: a cor aqui é só o desenho.
     ('android-icon-monochrome.png', 432, 'none', CREAM, CREAM, 0.45, False),
 ]
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, size, background, ring, core, ratio, squircle in JOBS:
+    for name, size, background, ring, core, ratio, opaque in JOBS:
         pixels = render(
             size,
             background=background,
             ring=ring if ring else (0, 0, 0),
             core=core,
             symbol_ratio=ratio if ring else 0.0,
-            squircle=squircle,
         )
-        write_png(OUT / name, size, pixels)
-        print(f'{name:34} {size}x{size}  {background}')
+        write_png(OUT / name, size, pixels, opaque)
+        print(f'{name:34} {size}x{size}  {background:5} {"rgb" if opaque else "rgba"}')
 
 
 if __name__ == '__main__':

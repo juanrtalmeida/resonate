@@ -15,8 +15,12 @@ artista e toca o áudio com controles nativos de tela de bloqueio.
 
 Três coisas que o Resonate deliberadamente **não** faz:
 
-- não faz streaming — todo áudio vem de arquivos locais;
-- não tem login nem conta;
+- **não usa serviço de streaming de terceiro.** O padrão continua sendo arquivo local. O
+  usuário pode conectar um servidor **dele** por OpenSubsonic — Navidrome, Airsonic, Gonic
+  — e aí o acervo do servidor entra na mesma biblioteca dos arquivos, com os dois caminhos
+  valendo juntos. Não há catálogo nosso, nem de ninguém, no meio. Ver `lib/subsonic.ts`;
+- **não tem login nem conta nossa.** A credencial que existe é a do servidor do próprio
+  usuário, guardada só no aparelho;
 - não move, copia nem renomeia os arquivos do usuário (a única exceção é a importação
   no iOS, onde copiar para dentro do sandbox é a única forma de acessar o arquivo).
 

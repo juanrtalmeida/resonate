@@ -15,6 +15,21 @@ export type Tags = {
   lyrics: string | null;
   /** Gênero declarado na tag. É o que aproxima artistas sem depender de rede. */
   genre: string | null;
+  /**
+   * ReplayGain **como a tag escreveu** — `"-7.53 dB"`, e não o número.
+   *
+   * Cru de propósito. Este arquivo é "o leitor de tags sem dependência", e é essa ausência
+   * de import que o deixa rodar em `node --test`: interpretar decibéis aqui obrigaria a
+   * importar `lib/gain.ts` e o teste do leitor pararia de carregar. A divisão também é a
+   * certa por si — aqui se lê bytes e sai texto; quem entende decibel é `gain.ts`, e quem
+   * converte é `scan.ts`, ao montar a faixa.
+   *
+   * ponytail: lido de Vorbis comment (FLAC/OGG/Opus) e de `TXXX` do ID3. MP4 guarda isso
+   * em átomo freeform `----`, que este leitor ainda não desce; na prática o iTunes usa
+   * `iTunNORM` em vez de ReplayGain, e a premissa do projeto é FLAC.
+   */
+  trackGain: string | null;
+  albumGain: string | null;
 };
 
 // ---------------------------------------------------------------- decoders
@@ -152,10 +167,57 @@ export function parseId3(b: Uint8Array): Partial<Tags> | null {
       case 'TCON':
         out.genre = genreOf(id3Text(b, from, to));
         break;
+      case 'TXXX': {
+        // O ReplayGain do MP3 mora num frame de usuário, chaveado por descrição.
+        const pair = txxx(b, from, to);
+        if (pair) {
+          const key = pair.key.toUpperCase();
+          if (key === 'REPLAYGAIN_TRACK_GAIN') out.trackGain = pair.value;
+          else if (key === 'REPLAYGAIN_ALBUM_GAIN') out.albumGain = pair.value;
+        }
+        break;
+      }
     }
     i = from + size;
   }
   return out;
+}
+
+/**
+ * TXXX: encoding, uma descrição terminada em NUL, e o valor.
+ *
+ * É o frame "definido pelo usuário" do ID3, e é onde o ReplayGain vive num MP3 — a
+ * descrição é a chave (`replaygain_album_gain`) e o resto é o valor. Sem separar os dois,
+ * o que se lê é a chave e o valor colados.
+ *
+ * Devolve `null` quando não há NUL separando: frame malformado, e adivinhar onde a
+ * descrição acaba daria uma chave que não casa com nada.
+ */
+function txxx(b: Uint8Array, from: number, to: number): { key: string; value: string } | null {
+  if (from >= to) return null;
+  const enc = b[from];
+  const wide = enc === 1 || enc === 2; // UTF-16: o terminador tem dois bytes
+  let i = from + 1;
+  let end = -1;
+  while (i < to) {
+    if (b[i] === 0 && (!wide || b[i + 1] === 0)) {
+      end = i;
+      break;
+    }
+    i += wide ? 2 : 1;
+  }
+  if (end < 0) return null;
+
+  // `id3Text` espera o byte de encoding logo antes do texto, então cada metade é
+  // remontada com ele na frente.
+  const decode = (start: number, stop: number): string => {
+    const text = new Uint8Array(stop - start + 1);
+    text[0] = enc;
+    text.set(b.subarray(start, stop), 1);
+    return id3Text(text, 0, text.length);
+  };
+
+  return { key: decode(from + 1, end), value: decode(end + (wide ? 2 : 1), to) };
 }
 
 /**
@@ -227,6 +289,8 @@ function parseVorbisComment(b: Uint8Array, at: number, end: number): Partial<Tag
       else if (key === 'LYRICS' || key === 'UNSYNCEDLYRICS' || key === 'SYNCEDLYRICS')
         out.lyrics = value;
       else if (key === 'GENRE') out.genre = genreOf(value);
+      else if (key === 'REPLAYGAIN_TRACK_GAIN') out.trackGain = value;
+      else if (key === 'REPLAYGAIN_ALBUM_GAIN') out.albumGain = value;
     }
     i += len;
   }
@@ -443,6 +507,9 @@ export function fromPath(uri: string): Tags {
     trackNumber,
     lyrics: null,
     genre: null,
+    // Caminho de arquivo não diz nada sobre volume.
+    trackGain: null,
+    albumGain: null,
   };
 }
 
@@ -466,6 +533,8 @@ export function parseTags(bytes: Uint8Array, uri: string): Tags {
     trackNumber: parsed.trackNumber ?? base.trackNumber,
     lyrics: parsed.lyrics || null,
     genre: parsed.genre || null,
+    trackGain: parsed.trackGain || null,
+    albumGain: parsed.albumGain || null,
   };
 }
 

@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
+  ReduceMotion,
   runOnJS,
   useAnimatedProps,
   useAnimatedReaction,
@@ -266,15 +268,31 @@ export function Waveform({
     });
 
   /**
-   * A parte tocada é a mesma onda no acento, dentro de uma janela que cresce.
+   * A parte tocada é a mesma onda no acento, revelada por uma janela que desliza.
    *
    * Colorir barra a barra custava um `backgroundColor` recalculado em JavaScript para 52
-   * views a cada tique do tempo. Uma janela com `overflow: hidden` é um estilo animado
-   * só, e o React não é acordado.
+   * views a cada tique do tempo. Uma janela com `overflow: hidden` resolveu isso.
+   *
+   * A janela **não** cresce em `width`, e é aqui que estava o engasgo: `width` é
+   * propriedade de layout, e animá-la obriga o Yoga a remedir a janela e as 52 barras de
+   * dentro a cada quadro. No tique do tempo isso acontece cinco vezes por segundo e
+   * ninguém nota; arrastando a onda para buscar, acontece a cada quadro, e é onde o
+   * arraste engasgava.
+   *
+   * Agora são dois `translateX` e nenhum layout. A janela tem largura fixa e desliza para
+   * a esquerda por `-(1-p)·w`, ficando com a borda direita em `p·w`; a onda de dentro
+   * desliza `+(1-p)·w` para desfazer isso e continuar ancorada no zero da fita. O que
+   * sobra visível é exatamente `[0, p·w]` — o mesmo recorte de antes, pela via que não
+   * passa pelo layout.
    */
-  const played = useAnimatedStyle(() => ({
-    width: (scrub.value >= 0 ? scrub.value : progress.value) * width,
-  }));
+  const reveal = useAnimatedStyle(() => {
+    const p = scrub.value >= 0 ? scrub.value : progress.value;
+    return { transform: [{ translateX: -(1 - p) * width }] };
+  });
+  const anchor = useAnimatedStyle(() => {
+    const p = scrub.value >= 0 ? scrub.value : progress.value;
+    return { transform: [{ translateX: (1 - p) * width }] };
+  });
 
   const row = (color: string) =>
     heights.map((h, i) => (
@@ -300,20 +318,23 @@ export function Waveform({
         <Animated.View
           pointerEvents="none"
           style={[
-            { position: 'absolute', left: 0, top: 0, bottom: 0, overflow: 'hidden' },
-            played,
+            // Largura fixa, igual à da fita: é a janela que desliza, não que cresce.
+            { position: 'absolute', left: 0, top: 0, bottom: 0, width, overflow: 'hidden' },
+            reveal,
           ]}>
-          {/* Largura fixa por dentro: é a janela que corta, não as barras que encolhem. */}
-          <View
-            style={{
-              width,
-              height: WAVE_H,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 2,
-            }}>
+          <Animated.View
+            style={[
+              {
+                width,
+                height: WAVE_H,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 2,
+              },
+              anchor,
+            ]}>
             {row(accent)}
-          </View>
+          </Animated.View>
         </Animated.View>
       </View>
     </GestureDetector>
@@ -339,18 +360,32 @@ export function Vinyl({
   useEffect(() => {
     if (playing) {
       spin.value = withRepeat(
-        withTiming(spin.value + 360, { duration: 7000, easing: Easing.linear }),
+        withTiming(spin.value + 360, {
+          duration: 7000,
+          easing: Easing.linear,
+          reduceMotion: ReduceMotion.System,
+        }),
         -1,
         false
       );
+      return;
     }
-    // Pausar deixa o disco onde está — é o que um toca-discos faz.
+    /*
+      Pausar deixa o disco onde está — é o que um toca-discos faz. Mas *deixar onde está*
+      precisa de `cancelAnimation`: sem ele o `withRepeat` de cima seguia rodando para
+      sempre, e o disco continuava girando com o áudio parado. Uma rotação eterna também é
+      um quadro recalculado a cada 16 ms pelo tempo que a tela ficar aberta, por nada.
+    */
+    cancelAnimation(spin);
   }, [playing, spin]);
   const rotate = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
 
   const arm = useSharedValue(playing ? 0 : -22);
   useEffect(() => {
-    arm.value = withTiming(playing ? 0 : -22, { duration: 800 });
+    arm.value = withTiming(playing ? 0 : -22, {
+      duration: 800,
+      reduceMotion: ReduceMotion.System,
+    });
   }, [playing, arm]);
   const armStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${arm.value}deg` }] }));
 

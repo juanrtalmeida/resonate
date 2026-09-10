@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Pressable, TextInput, View } from 'react-native';
-import { useSharedValue } from 'react-native-reanimated';
+import { Pressable, TextInput, View } from 'react-native';
+import Animated, { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumArt } from '@/components/album-art';
@@ -16,10 +16,11 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
+import type { Track } from '@/lib/scan';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
 import { usePrefs, useT } from '@/lib/prefs';
-import { chromeScroll } from '@/lib/chrome-scroll';
+import { useChromeScroll } from '@/lib/chrome-scroll';
 import { useKeyboardOverlap } from '@/lib/keyboard';
 
 export default function PlaylistScreen() {
@@ -214,11 +215,13 @@ function PlaylistDetail({ playlist }: { playlist: Playlist }) {
     </View>
   );
 
+  const scroll = useChromeScroll();
+
   return (
     <View style={{ flex: 1 }}>
       <Backdrop cover={playlist.cover ?? null} color={art.a} />
-      <FlatList
-        {...chromeScroll}
+      <Animated.FlatList<Track>
+        {...scroll}
         data={tracks}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}

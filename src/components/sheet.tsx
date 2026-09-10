@@ -35,6 +35,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, R, T } from '@/constants/theme';
 import { useKeyboardOverlap } from '@/lib/keyboard';
+import { Panel } from './panel';
 import { Display } from './text';
 
 const IN = { damping: 24, stiffness: 240, mass: 0.9 };
@@ -153,9 +154,10 @@ export function Sheet({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: C.surface,
             borderTopLeftRadius: R.r26,
             borderTopRightRadius: R.r26,
+            // A linha de topo fica no contêiner, e não no `Panel` abaixo: ela é um fio só,
+            // vale nos três materiais, e no vidro é ela que marca onde a folha começa.
             borderTopWidth: 1,
             borderColor: T.t1,
             // Levantada, o recuo da barra de navegação viraria um vão sobre o teclado.
@@ -166,6 +168,23 @@ export function Sheet({
           },
           sheet,
         ]}>
+        {/*
+          O material da folha, numa camada atrás do conteúdo — vidro no iOS, superfície
+          Material no Android, e o nosso `C.surface` com a linha de topo quando a interface
+          nativa está desligada. Ver `components/panel.tsx`.
+
+          `fade={progress}` não é sobre esmaecer: a folha entra por `translateY`, não por
+          opacidade. É que a janela do Modal entra em fade **nativo**, e opacidade zero num
+          ancestral do vidro não o deixa translúcido — deixa sem efeito nenhum. Com o
+          progresso da entrada dirigindo o estilo, o vidro só é pedido quando a folha já
+          começou a subir, e a janela já não está em zero.
+        */}
+        <Panel
+          fade={progress}
+          style={{ borderTopLeftRadius: R.r26, borderTopRightRadius: R.r26 }}
+          fallback={{ background: C.surface }}
+        />
+
         {/* Um brilho de acento no topo da folha, para ela não nascer de um retângulo seco. */}
         <View
           pointerEvents="none"

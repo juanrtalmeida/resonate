@@ -18,6 +18,7 @@ import { useDeferredValue, useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  ReduceMotion,
   cancelAnimation,
   runOnJS,
   useAnimatedStyle,
@@ -40,12 +41,14 @@ import {
 } from '@/lib/chrome-scroll';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
+import { useNativeUI } from '@/lib/native-ui';
 import { usePlayer } from '@/lib/player';
 import { usePrefs, useT } from '@/lib/prefs';
 import { tabTop } from '@/lib/tab-top';
 import { useZoomLaunch } from '@/lib/zoom';
 import { AlbumArt } from './album-art';
 import { EqBars } from './eq-bars';
+import { Panel } from './panel';
 import {
   LibraryIcon,
   Pause,
@@ -66,6 +69,17 @@ const NAV = [
 
 /** Altura da pílula: 42 do item, mais 5 de recuo de cada lado e a borda. */
 const NAV_HEIGHT = 54;
+
+/** O vão entre o player e a pílula. */
+const NAV_GAP = 13;
+
+/**
+ * Quanto a barra desce ao recolher: a altura da pílula mais o vão dela.
+ *
+ * É a distância que o mini player percorre para baixo quando a pílula sai — e agora é uma
+ * translação de verdade, não a consequência de a pílula encolher. Ver `Reveal`.
+ */
+const COLLAPSE_TRAVEL = NAV_HEIGHT + NAV_GAP;
 
 /**
  * Última aba de verdade que o usuário abriu.
@@ -136,28 +150,55 @@ export function Chrome() {
   const active = base ?? lastBase;
 
   return (
-    <Reveal insets={insets}>
+    <Reveal insets={insets} hasTrack={!!track}>
       <Bar active={active} hasTrack={!!track} />
     </Reveal>
   );
 }
 
 /**
- * A moldura da barra, com a opacidade que o Now Playing dirige.
+ * A moldura da barra, com a opacidade que o Now Playing dirige e o recolhimento da rolagem.
  *
  * `pointerEvents` desliga junto: apagada, a barra não pode continuar recebendo toque
  * embaixo do player.
+ *
+ * **O recolhimento é uma translação daqui, e não a pílula encolhendo de altura.**
+ *
+ * Antes a pílula animava `height` e `marginTop` de 67 para zero. Os dois são propriedades
+ * de layout: cada quadro da animação obrigava uma passada de layout na barra inteira — e a
+ * animação dispara a cada troca de sentido da rolagem, ou seja, exatamente enquanto a
+ * lista está rolando e a thread de JS está montando linhas. Era ali que a barra engasgava.
+ *
+ * A moldura é ancorada em `bottom: 0` e a pílula é o último filho dela, então descer a
+ * moldura em `COLLAPSE_TRAVEL` põe o mini player no mesmo lugar em que a pílula de altura
+ * zero o punha, e leva a pílula para fora da tela pelo pé. Mesmo desenho, mesma distância,
+ * um `translateY` em vez de uma remedida por quadro.
  */
 function Reveal({
   insets,
+  hasTrack,
   children,
 }: {
   insets: { bottom: number };
+  /** Sem faixa não há recolhimento: a pílula é a única navegação que sobraria. */
+  hasTrack: boolean;
   children: ReactNode;
 }) {
+  /*
+    O véu que separa a barra do conteúdo que rola atrás dela sai quando a interface nativa
+    entra.
+
+    Ele é um gradiente que escurece o pé da tela até a cor de fundo — o que dá contraste à
+    barra desenhada por nós. Debaixo de vidro ele é o contrário do que se quer: o vidro
+    mostra o que está atrás, e atrás passaria a estar o nosso degradê em vez da lista. No
+    Material os cartões são opacos e se sustentam sozinhos.
+  */
+  const native = useNativeUI();
+
   const reveal = useAnimatedStyle(() => ({
     opacity: chromeReveal.value,
     pointerEvents: chromeReveal.value < 0.5 ? 'none' : 'box-none',
+    transform: [{ translateY: (hasTrack ? chromeCollapsed.value : 0) * COLLAPSE_TRAVEL }],
   }));
 
   return (
@@ -176,7 +217,9 @@ function Reveal({
           // O inset já reserva a barra de gestos; o que se somava além dele era vão puro.
           paddingBottom: Math.max(insets.bottom, 16) + 4,
           paddingTop: 40,
-          experimental_backgroundImage: `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
+          experimental_backgroundImage: native
+            ? undefined
+            : `linear-gradient(180deg, transparent 0%, rgba(14,12,11,.9) 32%, ${C.surface} 60%)`,
         },
         reveal,
       ]}>
@@ -202,16 +245,40 @@ function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
   */
   const withPlayer = useDeferredValue(hasTrack, false);
 
+  /*
+    Altura e margem fixas: quem move a pílula é o `translateY` da moldura (ver `Reveal`).
+    O que sobra aqui é o esmaecer — e desligar o toque, que uma pílula invisível 67 px
+    abaixo do pé da tela não pode continuar recebendo.
+  */
   const nav = useAnimatedStyle(() => ({
-    height: (1 - collapse.value) * NAV_HEIGHT,
-    marginTop: (1 - collapse.value) * 13,
     opacity: 1 - collapse.value,
+    pointerEvents: collapse.value > 0.5 ? 'none' : 'auto',
   }));
+
+  /*
+    A opacidade que a pílula *tem de verdade*: o esmaecer do recolhimento vezes o do Now
+    Playing, que vem de fora e apaga a barra inteira.
+
+    O vidro precisa deste produto, e não de um dos dois: apagado por qualquer um dos
+    caminhos ele para de renderizar, e voltaria vazio — ver `fade` em
+    `components/panel.tsx`. O mini player não entra na conta porque ele só apaga pelo
+    segundo caminho.
+  */
+  const pill = useDerivedValue(() => chromeReveal.value * (1 - collapse.value));
 
   return (
     <View>
       {withPlayer && <MiniPlayer active={active} collapse={collapse} />}
-      <Animated.View style={[{ overflow: 'hidden', alignItems: 'center' }, nav]}>
+      <Animated.View
+        style={[
+          {
+            height: NAV_HEIGHT,
+            marginTop: NAV_GAP,
+            overflow: 'hidden',
+            alignItems: 'center',
+          },
+          nav,
+        ]}>
         <View
           style={{
             flexDirection: 'row',
@@ -219,10 +286,21 @@ function Bar({ active, hasTrack }: { active: string; hasTrack: boolean }) {
             gap: 3,
             padding: 5,
             borderRadius: R.r26,
-            backgroundColor: 'rgba(26,22,20,.94)',
-            borderWidth: 1,
-            borderColor: T.t1,
           }}>
+          {/*
+            O fundo da pílula é uma camada, não a cor do container: é o que deixa o mesmo
+            desenho receber vidro no iOS e superfície Material no Android sem que o layout
+            da fileira mude uma linha. Ver `components/panel.tsx`.
+
+            Fora do fluxo por ser absoluto, então o `gap: 3` continua valendo só entre os
+            destinos.
+          */}
+          <Panel
+            tone="raised"
+            fade={pill}
+            style={{ borderRadius: R.r26 }}
+            fallback={{ background: 'rgba(26,22,20,.94)', border: T.t1 }}
+          />
           {NAV.map((item) => (
             <NavItem key={item.key} item={item} active={item.key === active} />
           ))}
@@ -247,11 +325,19 @@ function MiniPlayer({
   const art = artworkFor(track!.artist, track!.album);
   const cover = albumById(track!.albumId)?.cover ?? null;
 
-  // O mini player fica montado o tempo todo. Com o tempo em estado do React ele
-  // re-renderizava cinco vezes por segundo, em toda tela do app, só para mover 2 px de
-  // barra. Aqui a barra anda na thread de UI e o React não é acordado.
+  /*
+    O mini player fica montado o tempo todo. Com o tempo em estado do React ele
+    re-renderizava cinco vezes por segundo, em toda tela do app, só para mover 2 px de
+    barra. Aqui a barra anda na thread de UI e o React não é acordado.
+
+    Por `scaleX`, e não por `width`: `width` é propriedade de layout, e animá-la re-mede a
+    caixa a cada mudança do valor — cinco vezes por segundo, em toda tela do app, porque
+    esta barra nunca desmonta. `scaleX` a partir da borda esquerda dá o mesmo desenho sem
+    tocar no layout. A barra é uma faixa de cor sólida, então esticá-la é idêntico a
+    aumentá-la.
+  */
   const bar = useAnimatedStyle(() => ({
-    width: `${(duration > 0 ? Math.min(1, elapsed.value / duration) : 0) * 100}%`,
+    transform: [{ scaleX: duration > 0 ? Math.min(1, elapsed.value / duration) : 0 }],
   }));
 
   // A capa é o que viaja até o Now Playing — não o cartão inteiro.
@@ -260,10 +346,16 @@ function MiniPlayer({
   const breathe = useSharedValue(1);
   useEffect(() => {
     if (playing) {
-      breathe.value = withRepeat(withTiming(1.045, { duration: 2600 }), -1, true);
+      breathe.value = withRepeat(
+        withTiming(1.045, { duration: 2600, reduceMotion: ReduceMotion.System }),
+        -1,
+        true
+      );
     } else {
+      // A atribuição abaixo já cancelaria o repeat; o `cancelAnimation` fica porque ele
+      // deixa explícito que o respiro para, e não que ele volta a 1 respirando.
       cancelAnimation(breathe);
-      breathe.value = withTiming(1, { duration: 200 });
+      breathe.value = withTiming(1, { duration: 200, reduceMotion: ReduceMotion.System });
     }
   }, [playing, breathe]);
   const breathing = useAnimatedStyle(() => ({ transform: [{ scale: breathe.value }] }));
@@ -308,13 +400,15 @@ function MiniPlayer({
       style={{
         borderRadius: 19,
         overflow: 'hidden',
-        backgroundColor: 'rgba(30,25,22,.92)',
-        borderWidth: 1,
-        borderColor: 'rgba(246,241,234,.09)',
         padding: 10,
         flexDirection: 'row',
         alignItems: 'center',
       }}>
+      <Panel
+        fade={chromeReveal}
+        style={{ borderRadius: 19 }}
+        fallback={{ background: 'rgba(30,25,22,.92)', border: 'rgba(246,241,234,.09)' }}
+      />
       <View
         style={{
           position: 'absolute',
@@ -382,7 +476,17 @@ function MiniPlayer({
           height: 2,
           backgroundColor: T.t08,
         }}>
-        <Animated.View style={[{ height: 2, backgroundColor: accent }, bar]} />
+        {/*
+          `width: '100%'` com `transformOrigin: 'left'`: a faixa nasce cheia e é a escala
+          que a encurta. Sem a origem à esquerda ela encolheria pelo centro, e a barra
+          apareceria flutuando no meio em vez de crescer da borda.
+        */}
+        <Animated.View
+          style={[
+            { width: '100%', height: 2, backgroundColor: accent, transformOrigin: 'left' },
+            bar,
+          ]}
+        />
       </View>
     </Pressable>
     </GestureDetector>

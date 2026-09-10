@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import Animated, {
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -238,7 +239,11 @@ export default function Onboarding() {
 function Glow({ accent }: { accent: string }) {
   const spin = useSharedValue(0);
   useEffect(() => {
-    spin.value = withRepeat(withTiming(360, { duration: 26000 }), -1, false);
+    spin.value = withRepeat(
+      withTiming(360, { duration: 26000, reduceMotion: ReduceMotion.System }),
+      -1,
+      false
+    );
   }, [spin]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
 
@@ -393,7 +398,11 @@ function ScanCta({
   const t = useT();
   const spin = useSharedValue(0);
   useEffect(() => {
-    spin.value = withRepeat(withTiming(360, { duration: 2400 }), -1, false);
+    spin.value = withRepeat(
+      withTiming(360, { duration: 2400, reduceMotion: ReduceMotion.System }),
+      -1,
+      false
+    );
   }, [spin]);
   const arc = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
 

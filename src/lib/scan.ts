@@ -6,7 +6,9 @@
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
 import { hash } from './artwork';
-import { clearLibrary, importJson, loadLibrary, saveLibrary } from './db';
+import { parseGain } from './gain';
+import { clearLibrary, importJson, loadLibrary, putLyrics, pruneLyrics, saveLibrary, type LyricsEntry } from './db';
+import { fold } from './search';
 import { absolute, portable } from './storage';
 import {
   findTopAtom,
@@ -23,7 +25,7 @@ import {
   type Reader,
   type Tags,
 } from './tags';
-import { listAudioFiles, type AudioFile } from './sources';
+import { adoptPicked, listAudioFiles, type AudioFile } from './sources';
 
 export type Track = {
   /**
@@ -57,6 +59,15 @@ export type Track = {
    * Use readLyrics() para buscá-lo na hora de mostrar.
    */
   hasLyrics: boolean;
+  /**
+   * ReplayGain em decibéis, como a tag declarou. `null` quando o arquivo não traz.
+   *
+   * Fica no índice, e não é lido na hora de tocar, porque ler a tag custa abrir o arquivo
+   * e o valor é o que nivela o volume **no instante em que a faixa começa** — tarde
+   * demais para ir buscar. Ver `lib/gain.ts`.
+   */
+  trackGain: number | null;
+  albumGain: number | null;
 };
 
 export type Album = {
@@ -190,13 +201,21 @@ export async function scan(
 
   const taken = new Set<string>();
 
+  /**
+   * As letras do lote atual, descarregadas junto com o progresso.
+   *
+   * Em lotes e não uma por faixa: são milhares de INSERTs, e um por commit levaria a
+   * varredura de segundos a minutos — o mesmo motivo da transação em `saveLibrary`.
+   */
+  let pendingLyrics: LyricsEntry[] = [];
+
   for (let i = 0; i < files.length; i++) {
     // Última linha de defesa contra duplicata: a fonte pode devolver o mesmo arquivo
     // por dois caminhos, e duas faixas com o mesmo id quebrariam a lista.
     if (taken.has(files[i].uri)) continue;
     taken.add(files[i].uri);
 
-    const track = await toTrack(files[i], albums, albumIds, artists);
+    const track = await toTrack(files[i], albums, albumIds, artists, pendingLyrics);
     tracks.push(track);
     seconds += track.duration ?? 0;
 
@@ -209,6 +228,13 @@ export async function scan(
         artists: artists.size,
         hours: Math.round(seconds / 3600),
       });
+      try {
+        putLyrics(pendingLyrics);
+      } catch {
+        // banco indisponível: a busca por verso fica sem estas faixas, e nada mais quebra
+      }
+      pendingLyrics = [];
+
       // Cede o thread: sem isso a tela de scan congela até o fim.
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -236,10 +262,20 @@ async function toTrack(
   f: AudioFile,
   albums: Map<string, Album>,
   albumIds: Set<string>,
-  artists: Set<string>
+  artists: Set<string>,
+  /**
+   * Onde a letra lida vai parar, para a busca por verso.
+   *
+   * Por parâmetro em vez de dentro do `Track`: a letra **não** entra no índice da
+   * biblioteca (D11), e é justamente por isso que ela era descartada aqui. Mas ela já está
+   * em mãos — `parseTags` a extraiu do mesmo cabeçalho que deu o título —, então indexá-la
+   * não custa leitura nenhuma a mais. Ver `db.putLyrics`.
+   */
+  lyricsOut: LyricsEntry[]
 ): Promise<Track> {
   const { tags, duration } = await readTags(f.uri);
-  const { lyrics, ...meta } = tags;
+  // `trackGain`/`albumGain` saem do leitor como texto da tag; o número é de `gain.ts`.
+  const { lyrics, trackGain, albumGain, ...meta } = tags;
   const key = albumKey(tags);
 
   let album = albums.get(key);
@@ -270,7 +306,16 @@ async function toTrack(
     duration: f.duration ?? duration,
     albumId: album.id,
     hasLyrics: lyrics !== null || lrcFile(f.uri) !== null,
+    trackGain: parseGain(trackGain),
+    albumGain: parseGain(albumGain),
   };
+
+  // A letra embutida, se houver. O `.lrc` ao lado não entra: ele é lido por
+  // `readLyrics` na hora de mostrar, e trazê-lo aqui somaria um read por faixa à
+  // varredura — que é exatamente o custo que este caminho existe para não ter.
+  const text = lyrics?.trim();
+  if (text) lyricsOut.push({ trackId: track.id, text, folded: fold(text) });
+
   album.trackIds.push(track.id);
   return track;
 }
@@ -302,7 +347,8 @@ export async function importLrc(track: Track): Promise<boolean> {
     if (!folder.exists) folder.create({ intermediates: true });
     const target = new File(folder, lrcName(track));
     if (target.exists) target.delete();
-    await picked.result.copy(target);
+    // Move, e não copia: o que o seletor devolve no iOS já é uma cópia nossa. Ver `adopt`.
+    await adoptPicked(picked.result, target);
     return true;
   } catch {
     return false;
@@ -480,6 +526,8 @@ export function load(): Library | null {
 export function save(library: Library): void {
   try {
     saveLibrary(library);
+    // Letra de faixa que saiu da biblioteca não tem por que ficar no índice de busca.
+    pruneLyrics();
   } catch {
     // sem espaço em disco: a biblioteca em memória continua válida nesta sessão
   }

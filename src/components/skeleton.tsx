@@ -15,6 +15,7 @@ import { useEffect } from 'react';
 import { View, type DimensionValue, type ViewStyle } from 'react-native';
 import Animated, {
   Easing,
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -36,7 +37,11 @@ const ROW = 54;
 const GROUP_ROW = 72;
 
 /** O respiro do bloco. Lento: é espera, não carregamento com barra. */
-const PULSE = { duration: 900, easing: Easing.inOut(Easing.quad) };
+const PULSE = {
+  duration: 900,
+  easing: Easing.inOut(Easing.quad),
+  reduceMotion: ReduceMotion.System,
+};
 
 /**
  * Larguras do título, em fração da linha. Três valores em ciclo: barras todas iguais

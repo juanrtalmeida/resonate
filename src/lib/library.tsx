@@ -4,8 +4,16 @@ import { createContext, use, useCallback, useMemo, useState, type ReactNode } fr
 
 import { deleteTracks, setHasLyrics } from './db';
 import { applyEdits } from './edits';
+import { mergeLibrary } from './merge';
 import { usePrefs } from './prefs';
 import { clear, load, save, type Album, type Library, type Track } from './scan';
+import {
+  connected,
+  fetchLibrary,
+  isRemote,
+  ownsRef,
+  type SyncProgress,
+} from './subsonic';
 
 type LibraryApi = {
   library: Library | null;
@@ -13,7 +21,23 @@ type LibraryApi = {
   trackById: (id: string) => Track | undefined;
   albumById: (id: string) => Album | undefined;
   artists: { name: string; albums: Album[] }[];
+  /**
+   * O resultado de uma varredura dos arquivos locais.
+   *
+   * **Funde**, não substitui: o que veio de servidor fica onde está. Uma varredura sabe
+   * dos arquivos do aparelho e de mais nada, e gravá-la por cima do índice apagaria o
+   * acervo remoto junto com as curtidas e listas que apontam para ele. Ver `lib/merge.ts`.
+   */
   replace: (library: Library) => void;
+  /**
+   * Traz o acervo do servidor conectado para o índice, fundindo com o que já está lá.
+   *
+   * Leva minutos num acervo grande — é `1 + N` requisições, ver `fetchLibrary`. Devolve
+   * quantas faixas entraram, ou lança o erro do servidor para a tela mostrar.
+   */
+  syncServer: (label: string, onProgress?: (p: SyncProgress) => void) => Promise<number>;
+  /** Tira do índice tudo o que veio de servidor. O acervo local fica intacto. */
+  forgetRemote: () => void;
   /** Depois de importar um .lrc, para o selo aparecer sem esperar uma nova varredura. */
   markLyrics: (trackId: string) => void;
   /** Depois de apagar arquivos do aparelho, para o índice não citar o que não existe. */
@@ -75,9 +99,40 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       trackById: (id) => byId.get(id),
       albumById: (id) => albumsById.get(id),
       artists,
+      /*
+        A varredura é dona do domínio **local**: o que ela não listou e não é remoto sai
+        (o arquivo foi apagado), e o que é remoto passa intacto. Sem isto, varrer de novo
+        depois de conectar um servidor apagaria o acervo dele do índice.
+      */
       replace: (next) => {
-        save(next);
-        setLibrary(next);
+        setLibrary((prev) => {
+          const merged = mergeLibrary(
+            prev,
+            { tracks: next.tracks, albums: next.albums },
+            (id) => !isRemote(id),
+            next.folders
+          );
+          save(merged);
+          return merged;
+        });
+      },
+      syncServer: async (label, onProgress) => {
+        const session = connected();
+        if (!session) return 0;
+        const incoming = await fetchLibrary(session, label, onProgress);
+        setLibrary((prev) => {
+          const merged = mergeLibrary(prev, incoming, ownsRef(session.id));
+          save(merged);
+          return merged;
+        });
+        return incoming.tracks.length;
+      },
+      forgetRemote: () => {
+        setLibrary((prev) => {
+          const merged = mergeLibrary(prev, { tracks: [], albums: [] }, isRemote);
+          save(merged);
+          return merged;
+        });
       },
       /*
         Um UPDATE de uma linha, e não a biblioteca inteira de volta ao disco.

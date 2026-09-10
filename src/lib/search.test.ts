@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { fold, isEmpty, search } from './search.ts';
+import { fold, isEmpty, search, verseOf } from './search.ts';
 import { pathKey } from './tags.ts';
 import type { Album, Track } from './scan.ts';
 
@@ -109,4 +109,25 @@ test('pathKey separa o mesmo nome em pastas diferentes', () => {
 
 test('pathKey aguenta URI mal formada', () => {
   assert.equal(pathKey('file:///Music/Rock/100%.mp3'), 'music/rock/100%.mp3');
+});
+
+// -------------------------------------------------------------- verso da letra
+
+test('o verso devolvido é a linha que casou, e não a letra inteira', () => {
+  const letra = 'primeira linha\nna beira do coração\nterceira linha';
+  assert.equal(verseOf(letra, fold('coracao')), 'na beira do coração');
+});
+
+test('a marca de tempo do .lrc sai do verso', () => {
+  const lrc = '[00:12.30] antes\n[00:42.10] o verso certo\n[01:00.00] depois';
+  assert.equal(verseOf(lrc, fold('verso certo')), 'o verso certo');
+});
+
+test('sem casar, devolve a primeira linha em vez de nada', () => {
+  assert.equal(verseOf('só uma linha', fold('inexistente')), 'só uma linha');
+  assert.equal(verseOf('', fold('x')), '');
+});
+
+test('o verso casa ignorando acento e caixa, como o resto da busca', () => {
+  assert.equal(verseOf('O CORAÇÃO bate', fold('coracao')), 'O CORAÇÃO bate');
 });

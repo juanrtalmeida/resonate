@@ -6,8 +6,7 @@
  * contexto entre as duas.
  */
 
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { makeMutable, withTiming } from 'react-native-reanimated';
+import { makeMutable, useAnimatedScrollHandler, withTiming } from 'react-native-reanimated';
 
 /** 0 = barra inteira, 1 = só o item ativo e o player. */
 export const chromeCollapsed = makeMutable(0);
@@ -92,34 +91,59 @@ export function chromeContent(height: number) {
   if (height < before) chromeExpand();
 }
 
-/** Props de qualquer lista vertical: `<FlatList {...chromeScroll} />`. */
-export const chromeScroll = {
-  /*
-    Quanto a lista mantém montado, medido em alturas de tela.
+/**
+ * Props de qualquer lista vertical: `<Animated.FlatList {...useChromeScroll()} />`.
+ *
+ * Hook, e não o objeto constante que isto era, porque o handler de rolagem tem de ser
+ * criado por `useAnimatedScrollHandler` — é ele que põe o handler na **thread de UI**.
+ *
+ * Antes era um callback de JavaScript comum, limitado a 30 Hz justamente para não acordar
+ * a thread de JS sessenta vezes por segundo. Só que trinta vezes por segundo também é
+ * acordar: cada evento atravessava a ponte, entrava na fila do JavaScript e disputava com
+ * o que a lista estivesse renderizando. Na thread de UI o worklet lê o offset onde ele já
+ * está, decide, e escreve o shared value sem passar pelo JavaScript nenhuma vez — e aí o
+ * `scrollEventThrottle` pode voltar a 16, porque o custo por evento deixou de existir.
+ *
+ * A lista precisa ser `Animated.FlatList` / `Animated.ScrollView`: um handler de worklet
+ * numa lista comum não é reconhecido e o recolhimento simplesmente não acontece.
+ */
+export function useChromeScroll() {
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      chromeScrollTo(e.contentOffset.y);
+    },
+  });
 
-    O padrão do FlatList é 21 — dez telas acima da visível e dez abaixo. Com linha de
-    faixa de 54 px são umas trezentas `TrackRow` montadas, e cada uma tem um
-    `GestureDetector` nativo, dois shared values e um `useConfirm`. Isso não pesa enquanto
-    se rola, porque nada muda; pesa na hora de trocar o conteúdo da lista, que desmonta
-    todas de uma vez. Era a demora ao sair da aba de Faixas.
+  return {
+    /*
+      Quanto a lista mantém montado, medido em alturas de tela.
 
-    Cinco é a tela visível mais duas de cada lado: rolagem rápida continua encontrando
-    linha pronta, e o que se desmonta ao trocar de aba é um quarto do que era.
+      O padrão do FlatList é 21 — dez telas acima da visível e dez abaixo. Com linha de
+      faixa de 54 px são umas trezentas `TrackRow` montadas, e cada uma tem um
+      `GestureDetector` nativo, dois shared values e um `useConfirm`. Isso não pesa enquanto
+      se rola, porque nada muda; pesa na hora de trocar o conteúdo da lista, que desmonta
+      todas de uma vez. Era a demora ao sair da aba de Faixas.
 
-    Aqui, e não na tela da biblioteca: cada lista do app é feita da mesma linha caríssima,
-    e todas passam por estas props. As duas valem só para lista virtualizada — os
-    `ScrollView` que também usam este objeto as ignoram. `initialNumToRender` fica no
-    padrão de propósito: baixá-lo atrasaria o primeiro quadro de toda lista para ganhar
-    numa troca de aba que ainda não aconteceu.
-  */
-  windowSize: 5,
-  maxToRenderPerBatch: 8,
-  // 30 Hz basta para decidir mostrar ou esconder; 60 acordava a thread de JS o dobro.
-  scrollEventThrottle: 32,
-  // A barra de rolagem do sistema não combina com nada aqui, e some das listas todas de
-  // uma vez porque todas passam por estas props.
-  showsVerticalScrollIndicator: false,
-  onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-    chromeScrollTo(e.nativeEvent.contentOffset.y),
-  onContentSizeChange: (_width: number, height: number) => chromeContent(height),
-};
+      Cinco é a tela visível mais duas de cada lado: rolagem rápida continua encontrando
+      linha pronta, e o que se desmonta ao trocar de aba é um quarto do que era.
+
+      Aqui, e não na tela da biblioteca: cada lista do app é feita da mesma linha caríssima,
+      e todas passam por estas props. As duas valem só para lista virtualizada — os
+      `ScrollView` que também usam este objeto as ignoram. `initialNumToRender` fica no
+      padrão de propósito: baixá-lo atrasaria o primeiro quadro de toda lista para ganhar
+      numa troca de aba que ainda não aconteceu.
+    */
+    windowSize: 5,
+    maxToRenderPerBatch: 8,
+    // 16 agora que o handler é worklet: o evento não custa mais uma ida ao JavaScript, e
+    // 60 Hz dá ao recolhimento a mesma resolução que a rolagem tem.
+    scrollEventThrottle: 16,
+    // A barra de rolagem do sistema não combina com nada aqui, e some das listas todas de
+    // uma vez porque todas passam por estas props.
+    showsVerticalScrollIndicator: false,
+    onScroll,
+    // Fica em JavaScript de propósito: o tamanho do conteúdo muda ao carregar e ao filtrar,
+    // não a cada quadro, e não existe versão worklet desta callback.
+    onContentSizeChange: (_width: number, height: number) => chromeContent(height),
+  };
+}

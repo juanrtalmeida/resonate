@@ -1,5 +1,5 @@
 import { useDeferredValue } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +14,7 @@ import { C, CHROME_HEIGHT, PADDING, T, alpha, fmt } from '@/constants/theme';
 import { artworkFor } from '@/lib/artwork';
 import { useDetail } from '@/lib/detail';
 import { useLibrary } from '@/lib/library';
-import { chromeScroll } from '@/lib/chrome-scroll';
+import { useChromeScroll } from '@/lib/chrome-scroll';
 import { usePlayer } from '@/lib/player';
 import { useItemMenu } from '@/components/context-menu';
 import { usePlaylistSheet } from '@/components/playlist-sheet';
@@ -265,11 +265,13 @@ function AlbumDetail({ album }: { album: Album }) {
     </View>
   );
 
+  const scroll = useChromeScroll();
+
   return (
     <ZoomScreen background={C.bg} edgeBack onClosed={close}>
       {ready && <Backdrop cover={album.cover} color={art.a} />}
-      <FlatList
-        {...chromeScroll}
+      <Animated.FlatList<Track>
+        {...scroll}
         data={ready ? tracks : NO_TRACKS}
         keyExtractor={(t) => t.id}
         ListHeaderComponent={header}

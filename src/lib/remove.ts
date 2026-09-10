@@ -19,6 +19,7 @@ import { File } from 'expo-file-system';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
+import { isRemote } from './subsonic';
 import { pathKey } from './tags';
 
 /** O que aconteceu com cada faixa pedida. */
@@ -85,6 +86,16 @@ async function deleteViaMediaStore(uris: string[]): Promise<Set<string>> {
  *
  * Nunca é chamada sem confirmação — quem chama é o menu de contexto, que pergunta antes
  * e diz quantas faixas são.
+ *
+ * Faixa de servidor é recusada **aqui**, e não apenas escondida no menu.
+ *
+ * Não é zelo: sem esta guarda ela saía da biblioteca sem nada ser apagado de lugar
+ * nenhum. A `uri` de uma faixa remota é a URL de stream, e `deleteDirect` faz
+ * `new File(url)` — `exists` é falso para um `https://`, e o `return true` de "já não está
+ * lá: o pedido está atendido" a punha na lista de removidas. O menu então a tirava do
+ * índice, em silêncio, com o arquivo intacto no servidor.
+ *
+ * Ela sai em `kept`, que é a verdade: continua lá. Ver `lib/subsonic.ts`.
  */
 export async function removeFromDevice(
   tracks: { id: string; uri: string }[]
@@ -93,6 +104,8 @@ export async function removeFromDevice(
   const remaining: { id: string; uri: string }[] = [];
 
   for (const track of tracks) {
+    // Apagar no servidor é operação do servidor, e o Subsonic não tem endpoint para isso.
+    if (isRemote(track.id)) continue;
     if (deleteDirect(track.uri)) removed.push(track.id);
     else remaining.push(track);
   }

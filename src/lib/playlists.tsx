@@ -8,6 +8,8 @@ import { createContext, use, useCallback, useMemo, useState, type ReactNode } fr
 
 import { hash } from './artwork';
 import { moveItem } from './queue';
+import type { BackupPlaylist } from './backup';
+import { adoptPicked } from './sources';
 import { absolute, portable, portableAll } from './storage';
 
 export type Playlist = {
@@ -63,7 +65,9 @@ async function copyCover(id: string): Promise<string | null> {
     deleteCover(id);
     const extension = picked.result.extension || '.jpg';
     const target = new File(folder, `playlist-${id}-${Date.now()}${extension}`);
-    await picked.result.copy(target);
+    // Move, e não copia: o seletor do iOS já entregou uma cópia dentro do app, e copiar de
+    // novo deixava a imagem ocupando o dobro. Ver `adopt` em `lib/sources.ts`.
+    await adoptPicked(picked.result, target);
     return target.uri;
   } catch {
     return null; // arquivo ilegível ou sem espaço: segue com a arte procedural
@@ -97,6 +101,14 @@ type PlaylistsApi = {
    * filtro. Até aqui ela era a ordem de inserção, e não havia como mudá-la.
    */
   moveTrack: (id: string, from: number, to: number) => void;
+  /**
+   * Devolve as listas de um backup. Ver `lib/backup.ts`.
+   *
+   * Por id: lista que já existe fica como está, e não é sobrescrita. Restaurar não pode
+   * desfazer o que o usuário montou depois do backup — e o id é gerado por nós, então
+   * colisão entre duas listas diferentes não acontece.
+   */
+  restore: (incoming: BackupPlaylist[]) => void;
   /** Abre o seletor do sistema e guarda a imagem escolhida como capa. */
   pickCover: (id: string) => Promise<void>;
   clearCover: (id: string) => void;
@@ -146,6 +158,15 @@ export function PlaylistsProvider({ children }: { children: ReactNode }) {
       // operação, e ele já não muta e já ignora índice fora do intervalo.
       moveTrack: (id, from, to) =>
         patch(id, (p) => ({ ...p, trackIds: moveItem(p.trackIds, from, to) })),
+      restore: (incoming) => {
+        const have = new Set(playlists.map((p) => p.id));
+        const added = incoming
+          .filter((p) => !have.has(p.id))
+          // `portableAll` porque um backup de antes da mudança de `lib/paths.ts` guarda
+          // URIs absolutas: sem converter, a lista voltaria vazia.
+          .map((p) => ({ ...p, trackIds: portableAll(p.trackIds), cover: null }));
+        if (added.length) commit([...playlists, ...added]);
+      },
       pickCover: async (id) => {
         const uri = await copyCover(id);
         if (uri) patch(id, (p) => ({ ...p, cover: uri }));

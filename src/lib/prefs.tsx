@@ -9,7 +9,10 @@ import { NO_EDITS, type Edits, type TrackEdit } from './edits';
 import { resolveLang, translate, type Key, type Lang } from './i18n';
 import type { Continuation } from './queue';
 import type { SpokenMarks } from './spoken';
+import type { Leveling } from './gain';
+import { addCounts, furthest, union, type BackupPrefs } from './backup';
 import { absolute, portable, portableAll, portableKeys } from './storage';
+import { connect, disconnect, type Server } from './subsonic';
 
 export type Treatment = 'ember' | 'vinyl' | 'wave';
 
@@ -62,10 +65,40 @@ type Prefs = {
   language: Lang | 'auto';
   /** Como a aba de álbuns se apresenta. */
   albumView: AlbumView;
+  /**
+   * Desenhar a interface com os componentes do sistema em vez dos nossos.
+   *
+   * Ligado, a barra inferior e a tela de Ajustes passam a ser SwiftUI no iOS — com o
+   * Liquid Glass de verdade, não uma imitação em gradiente — e Jetpack Compose no
+   * Android, com o Material 3 do aparelho. Ver `lib/native-ui.ts`.
+   *
+   * Desligado de padrão, e é a escolha certa: o desenho do Resonate é o app, e quem
+   * prefere o do sistema pede. A preferência é guardada mesmo em aparelho que não sabe
+   * desenhar o vidro — o flag é do usuário, e a capacidade é do aparelho.
+   */
+  nativeUI: boolean;
   /** O que fazer quando a fila acaba. */
   continuation: Continuation;
   shuffle: boolean;
   repeat: Repeat;
+  /**
+   * Nivelamento de volume por ReplayGain. Ver `lib/gain.ts`.
+   *
+   * Padrão `album`, e não `off`: quem tem a tag no arquivo quer o volume parelho, e quem
+   * não tem não sente diferença nenhuma — sem tag o fator é 1. `album` em vez de `track`
+   * porque preserva a dinâmica dentro do disco.
+   */
+  leveling: Leveling;
+  /**
+   * Servidor OpenSubsonic do usuário, ou null quando só há arquivos locais.
+   *
+   * A senha fica aqui em claro, e não há como não ficar: o esquema de autenticação do
+   * Subsonic exige a senha para derivar `md5(senha + salt)` a cada sessão, então guardar
+   * só o token não permitiria reconectar depois de reiniciar o app. É o mesmo que todo
+   * cliente Subsonic faz, e `prefs.json` já vive na pasta privada do app — mas vale saber
+   * que é o dado mais sensível que este arquivo carrega.
+   */
+  server: Server | null;
 };
 
 export type Repeat = 'off' | 'all' | 'one';
@@ -85,9 +118,12 @@ const DEFAULTS: Prefs = {
   edits: NO_EDITS,
   language: 'auto',
   albumView: 'grid',
+  nativeUI: false,
   continuation: 'album',
   shuffle: false,
   repeat: 'all',
+  leveling: 'album',
+  server: null,
 };
 
 const prefsFile = () => new File(Paths.document, 'prefs.json');
@@ -192,15 +228,69 @@ type PrefsApi = Prefs & {
   clearEdits: (trackIds: string[]) => void;
   setLanguage: (language: Lang | 'auto') => void;
   setAlbumView: (v: AlbumView) => void;
+  setNativeUI: (on: boolean) => void;
   setContinuation: (c: Continuation) => void;
   setShuffle: (on: boolean) => void;
   setRepeat: (r: Repeat) => void;
+  setLeveling: (l: Leveling) => void;
+  /**
+   * Guarda o servidor e abre a sessão. `null` desconecta e esquece a senha.
+   *
+   * Não valida — quem confirma que o servidor responde é a tela de Ajustes, com `ping`.
+   * Ver `lib/subsonic.ts`.
+   */
+  setServer: (server: Server | null) => void;
+  /**
+   * Devolve o que um backup trouxe, **unido** ao que já está aqui. Ver `lib/backup.ts`.
+   *
+   * Une em vez de substituir porque quem restaura pode já ter usado o app antes de lembrar
+   * do backup, e apagar o que ele fez nesse meio-tempo seria uma surpresa ruim.
+   */
+  restore: (prefs: BackupPrefs) => void;
 };
+
+/**
+ * As correções do backup por cima das de agora.
+ *
+ * `edits` vem do arquivo como `unknown` — `lib/backup.ts` é puro e não conhece a forma
+ * dele. O saneamento é aqui, onde a forma vive, e no mesmo formato defensivo de `migrate`:
+ * campo que não é objeto simplesmente não entra.
+ */
+function mergeEdits(current: Edits, incoming: unknown): Edits {
+  if (typeof incoming !== 'object' || incoming === null) return current;
+  const raw = incoming as { tracks?: unknown; artists?: unknown };
+  const tracks = typeof raw.tracks === 'object' && raw.tracks ? raw.tracks : {};
+  const artists = typeof raw.artists === 'object' && raw.artists ? raw.artists : {};
+  return {
+    tracks: { ...current.tracks, ...portableKeys(tracks as Record<string, TrackEdit>) },
+    artists: { ...current.artists, ...(artists as Record<string, string>) },
+  };
+}
 
 const Ctx = createContext<PrefsApi | null>(null);
 
+/**
+ * Abre a sessão do servidor guardado, uma vez, antes do primeiro render.
+ *
+ * No módulo e não num efeito: `absolute()` resolve `sub://` pela sessão em memória (ver
+ * `lib/storage.ts`), e ela é chamada já no primeiro render — pela biblioteca carregada do
+ * disco, que pode ter faixas remotas. Num efeito, esse primeiro render veria as faixas
+ * remotas como indisponíveis e só se corrigiria no seguinte.
+ *
+ * `connect` é síncrona justamente para isto: o MD5 é o nosso, não o assíncrono do
+ * `expo-crypto`.
+ */
+function reconnect(server: Server | null): void {
+  if (server) connect(server);
+  else disconnect();
+}
+
 export function PrefsProvider({ children }: { children: ReactNode }) {
-  const [prefs, setPrefs] = useState<Prefs>(read);
+  const [prefs, setPrefs] = useState<Prefs>(() => {
+    const stored = read();
+    reconnect(stored.server);
+    return stored;
+  });
 
   const update = useCallback((patch: Partial<Prefs>) => {
     setPrefs((prev) => {
@@ -285,9 +375,31 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
         update({ edits: { ...prefs.edits, tracks } });
       },
       setAlbumView: (albumView) => update({ albumView }),
+      setNativeUI: (nativeUI) => update({ nativeUI }),
       setContinuation: (continuation) => update({ continuation }),
       setShuffle: (shuffle) => update({ shuffle }),
       setRepeat: (repeat) => update({ repeat }),
+      setLeveling: (leveling) => update({ leveling }),
+      restore: (incoming) => {
+        update({
+          liked: union(prefs.liked, portableAll(incoming.liked)),
+          likedAlbums: union(prefs.likedAlbums, incoming.likedAlbums),
+          heard: union(prefs.heard, portableAll(incoming.heard)),
+          plays: addCounts(prefs.plays, portableKeys(incoming.plays)),
+          // Progresso não soma: a posição mais adiantada vence.
+          progress: furthest(prefs.progress, portableKeys(incoming.progress)),
+          // As marcas do backup vencem: são escolha explícita de quem marcou o álbum.
+          spoken: { ...prefs.spoken, ...(incoming.spoken as SpokenMarks) },
+          sessions: { ...prefs.sessions, ...incoming.sessions },
+          edits: mergeEdits(prefs.edits, incoming.edits),
+        });
+      },
+      setServer: (server) => {
+        // A sessão abre **antes** de gravar: o re-render que vem do `update` já vai
+        // encontrar `absolute()` resolvendo as faixas remotas.
+        reconnect(server);
+        update({ server });
+      },
     }),
     [prefs, update]
   );

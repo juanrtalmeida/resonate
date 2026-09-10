@@ -48,6 +48,8 @@ type TrackRow = {
   albumId: string;
   hasLyrics: number;
   position: number;
+  trackGain: number | null;
+  albumGain: number | null;
 };
 
 type AlbumRow = { id: string; title: string; artist: string; cover: string | null };
@@ -90,7 +92,9 @@ export function db(): SQLiteDatabase {
       duration    REAL,
       albumId     TEXT NOT NULL,
       hasLyrics   INTEGER NOT NULL DEFAULT 0,
-      position    INTEGER NOT NULL DEFAULT 0
+      position    INTEGER NOT NULL DEFAULT 0,
+      trackGain   REAL,
+      albumGain   REAL
     );
 
     CREATE INDEX IF NOT EXISTS tracks_album ON tracks (albumId, position);
@@ -107,12 +111,61 @@ export function db(): SQLiteDatabase {
 
     CREATE INDEX IF NOT EXISTS plays_at ON plays (at);
 
+    /*
+      Indice de letras, para a busca por verso.
+
+      Tabela a parte, e nao uma coluna em tracks, porque a letra e justamente o que D11
+      mantem fora do indice da biblioteca: loadLibrary materializa tracks inteira em
+      memoria no boot, e milhares de letras ali seriam megabytes carregados para nada em
+      toda abertura do app. Aqui elas so sao lidas quando alguem busca.
+
+      A coluna folded e o texto sem acento e em minuscula, na mesma normalizacao de
+      lib/search.ts. Guardar as duas formas e o que permite achar "coracao" numa letra que
+      escreve "coracao" com cedilha e til, sem depender de um LIKE insensivel a acento —
+      que o SQLite nao tem.
+    */
+    CREATE TABLE IF NOT EXISTS lyrics (
+      trackId TEXT PRIMARY KEY,
+      text    TEXT NOT NULL,
+      folded  TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS meta (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
   `);
+
+  /*
+    Colunas adicionadas depois que o esquema já estava no aparelho de alguém.
+
+    `CREATE TABLE IF NOT EXISTS` não altera a tabela que já existe: para quem instalou
+    antes, as colunas novas do bloco acima simplesmente não aparecem, e o INSERT falha
+    citando coluna inexistente. Era a dívida anotada em `07-roadmap-e-divida.md` —
+    "esquema sem versão, no dia em que uma coluna mudar".
+
+    Ainda não é versionamento, e de propósito: coluna **adicionada** é aditiva e idempotente
+    por natureza, e `addColumn` cobre isso sem tabela de versão. O dia de versionar é o dia
+    em que uma coluna existente mudar de tipo ou de significado — aí não há ALTER que
+    resolva e os dados precisam ser reescritos.
+  */
+  addColumn(handle, 'tracks', 'trackGain', 'REAL');
+  addColumn(handle, 'tracks', 'albumGain', 'REAL');
+
   return handle;
+}
+
+/**
+ * Adiciona uma coluna se ela ainda não existe.
+ *
+ * Por `PRAGMA table_info`, e não por `try/catch` em volta do ALTER: o erro de "coluna
+ * duplicada" do SQLite é indistinguível de outros erros de ALTER, e engolir todos deixaria
+ * uma falha real passar em silêncio — para reaparecer como INSERT quebrado depois.
+ */
+function addColumn(handle: SQLiteDatabase, table: string, column: string, type: string): void {
+  const columns = handle.getAllSync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (columns.some((c) => c.name === column)) return;
+  handle.execSync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 
 const metaGet = (key: string): string | null =>
@@ -138,6 +191,9 @@ const toTrack = (row: TrackRow): Track => ({
   duration: row.duration,
   albumId: row.albumId,
   hasLyrics: row.hasLyrics === 1,
+  // `?? null` porque uma coluna adicionada por migração vem `undefined` em linha antiga.
+  trackGain: row.trackGain ?? null,
+  albumGain: row.albumGain ?? null,
 });
 
 /**
@@ -207,10 +263,10 @@ export function saveLibrary(library: Library): void {
     const track = db().prepareSync(`
       INSERT INTO tracks
         (id, uri, file, folder, title, artist, album, albumArtist, trackNumber, genre,
-         duration, albumId, hasLyrics, position)
+         duration, albumId, hasLyrics, position, trackGain, albumGain)
       VALUES
         ($id, $uri, $file, $folder, $title, $artist, $album, $albumArtist, $trackNumber,
-         $genre, $duration, $albumId, $hasLyrics, $position)
+         $genre, $duration, $albumId, $hasLyrics, $position, $trackGain, $albumGain)
     `);
     try {
       for (const a of library.albums) {
@@ -237,6 +293,8 @@ export function saveLibrary(library: Library): void {
           $albumId: t.albumId,
           $hasLyrics: t.hasLyrics ? 1 : 0,
           $position: at.get(t.id) ?? 0,
+          $trackGain: t.trackGain,
+          $albumGain: t.albumGain,
         });
       }
     } finally {
@@ -304,6 +362,112 @@ export const playsBetween = (from: number, to: number): Play[] =>
  * É o que define até onde o seletor de mês pode voltar: oferecer 2019 a quem instalou o
  * app semana passada é oferecer telas vazias.
  */
+/**
+ * Quando cada faixa tocou por último, em ms.
+ *
+ * Um `GROUP BY` no banco, e não a lista de escutas trazida para a memória: um histórico de
+ * um ano são dezenas de milhares de linhas, e o que as listas inteligentes precisam é de
+ * um número por faixa. Ver `lib/smart.ts`.
+ */
+export function lastPlayedAt(): Map<string, number> {
+  const rows = db().getAllSync<{ trackId: string; at: number }>(
+    'SELECT trackId, MAX(at) AS at FROM plays GROUP BY trackId'
+  );
+  return new Map(rows.map((r) => [r.trackId, r.at]));
+}
+
+/** Todo o histórico. Serve à exportação, que é a única coisa que quer tudo de uma vez. */
+export const allPlays = (): Play[] =>
+  db().getAllSync<Play>('SELECT * FROM plays ORDER BY at');
+
+/**
+ * Insere escutas importadas de um backup.
+ *
+ * Numa transação e com declaração preparada, pelo mesmo motivo de `saveLibrary`: um
+ * histórico de um ano são dezenas de milhares de linhas, e uma por commit levaria minutos.
+ *
+ * Quem decide o que é novo é `newPlays`, em `lib/backup.ts` — aqui não há checagem de
+ * duplicata de propósito, porque a chave de uma escuta é composta e um índice único sobre
+ * ela custaria em toda gravação para servir só à importação.
+ */
+export function importPlays(plays: Play[]): void {
+  if (!plays.length) return;
+  db().withTransactionSync(() => {
+    const insert = db().prepareSync(
+      'INSERT INTO plays (at, trackId, albumId, artist, album, title, seconds) VALUES ($at, $trackId, $albumId, $artist, $album, $title, $seconds)'
+    );
+    try {
+      for (const p of plays) {
+        insert.executeSync({
+          $at: p.at,
+          $trackId: p.trackId,
+          $albumId: p.albumId,
+          $artist: p.artist,
+          $album: p.album,
+          $title: p.title,
+          $seconds: p.seconds,
+        });
+      }
+    } finally {
+      insert.finalizeSync();
+    }
+  });
+}
+
+// ------------------------------------------------------------------- letras
+
+/** Uma letra indexada. `folded` é responsabilidade de quem chama — ver `lib/search.ts`. */
+export type LyricsEntry = { trackId: string; text: string; folded: string };
+
+/**
+ * Grava letras no índice.
+ *
+ * Em lote e numa transação: quem chama é a varredura, que já tem o texto em mãos — o
+ * `parseTags` extrai a letra e o `toTrack` a descartava. Indexar não custa I/O nenhum a
+ * mais, só a escrita.
+ */
+export function putLyrics(entries: LyricsEntry[]): void {
+  if (!entries.length) return;
+  db().withTransactionSync(() => {
+    const insert = db().prepareSync(
+      'INSERT OR REPLACE INTO lyrics (trackId, text, folded) VALUES ($trackId, $text, $folded)'
+    );
+    try {
+      for (const e of entries) {
+        insert.executeSync({ $trackId: e.trackId, $text: e.text, $folded: e.folded });
+      }
+    } finally {
+      insert.finalizeSync();
+    }
+  });
+}
+
+/** Tira do índice a letra de faixa que não existe mais. */
+export function pruneLyrics(): void {
+  db().runSync('DELETE FROM lyrics WHERE trackId NOT IN (SELECT id FROM tracks)');
+}
+
+/**
+ * Faixas cuja letra contém o trecho, com o verso que casou.
+ *
+ * `LIKE` com curinga nas duas pontas, sobre a coluna já normalizada. Não usa índice — é
+ * uma varredura da tabela —, e é aceitável porque acontece só quando alguém digita na
+ * busca, e porque a tabela tem uma linha por faixa *com letra*, que é uma fração do
+ * acervo.
+ *
+ * ponytail: com muitos milhares de letras isto passa a pesar. O caminho é FTS5, que o
+ * SQLite do expo-sqlite traz — deixado para quando doer, porque uma tabela virtual de FTS
+ * precisa ser mantida em sincronia e isso é mais código para manter.
+ */
+export function searchLyrics(folded: string, limit: number): { trackId: string; text: string }[] {
+  if (!folded) return [];
+  return db().getAllSync<{ trackId: string; text: string }>(
+    'SELECT trackId, text FROM lyrics WHERE folded LIKE ? LIMIT ?',
+    `%${folded}%`,
+    limit
+  );
+}
+
 export function playSpan(): { first: number; last: number } | null {
   const row = db().getFirstSync<{ first: number | null; last: number | null }>(
     'SELECT MIN(at) AS first, MAX(at) AS last FROM plays'

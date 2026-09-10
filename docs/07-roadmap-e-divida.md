@@ -2,7 +2,7 @@
 projeto: Resonate
 tipo: roadmap
 tags: [roadmap, divida-tecnica, ponytail, pendencias, ideias]
-atualizado: 2026-09-08
+atualizado: 2026-09-09
 ---
 
 # Roadmap e dívida do Resonate
@@ -25,6 +25,39 @@ armazenamento:
 - **Estatísticas de escuta.** Um destino da barra inferior (`app/stats.tsx`) sobre a
   tabela `plays` do banco. `lib/history.ts` é a agregação, pura e testada.
 - **A biblioteca saiu do JSON e foi para o SQLite** (`lib/db.ts`).
+
+## O que entrou nesta rodada
+
+- **A interface do aparelho, por escolha do usuário.** Um flag em Ajustes troca as
+  superfícies do app pelas do sistema: Liquid Glass no iOS (`expo-glass-effect`) e Material
+  3 no Android (`@expo/ui`, Jetpack Compose). A barra inferior troca de material e a tela de
+  Ajustes é substituída por um `Form` nativo. Duas peças seguem sendo nossas dentro dele,
+  hospedadas por `RNHostView`: o seletor de acento — não existe seletor de cor de duas
+  faixas no SwiftUI nem no Material — e o botão de apagar a biblioteca, porque o vermelho
+  de ação destrutiva não é um estilo de botão que o sistema ofereça. Ver a seção da
+  interface nativa em `05-design-system.md`.
+- **Streaming do próprio usuário, por OpenSubsonic.** O acervo do servidor entra no **mesmo
+  índice** da biblioteca local, então busca, Escuta, listas e menu de contexto valem para os
+  dois sem código novo nessas telas. A costura é `absolute()` em `lib/storage.ts`, a única
+  função que traduz identidade em localização — o player não sabe que streaming existe.
+  `lib/merge.ts` é o que impede uma varredura de apagar o acervo remoto, e vice-versa.
+- **Nivelamento de volume (ReplayGain).** `lib/gain.ts`, puro e testado. As tags já
+  passavam pelo leitor e eram descartadas; agora entram no índice e no volume da
+  reprodução, multiplicadas pelo esmaecimento do sleep timer. Não dependeu de trocar o
+  motor de áudio.
+- **Listas inteligentes.** `lib/smart.ts`: nunca ouvidas, mais tocadas, esquecidas, desta
+  semana. Chips na aba de Faixas, compondo com o filtro de gênero. Tornam acionáveis os
+  dados que a tela de Escuta só mostrava.
+- **Cópia da própria escuta.** `lib/backup.ts` (puro) e `lib/backup-io.ts`: um arquivo com
+  curtidas, contagens, progresso, listas e histórico. Restaurar **une** em vez de
+  substituir, e importar duas vezes não dobra o histórico. A senha do servidor fica fora.
+- **Busca dentro das letras.** Índice próprio no banco, populado pela varredura — que já
+  lia a letra e a jogava fora, então indexar não custou I/O. A letra continua fora do
+  índice da biblioteca, que é o que D11 protege.
+- **Escolha de período em Escuta por dois dias**, em vez de por mês.
+- **Migração de coluna no banco.** `addColumn` por `PRAGMA table_info`, que resolveu a
+  dívida "esquema sem versão" para o caso aditivo. Versionar de verdade só no dia em que
+  uma coluna existente mudar de tipo ou de significado.
 
 ## O que ficou para depois
 
@@ -89,6 +122,10 @@ caminho de saída. Para listar: `grep -rn "ponytail:" src/`.
 | `lib/tags.ts` | OGG com cabeçalho de comentários em várias páginas | se houver arquivos assim na prática |
 | `lib/tags.ts` | duração de OGG e Opus não é lida | exige ler a última página do arquivo |
 | `lib/artwork.ts` | forma de onda procedural, não o áudio real | só com PCM real, que no Android custa `RECORD_AUDIO` |
+| `lib/tags.ts` | ReplayGain não é lido de MP4 (átomo freeform `----`) | se aparecer M4A com ReplayGain; o iTunes usa `iTunNORM` |
+| `lib/db.ts` | busca de letra por `LIKE`, sem índice | com muitos milhares de letras; o caminho é FTS5 |
+| `lib/scan.ts` | só a letra **embutida** é indexada, não o `.lrc` ao lado | custaria um read por faixa na varredura |
+| `lib/subsonic.ts` | sem download para offline; sem letra do servidor | quando streaming provar o valor no uso |
 | `components/album-art.tsx` | riscas diagonais da capa removidas | se o RN passar a parsear `repeating-linear-gradient` |
 | `components/player-visuals.tsx` | barras da fita não pulsam junto ao cursor | se houver folga de desempenho |
 | `components/player-visuals.tsx` | esmaecimento da fita cobre o brilho nas pontas | se o RN ganhar `mask-image` |
@@ -107,6 +144,26 @@ caminho de saída. Para listar: `grep -rn "ponytail:" src/`.
   `lrcFile()` trata a falha em silêncio.
 - **O histórico de escuta não distingue quem ouviu.** Um aparelho, um histórico. Não há
   conta, e não vai haver.
+- **Os módulos pré-compilados do Expo não linkam num build de simulador em Debug.** Com
+  `EXPO_USE_PRECOMPILED_MODULES` ligado — que é o padrão do SDK 57 —, o `ExpoModulesCore`
+  e o `ExpoModulesWorklets` entram como frameworks dinâmicos compilados contra um
+  `React.framework`, e esse framework só existe quando o CocoaPods encontra os artefatos
+  pré-compilados do React Native. Quando ele não os encontra (`[ReactNativeCore] No
+  prebuilt artifacts found`), a RN é compilada da fonte, o `React.framework` não existe, e
+  o app instala mas morre no `dyld` antes do primeiro render:
+  `Library not loaded: @rpath/React.framework/React`.
+
+  O contorno é compilar os módulos do Expo da fonte também, o que casa as duas metades:
+
+  ```sh
+  cd ios && EXPO_USE_PRECOMPILED_MODULES=0 pod install
+  npx expo run:ios
+  ```
+
+  É por isso que os podspecs de `modules/story-share` e `modules/audio-route` pedem iOS
+  16.4 e não os 15.1 do template: compilado da fonte, o `ExpoModulesCore` exige 16.4, e o
+  app já mira 16.4 de qualquer jeito. Para gravar a escolha no projeto em vez de repetir a
+  variável, `ios.usePrecompiledModules: false` no `expo-build-properties` do app.json.
 
 ## Pendências de validação
 

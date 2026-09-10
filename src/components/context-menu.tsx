@@ -25,11 +25,13 @@ import { artworkFor } from '@/lib/artwork';
 import { useLibrary } from '@/lib/library';
 import { usePlayer } from '@/lib/player';
 import { usePlaylists, type Playlist } from '@/lib/playlists';
+import { useNativeUI } from '@/lib/native-ui';
 import { usePrefs, useT } from '@/lib/prefs';
 import type { Translate } from '@/lib/i18n';
 import { useEditSheet, type Editable } from './edit-sheet';
 import { spokenOf, type SpokenMarks } from '@/lib/spoken';
 import { removeFromDevice } from '@/lib/remove';
+import { isRemote } from '@/lib/subsonic';
 import { canShareToStories } from '@/lib/share';
 import type { Album, Track } from '@/lib/scan';
 import { AlbumArt } from './album-art';
@@ -48,6 +50,7 @@ import {
   Shuffle,
   Trash,
 } from './icons';
+import { Panel, useEntering } from './panel';
 import { usePlaylistSheet } from './playlist-sheet';
 import { useShareCard, type Shareable } from './share-card';
 import { Body, Display, Mono } from './text';
@@ -89,7 +92,19 @@ export function ContextMenu({
   const insets = useSafeAreaInsets();
   const { accent } = usePrefs();
   const t = useT();
+  const native = useNativeUI();
   const [confirming, setConfirming] = useState<MenuAction | null>(null);
+
+  /*
+    Quando o material desta tela pode pedir vidro.
+
+    Duas camadas aqui começam apagadas: a janela do Modal, que entra em fade nativo, e cada
+    bloco com `entering={FadeIn…}`. Opacidade zero num ancestral não deixa o vidro
+    translúcido — deixa sem efeito nenhum —, então o material espera o tempo da entrada
+    mais lenta (200 ms com 80 de espera, o X do canto). Um valor só para os três: passado o
+    limiar, nenhuma das camadas está mais em zero. Ver `useEntering`.
+  */
+  const entered = useEntering(200, 80);
 
   const close = () => {
     setConfirming(null);
@@ -107,11 +122,22 @@ export function ContextMenu({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      {/* O fundo apagado é o destaque: ele é o que separa o item do resto da tela. */}
+      {/*
+        O fundo apagado é o destaque: ele é o que separa o item do resto da tela.
+
+        Com a interface nativa ele **abre**: 96% de preto é quase opaco, e material sobre
+        opaco não é material — não há nada atrás para refratar nem para o Material tingir.
+        Em 62% a tela de baixo aparece o suficiente para o vidro ter o que fazer, e o menu
+        continua sendo o que se lê primeiro.
+      */}
       <Animated.View
         entering={FadeIn.duration(180)}
         exiting={FadeOut.duration(120)}
-        style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(6,5,4,.96)' }}>
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: native ? 'rgba(6,5,4,.62)' : 'rgba(6,5,4,.96)',
+        }}>
         <Pressable style={{ flex: 1 }} onPress={close} />
       </Animated.View>
 
@@ -165,68 +191,34 @@ export function ContextMenu({
           </Animated.View>
 
           {confirming ? (
-            <Animated.View
-              entering={FadeInDown.duration(200)}
-              style={{
-                marginTop: 26,
-                padding: 18,
-                borderRadius: R.r21,
-                backgroundColor: C.card,
-                borderWidth: 1,
-                borderColor: alpha(accent, 0.35),
-              }}>
-              <Body size={14} weight={500} align="center" color={T.full}>
-                {confirming.confirm}
-              </Body>
-              <Body size={12} color={T.t5} align="center" style={{ marginTop: 8 }}>
-                {confirming.warning}
-              </Body>
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-                <Pressable
-                  onPress={() => setConfirming(null)}
-                  style={{
-                    flex: 1,
-                    height: 46,
-                    borderRadius: R.r15,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 1,
-                    borderColor: T.t12,
-                  }}>
-                  <Body size={13.5} weight={600} color={T.t72}>
-                    {t('common.cancel')}
-                  </Body>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    confirming.onPress();
-                    close();
-                  }}
-                  style={{
-                    flex: 1,
-                    height: 46,
-                    borderRadius: R.r15,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: accent,
-                  }}>
-                  <Body size={13.5} weight={600} color={C.onAccent}>
-                    {t('common.delete')}
-                  </Body>
-                </Pressable>
-              </View>
-            </Animated.View>
+            <Confirm
+              action={confirming}
+              accent={accent}
+              t={t}
+              onCancel={() => setConfirming(null)}
+              onConfirm={() => {
+                confirming.onPress();
+                close();
+              }}
+            />
           ) : (
             <ScrollView
               style={{ marginTop: 26, flexGrow: 0 }}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
                 borderRadius: R.r21,
-                backgroundColor: C.card,
-                borderWidth: 1,
-                borderColor: T.t07,
                 overflow: 'hidden',
               }}>
+              {/*
+                O material da lista fica **dentro** do contêiner de conteúdo, e não como
+                fundo do ScrollView: absoluto ali ele mede a altura do conteúdo, então
+                acompanha a lista quando ela rola em vez de ficar parado atrás dela.
+              */}
+              <Panel
+                fade={entered}
+                style={{ borderRadius: R.r21 }}
+                fallback={{ background: C.card, border: T.t07 }}
+              />
               {actions.map((action, index) => (
                 <Row
                   key={action.label}
@@ -265,16 +257,95 @@ export function ContextMenu({
                 borderRadius: 19,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: T.t08,
-                borderWidth: 1,
-                borderColor: T.t1,
               }}>
+              <Panel
+                interactive
+                fade={entered}
+                style={{ borderRadius: 19 }}
+                fallback={{ background: T.t08, border: T.t1 }}
+              />
               <Close size={16} color={T.t72} />
             </Pressable>
           </Animated.View>
         </View>
       )}
     </Modal>
+  );
+}
+
+/**
+ * A confirmação de uma ação destrutiva, no lugar da lista.
+ *
+ * Componente próprio por causa do material: ele entra com `FadeInDown`, ou seja de
+ * opacidade zero, e o vidro precisa de um `fade` que **comece quando este cartão nasce** —
+ * não quando o menu nasceu. Vivendo aqui, o `useEntering` monta com ele.
+ */
+function Confirm({
+  action,
+  accent,
+  t,
+  onCancel,
+  onConfirm,
+}: {
+  action: MenuAction;
+  accent: string;
+  t: Translate;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const entered = useEntering(200);
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(200)}
+      style={{
+        marginTop: 26,
+        padding: 18,
+        borderRadius: R.r21,
+        // A borda no acento fica: ela é o aviso de que este cartão pergunta antes de
+        // destruir, e vale nos três materiais.
+        borderWidth: 1,
+        borderColor: alpha(accent, 0.35),
+      }}>
+      <Panel fade={entered} style={{ borderRadius: R.r21 }} fallback={{ background: C.card }} />
+      <Body size={14} weight={500} align="center" color={T.full}>
+        {action.confirm}
+      </Body>
+      <Body size={12} color={T.t5} align="center" style={{ marginTop: 8 }}>
+        {action.warning}
+      </Body>
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+        <Pressable
+          onPress={onCancel}
+          style={{
+            flex: 1,
+            height: 46,
+            borderRadius: R.r15,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: T.t12,
+          }}>
+          <Body size={13.5} weight={600} color={T.t72}>
+            {t('common.cancel')}
+          </Body>
+        </Pressable>
+        <Pressable
+          onPress={onConfirm}
+          style={{
+            flex: 1,
+            height: 46,
+            borderRadius: R.r15,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: accent,
+          }}>
+          <Body size={13.5} weight={600} color={C.onAccent}>
+            {t('common.delete')}
+          </Body>
+        </Pressable>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -492,27 +563,39 @@ export function useItemMenu() {
         warning: t('menu.deletePlaylist.warning'),
         onPress: () => removePlaylist(menu.playlist.id),
       });
-    } else if (tracks.length) {
-      list.push({
-        label:
-          tracks.length === 1
-            ? t('menu.removeFile')
-            : t('menu.removeFiles', { n: tracks.length }),
-        icon: <Trash size={16} color={T.full} />,
-        destructive: true,
-        confirm:
-          tracks.length === 1
-            ? t('menu.removeFile.confirm', { title: tracks[0].title })
-            : t('menu.removeFiles.confirm', { n: tracks.length }),
-        warning: t(
-          tracks.length === 1 ? 'menu.removeFile.warning' : 'menu.removeFiles.warning'
-        ),
-        onPress: () => {
-          void removeFromDevice(tracks).then(({ removed }) => {
-            if (removed.length) removeTracks(removed);
-          });
-        },
-      });
+    } else {
+      /*
+        Só o que é arquivo neste aparelho.
+
+        Faixa de servidor não tem arquivo para apagar, e o Subsonic não tem endpoint que
+        apague nada — oferecer "remover do aparelho" nela prometeria o que o app não pode
+        cumprir. Num álbum misto a ação continua aparecendo, contando apenas as locais, que
+        é o número que o diálogo precisa dizer para não mentir. `removeFromDevice` recusa
+        as remotas de qualquer forma; isto é para o menu não oferecer. Ver `lib/remove.ts`.
+      */
+      const local = tracks.filter((track) => !isRemote(track.id));
+      if (local.length) {
+        list.push({
+          label:
+            local.length === 1
+              ? t('menu.removeFile')
+              : t('menu.removeFiles', { n: local.length }),
+          icon: <Trash size={16} color={T.full} />,
+          destructive: true,
+          confirm:
+            local.length === 1
+              ? t('menu.removeFile.confirm', { title: local[0].title })
+              : t('menu.removeFiles.confirm', { n: local.length }),
+          warning: t(
+            local.length === 1 ? 'menu.removeFile.warning' : 'menu.removeFiles.warning'
+          ),
+          onPress: () => {
+            void removeFromDevice(local).then(({ removed }) => {
+              if (removed.length) removeTracks(removed);
+            });
+          },
+        });
+      }
     }
 
     return list;

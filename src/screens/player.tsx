@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { ScrollView, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   FadeInDown,
-  FadeOut,
-  LinearTransition,
+  FadeOutDown,
+  ReduceMotion,
   SensorType,
   type SharedValue,
   runOnJS,
@@ -39,7 +39,9 @@ import {
   Share as ShareIcon,
   Shuffle,
 } from '@/components/icons';
+import { Panel } from '@/components/panel';
 import { Ribbon, Vinyl, Waveform } from '@/components/player-visuals';
+import { Beat, Press } from '@/components/press';
 import { useShareCard } from '@/components/share-card';
 import { QueueRow } from '@/components/queue-row';
 import { Body, Display, Mono } from '@/components/text';
@@ -57,11 +59,18 @@ import { TILT_INTERVAL, TILT_REST, tiltAngles, tiltStep } from '@/lib/tilt';
 import { LyricsView, NoLyrics } from '@/components/lyrics';
 import { type Lyrics } from '@/lib/lrc';
 import { forgetLyrics, useLyrics } from '@/lib/lyrics';
-import { CONTINUATIONS, continuationFor } from '@/lib/queue';
+import { CONTINUATIONS, continuationFor, type Continuation } from '@/lib/queue';
 import { importLrc } from '@/lib/scan';
 import { leftOf, SLEEP_MINUTES, type Sleep } from '@/lib/sleep';
 import { useLibrary } from '@/lib/library';
-import { ZoomFade, ZoomScreen, ZoomTarget, useZoomClose, useZoomProgress } from '@/lib/zoom';
+import {
+  ZoomFade,
+  ZoomScreen,
+  ZoomTarget,
+  useZoomClose,
+  useZoomFade,
+  useZoomProgress,
+} from '@/lib/zoom';
 
 /**
  * Respiro entre a barra do topo e a capa.
@@ -154,14 +163,6 @@ export function PlayerScreen() {
     ],
   }));
 
-  /**
-   * O tamanho da capa muda de verdade; nada de `scale`.
-   *
-   * Escalar exigia acertar o `transformOrigin`, e qualquer valor não reconhecido cai em
-   * silêncio no centro — foi o que manteve a capa fora de lugar nas tentativas
-   * anteriores. Com o tamanho real, a capa é o que o layout diz que ela é, e
-   * `LinearTransition` anima a caixa entre os dois estados.
-   */
   /*
     A capa mede pelo espaço que sobra, não por um número fixo.
 
@@ -175,13 +176,58 @@ export function PlayerScreen() {
     miniatura numa tela muito curta.
   */
   const artRoom = screen - insets.top - Math.max(insets.bottom, 18) - ROOM;
-  const artSize = showQueue
-    ? ART_MINI
-    : treatment === 'vinyl'
+  const artSize =
+    treatment === 'vinyl'
       ? Math.max(180, Math.min(310, artRoom))
       : treatment === 'wave'
         ? 96
         : Math.max(170, Math.min(286, artRoom));
+
+  /**
+   * A capa encolhendo para dar lugar à fila — e voltando.
+   *
+   * O `artSize` era trocado por `ART_MINI` no mesmo render em que `showQueue` virava: a
+   * capa aparecia com 92 px no primeiro quadro e o `LinearTransition` do invólucro animava
+   * uma caixa vazia em volta dela. Não havia transição para ver, nem na ida nem na volta —
+   * era o salto que a fila dava ao abrir e ao fechar.
+   *
+   * Agora a capa é sempre do tamanho cheio e quem encolhe é um `scale`, que não passa pelo
+   * layout: a arte muda de tamanho quadro a quadro, na thread de UI. O espaço que a escala
+   * libera não é devolvido de graça — `scale` não mexe no layout —, então uma margem
+   * negativa proporcional puxa o que vem embaixo exatamente na medida em que a capa
+   * encolheu. Só as duas margens passam pelo layout, uma vez por transição, e o que se vê
+   * mover está no caminho rápido.
+   *
+   * `transformOrigin: 'top center'` é o que faz a capa encolher **para cima**, em direção
+   * ao lugar dela na fila, em vez de para o próprio centro. O valor é reconhecido; foi um
+   * `transformOrigin` inválido caindo em silêncio no centro que derrubou as tentativas
+   * anteriores de escalar esta capa.
+   *
+   * O modo onda fica de fora: ali a capa já é 96 contra os 92 da fila, e escalar o bloco
+   * inteiro — que tem título e forma de onda dentro — encolheria o texto por 4 px de
+   * ganho.
+   */
+  const shrink = treatment === 'wave' ? 1 : ART_MINI / artSize;
+  const artShrink = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - q.value * (1 - shrink) }],
+    marginTop: (1 - q.value) * ART_TOP,
+    marginBottom: -q.value * artSize * (1 - shrink),
+  }));
+
+  /**
+   * O que existe só fora da fila: a fileira de pílulas embaixo da capa.
+   *
+   * Esmaece e recolhe em vez de desmontar — desmontar é o que fazia a fila subir num
+   * salto. `pointerEvents` desliga junto: esmaecida, ela não pode continuar sob o dedo.
+   */
+  const SECONDARY_H = 34;
+  const queueless = useAnimatedStyle(() => ({
+    opacity: 1 - q.value,
+    transform: [{ scale: 1 - q.value * 0.08 }],
+    marginTop: (1 - q.value) * 26,
+    marginBottom: -q.value * SECONDARY_H,
+    pointerEvents: q.value > 0.5 ? 'none' : 'auto',
+  }));
 
 
   /*
@@ -229,12 +275,11 @@ export function PlayerScreen() {
     Com a letra aberta o título grande sai de cena, como no Music; com a fila aberta saem
     título e fita, que o espaço é da lista.
 
-    A fila desmonta os dois — ela reorganiza a tela de verdade. A letra só os esmaece, por
-    `Fade`, e o lugar deles fica: era um `&&` de `showLyrics`, o bloco sumia de um quadro
-    para o outro e o rodapé saltava para cima.
+    Nenhum dos dois desmonta mais. A letra os esmaece por `Fade`, que guarda o lugar; a
+    fila os recolhe por `Collapse`, que devolve o lugar à lista. Os dois casos eram `&&`
+    de estado, e nos dois o bloco sumia de um quadro para o outro com o rodapé saltando
+    atrás dele.
   */
-  const bigTitle = treatment !== 'wave' && !showQueue;
-  const ribbon = !showQueue;
   /** O que o card leva quando se compartilha do Now Playing. */
   const nowPlaying = () => ({
     title: track.title,
@@ -313,10 +358,16 @@ export function PlayerScreen() {
             </ZoomFade>
           }>
         <GestureDetector gesture={swipe}>
-          <View style={{ flex: 1, justifyContent: showQueue ? 'flex-start' : 'center' }}>
-            <Animated.View
-              layout={LinearTransition.duration(300)}
-              style={{ alignItems: 'center', marginTop: showQueue ? 0 : ART_TOP }}>
+          {/*
+            `justifyContent: 'center'` sempre, e não um ternário de `showQueue`.
+
+            O ternário trocava de valor no mesmo quadro em que a fila abria, e a capa
+            saltava para o topo antes de começar a encolher. Com a fila aberta o
+            `QueuePanel` é `flex: 1` e não sobra espaço livre nenhum para distribuir, então
+            os dois valores fazem exatamente a mesma coisa ali — e o salto vai embora.
+          */}
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Animated.View style={[{ alignItems: 'center', transformOrigin: 'top center' }, artShrink]}>
             {treatment === 'ember' && (
               <Animated.View style={[{ alignSelf: 'center' }, dragStyle]}>
                 <ZoomFade
@@ -416,8 +467,13 @@ export function PlayerScreen() {
               ela lia como um aglomerado solto.
 
               Fora com a fila aberta, como o título grande e a fita: o espaço é da lista.
+
+              "Fora" por `q`, e não por `{!showQueue && …}`: desmontar tirava as três
+              pílulas da tela de um quadro para o outro, e o que vinha embaixo — a fila —
+              subia no salto. Montada e esmaecida, ela sai junto com a capa e volta junto
+              com ela. A margem negativa devolve os 34 px dela à lista, como na capa.
             */}
-            {!showQueue && (
+            <Animated.View style={queueless}>
               <ZoomFade
                 style={{
                   flexDirection: 'row',
@@ -428,7 +484,6 @@ export function PlayerScreen() {
                   // Presa à largura do card, e centrada dentro dela: nas beiradas os três
                   // ícones liam como cantos de uma moldura, não como um grupo.
                   width: treatment === 'wave' ? '100%' : artSize,
-                  marginTop: 26,
                 }}>
                 {/*
                   Trocar de saída é do sistema nos dois lados, por caminhos opostos.
@@ -447,21 +502,7 @@ export function PlayerScreen() {
                     <Output size={16} color={T.t72} />
                   </Pill>
                 )}
-                {canShowRoutePicker && (
-                  <View
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 17,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderWidth: 1,
-                      borderColor: T.t12,
-                      backgroundColor: T.t06,
-                    }}>
-                    <RoutePicker size={26} tint={T.full} />
-                  </View>
-                )}
+                {canShowRoutePicker && <RouteBox />}
                 {canShareToStories && (
                   <Pill onPress={() => share(nowPlaying(), 'stories')}>
                     <Instagram size={16} color={T.t72} />
@@ -471,12 +512,18 @@ export function PlayerScreen() {
                   <ShareIcon size={15} color={T.t72} />
                 </Pill>
               </ZoomFade>
-            )}
+            </Animated.View>
 
             {showQueue && (
               <Animated.View
                 entering={FadeInDown.duration(280)}
-                exiting={FadeOut.duration(140)}
+                /*
+                  Sai pelo caminho por onde entrou.
+                  Era um `FadeOut` seco de 140 ms: a lista sumia no lugar enquanto a capa
+                  crescia por cima dela. Descendo, ela devolve o espaço à capa em vez de
+                  disputá-lo — e 200 ms para casar com os 320 do encolher da capa.
+                */
+                exiting={FadeOutDown.duration(200)}
                 style={{ flex: 1, marginTop: 12 }}>
                 <QueuePanel />
               </Animated.View>
@@ -487,36 +534,50 @@ export function PlayerScreen() {
 
         {/* rodapé */}
         <ZoomFade style={{ marginTop: 14 }}>
-          {bigTitle && (
-            <Fade on={lyricsOn} style={{ alignItems: 'center', marginBottom: 20 }}>
-              <Display size={26} tracking={-0.035} align="center" numberOfLines={2}>
-                {track.title}
-              </Display>
-              <Body size={14} color={T.t62} style={{ marginTop: 5 }}>
-                {track.artist}
-              </Body>
-            </Fade>
+          {/*
+            Título grande e fita saem com a fila aberta — o espaço é da lista. Mas saem
+            **recolhendo**, e não desmontando: era o `{bigTitle && …}` e o `{ribbon && …}`
+            que faziam os dois desaparecerem de um quadro para o outro, e o rodapé inteiro
+            saltar para baixo junto. O `Collapse` mede a altura de verdade e devolve
+            exatamente ela à lista.
+
+            O `treatment !== 'wave'` fica como `&&` porque não é estado: no modo onda o
+            título vive ao lado da capa e este bloco nunca existiu.
+          */}
+          {treatment !== 'wave' && (
+            <Collapse on={q} gap={20} style={{ alignItems: 'center' }}>
+              <Fade on={lyricsOn} style={{ alignItems: 'center' }}>
+                <Display size={26} tracking={-0.035} align="center" numberOfLines={2}>
+                  {track.title}
+                </Display>
+                <Body size={14} color={T.t62} style={{ marginTop: 5 }}>
+                  {track.artist}
+                </Body>
+              </Fade>
+            </Collapse>
           )}
 
-          {ribbon && (
-            /*
-              A fita vale nos três tratamentos, inclusive no da onda.
+          {/*
+            A fita vale nos três tratamentos, inclusive no da onda.
 
-              Antes ela era escondida ali — quem buscava era a própria forma de onda — e
-              voltava quando a letra abria, que é quando a onda sai de cena. Manter o
-              lugar dela custava 40 px vazios embaixo do transporte, e recolher a altura
-              de verdade re-mede a caixa da letra a cada quadro da transição, que é a
-              travada que o `Fade` existe para não ter. Com a fita sempre lá, nada no
-              rodapé se move: no modo onda ela e a onda dizem a mesma coisa em dois
-              tamanhos, o que é barato demais para valer um vão morto.
-            */
+            Antes ela era escondida ali — quem buscava era a própria forma de onda — e
+            voltava quando a letra abria, que é quando a onda sai de cena. Manter o
+            lugar dela custava 40 px vazios embaixo do transporte, e recolher a altura
+            de verdade re-mede a caixa da letra a cada quadro da transição, que é a
+            travada que o `Fade` existe para não ter. Com a fita sempre lá, nada no
+            rodapé se move ao trocar de aba: no modo onda ela e a onda dizem a mesma coisa
+            em dois tamanhos, o que é barato demais para valer um vão morto.
+
+            Com a **fila**, não: ali a fita recolhe, porque a lista quer os 44 px dela.
+          */}
+          <Collapse on={q}>
             <Ribbon
               seed={track.id}
               progress={progress}
               accent={accent}
               onSeek={(delta) => seekTo(elapsed.value + delta * duration)}
             />
-          )}
+          </Collapse>
 
           <View
             style={{
@@ -527,10 +588,34 @@ export function PlayerScreen() {
               marginTop: 16,
             }}>
             <Elapsed />
+            {/*
+              O ponto e o rótulo dizem o estado da reprodução — e, quando não há
+              reprodução possível, dizem isso.
+
+              `uri` vazia é faixa remota sem servidor que a resolva (ver `cue` em
+              `lib/player.tsx`). Sem esta linha, um toque nela não fazia nada e não
+              explicava nada: o transporte ficava parado sem motivo visível.
+            */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-              <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: accent }} />
-              <Mono size={10} weight={500} tracking={0.14} caps color={T.t62}>
-                {playing ? track.file.split('.').pop() : t('player.paused')}
+              <View
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: 2.5,
+                  backgroundColor: track.uri ? accent : C.danger,
+                }}
+              />
+              <Mono
+                size={10}
+                weight={500}
+                tracking={0.14}
+                caps
+                color={track.uri ? T.t62 : C.danger}>
+                {!track.uri
+                  ? t('streaming.unavailable')
+                  : playing
+                    ? track.file.split('.').pop()
+                    : t('player.paused')}
               </Mono>
             </View>
             <Remaining duration={duration} />
@@ -543,29 +628,36 @@ export function PlayerScreen() {
               justifyContent: 'space-between',
               marginTop: 16,
             }}>
-            <Pressable onPress={() => toggleLike(track.id)} hitSlop={8} style={round(44)}>
-              <Heart size={20} color={accent} filled={liked} />
-            </Pressable>
-            <Pressable
+            {/*
+              O `Beat` pulsa quando `liked` muda, e não quando o dedo desce: curtir passa
+              pelo `PrefsProvider` e volta como prop, então o pulso no toque mentiria sobre
+              quando a curtida entrou. O `Press` cobre o toque; o `Beat`, o resultado.
+            */}
+            <Press onPress={() => toggleLike(track.id)} hitSlop={8} style={round(44)}>
+              <Beat on={liked}>
+                <Heart size={20} color={accent} filled={liked} />
+              </Beat>
+            </Press>
+            {/* O empurrão de 3 px vai no sentido da viagem: para trás em "anterior". */}
+            <Press
               onPress={previous}
               disabled={!canPrevious}
               hitSlop={8}
-              style={[round(52), { opacity: canPrevious ? 1 : 0.3 }]}>
+              nudge={-3}
+              style={round(52)}>
               <Previous />
-            </Pressable>
+            </Press>
             <PlayButton playing={playing} accent={accent} onPress={toggle} />
-            <Pressable
-              onPress={next}
-              disabled={!canNext}
-              hitSlop={8}
-              style={[round(52), { opacity: canNext ? 1 : 0.3 }]}>
+            <Press onPress={next} disabled={!canNext} hitSlop={8} nudge={3} style={round(52)}>
               <Next />
-            </Pressable>
+            </Press>
             {/* No protótipo este slot abria a tela de bloqueio, que é do sistema; aqui
                 ele abre a fila. */}
-            <Pressable onPress={() => setShowQueue((on) => !on)} hitSlop={8} style={round(44)}>
-              <Queue size={20} color={showQueue ? accent : T.t72} />
-            </Pressable>
+            <Press onPress={() => setShowQueue((on) => !on)} hitSlop={8} style={round(44)}>
+              <Beat on={showQueue} amount={0.18}>
+                <Queue size={20} color={showQueue ? accent : T.t72} />
+              </Beat>
+            </Press>
           </View>
 
         </ZoomFade>
@@ -619,9 +711,15 @@ function Pill({
   label?: string;
   children: React.ReactNode;
 }) {
+  // A opacidade que o `ZoomFade` em volta está aplicando: o vidro precisa dela para não
+  // ser pedido enquanto a tela ainda está em zero. Ver `useZoomFade` em `lib/zoom.tsx`.
+  const fade = useZoomFade();
+
   return (
-    <Pressable
+    <Press
       onPress={onPress}
+      // Pílula pequena: afunda mais que um botão grande para o gesto aparecer.
+      sink={0.09}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -631,37 +729,77 @@ function Pill({
         width: label ? undefined : 34,
         height: 34,
         borderRadius: 17,
-        borderWidth: 1,
-        borderColor: T.t12,
-        backgroundColor: T.t06,
       }}>
+      {/*
+        Vidro interativo no iOS, superfície Material no Android, e a nossa pílula quando a
+        interface nativa está desligada — ver `components/panel.tsx`. É o controle mais
+        repetido do Now Playing, então é aqui que a troca de material mais se vê.
+      */}
+      <Panel
+        interactive
+        fade={fade}
+        style={{ borderRadius: 17 }}
+        fallback={{ background: T.t06, border: T.t12 }}
+      />
       {children}
       {label ? (
         <Body size={12} weight={600} color={T.t72}>
           {label}
         </Body>
       ) : null}
-    </Pressable>
+    </Press>
+  );
+}
+
+/**
+ * O seletor de saída de áudio da Apple, na mesma pílula das outras ações.
+ *
+ * Componente próprio, e não uma `View` no meio da fileira, porque o fundo dele precisa do
+ * `useZoomFade` — e esse hook lê o contexto que o `ZoomScreen` provê, que do componente
+ * que *renderiza* o ZoomScreen volta nulo. Renderizado daqui, ele está dentro.
+ */
+function RouteBox() {
+  const fade = useZoomFade();
+
+  return (
+    <View
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <Panel
+        interactive
+        fade={fade}
+        style={{ borderRadius: 17 }}
+        fallback={{ background: T.t06, border: T.t12 }}
+      />
+      <RoutePicker size={26} tint={T.full} />
+    </View>
   );
 }
 
 /** Encolhe o Now Playing de volta para o mini player. */
 function CloseButton() {
   const close = useZoomClose();
+  const fade = useZoomFade();
   return (
-    <Pressable
+    <Press
       onPress={close}
       hitSlop={8}
+      sink={0.09}
       style={{
         width: 38,
         height: 38,
         borderRadius: 19,
-        backgroundColor: T.t08,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
+      <Panel interactive fade={fade} style={{ borderRadius: 19 }} fallback={{ background: T.t08 }} />
       <ChevronDown />
-    </Pressable>
+    </Press>
   );
 }
 
@@ -834,35 +972,7 @@ function QueuePanel() {
       )}
 
       {/* Abas do modo de continuação: as quatro opções à vista, sem ciclar às cegas. */}
-      <View
-        style={{
-          flexDirection: 'row',
-          backgroundColor: C.card,
-          borderRadius: R.r13,
-          padding: 3,
-          marginTop: 10,
-        }}>
-        {CONTINUATIONS.map((option) => {
-          const on = option.key === continuation;
-          return (
-            <Pressable
-              key={option.key}
-              onPress={() => setContinuation(option.key)}
-              style={{
-                flex: 1,
-                height: 30,
-                borderRadius: 10,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: on ? alpha(accent, 0.18) : 'transparent',
-              }}>
-              <Body size={11.5} weight={600} color={on ? T.full : T.t42}>
-                {t(option.short)}
-              </Body>
-            </Pressable>
-          );
-        })}
-      </View>
+      <ContinuationTabs accent={accent} value={continuation} onPick={setContinuation} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
         {upcoming.map((item, at) => (
@@ -932,6 +1042,135 @@ function QueuePanel() {
 }
 
 /**
+ * As abas do modo de continuação, com o realce deslizando entre elas.
+ *
+ * O realce era um `backgroundColor` no botão escolhido: trocava de aba num quadro, sem
+ * nada ligando a de onde saiu à que recebeu o toque — quatro opções acendendo e apagando
+ * em seco. Agora é uma peça só que viaja, como a pílula das abas de arte e letra no topo
+ * da tela, e a cor do texto atravessa junto com ela.
+ *
+ * A largura vem do `onLayout` porque a fileira é `flex: 1` em quatro: o passo do realce é
+ * um quarto do que a tela deu à caixa, e isso não é um número que se possa cravar. Até a
+ * primeira medida o realce fica em largura zero — invisível, em vez de um retângulo no
+ * lugar errado por um quadro.
+ */
+function ContinuationTabs({
+  accent,
+  value,
+  onPick,
+}: {
+  accent: string;
+  value: Continuation;
+  onPick: (key: Continuation) => void;
+}) {
+  const t = useT();
+  const fade = useZoomFade();
+  const [width, setWidth] = useState(0);
+
+  const at = Math.max(0, CONTINUATIONS.findIndex((option) => option.key === value));
+
+  /** Posição do realce, em índice de aba. Anima; o índice em si é estado. */
+  const slide = useSharedValue(at);
+  useEffect(() => {
+    slide.value = withTiming(at, PANE);
+  }, [at, slide]);
+
+  const step = width / CONTINUATIONS.length;
+  const highlight = useAnimatedStyle(() => ({
+    width: step,
+    transform: [{ translateX: slide.value * step }],
+  }));
+
+  return (
+    <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{
+        flexDirection: 'row',
+        borderRadius: R.r13,
+        padding: 3,
+        marginTop: 10,
+      }}>
+      {/* O fundo da fileira. Não é interativo: quem responde ao toque são as abas, e o
+          realce que corre atrás delas já é o retorno do gesto. */}
+      <Panel fade={fade} style={{ borderRadius: R.r13 }} fallback={{ background: C.card }} />
+      {/*
+        O realce mora **atrás** das abas, num absoluto que respeita o `padding: 3` da
+        caixa. Como irmão anterior ele pintaria embaixo dos rótulos, que é o que se quer;
+        como filho de uma das abas viajaria junto com ela.
+      */}
+      {width > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: 'absolute',
+              left: 3,
+              top: 3,
+              bottom: 3,
+              borderRadius: 10,
+              backgroundColor: alpha(accent, 0.18),
+            },
+            highlight,
+          ]}
+        />
+      )}
+      {CONTINUATIONS.map((option) => (
+        <Tab
+          key={option.key}
+          label={t(option.short)}
+          index={CONTINUATIONS.indexOf(option)}
+          slide={slide}
+          onPress={() => onPick(option.key)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Uma aba da fileira de continuação.
+ *
+ * A cor do rótulo sai da distância até o realce, e não de um booleano: assim ela acende no
+ * ritmo em que a peça chega, em vez de trocar de valor no quadro do toque. Interpolar a
+ * opacidade da View dispensa animar a cor do texto, que exigiria `animatedProps`.
+ */
+function Tab({
+  label,
+  index,
+  slide,
+  onPress,
+}: {
+  label: string;
+  index: number;
+  slide: SharedValue<number>;
+  onPress: () => void;
+}) {
+  const lit = useAnimatedStyle(() => ({
+    // 1 quando o realce está em cima, 0.42 a uma aba de distância ou mais.
+    opacity: 0.42 + 0.58 * Math.max(0, 1 - Math.abs(slide.value - index)),
+  }));
+
+  return (
+    <Press
+      onPress={onPress}
+      sink={0.04}
+      style={{
+        flex: 1,
+        height: 30,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <Animated.View style={lit}>
+        <Body size={11.5} weight={600}>
+          {label}
+        </Body>
+      </Animated.View>
+    </Press>
+  );
+}
+
+/**
  * Quanto falta para a pausa, em texto.
  *
  * Um relógio próprio de um segundo, e só enquanto está montado: o tempo do temporizador
@@ -977,6 +1216,7 @@ function SleepPicker({
   onChoose: (choice: number | 'track' | null) => void;
 }) {
   const t = useT();
+  const fade = useZoomFade();
 
   const options: { key: string; label: string; on: boolean; choice: number | 'track' | null }[] = [
     { key: 'off', label: t('sleep.off'), on: sleep.kind === 'off', choice: null },
@@ -999,23 +1239,37 @@ function SleepPicker({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 7, paddingVertical: 8 }}>
         {options.map((option) => (
-          <Pressable
+          <Press
             key={option.key}
             onPress={() => onChoose(option.choice)}
+            sink={0.07}
             style={{
               height: 32,
               paddingHorizontal: 14,
               borderRadius: 16,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: option.on ? alpha(accent, 0.18) : C.card,
+              backgroundColor: option.on ? alpha(accent, 0.18) : undefined,
               borderWidth: 1,
               borderColor: option.on ? alpha(accent, 0.5) : 'transparent',
             }}>
+            {/*
+              O material só entra na opção **não** escolhida: a escolhida é o acento, que é
+              o que responde "este é o tempo que vai valer". Vidro em cima do acento
+              apagaria justamente essa resposta.
+            */}
+            {!option.on && (
+              <Panel
+                interactive
+                fade={fade}
+                style={{ borderRadius: 16 }}
+                fallback={{ background: C.card }}
+              />
+            )}
             <Body size={12.5} weight={600} color={option.on ? T.full : T.t62}>
               {option.label}
             </Body>
-          </Pressable>
+          </Press>
         ))}
       </ScrollView>
     </View>
@@ -1034,9 +1288,10 @@ function Mode({
   children: React.ReactNode;
 }) {
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       hitSlop={8}
+      sink={0.09}
       style={{
         width: 38,
         height: 38,
@@ -1045,8 +1300,11 @@ function Mode({
         justifyContent: 'center',
         backgroundColor: on ? alpha(accent, 0.16) : 'transparent',
       }}>
-      {children}
-    </Pressable>
+      {/* Aleatório, repetir e temporizador acendem: o pulso confirma a troca de modo. */}
+      <Beat on={on} amount={0.2}>
+        {children}
+      </Beat>
+    </Press>
   );
 }
 
@@ -1058,6 +1316,12 @@ const round = (size: number) => ({
   justifyContent: 'center' as const,
 });
 
+/**
+ * O botão de tocar e pausar.
+ *
+ * Três coisas se movem, e nenhuma delas custa layout: o anel que pulsa enquanto toca, o
+ * afundar do toque (`Press`) e a troca entre os dois glifos.
+ */
 function PlayButton({
   playing,
   accent,
@@ -1069,17 +1333,56 @@ function PlayButton({
 }) {
   const ring = useSharedValue(0);
   useEffect(() => {
-    if (playing) ring.value = withRepeat(withTiming(1, { duration: 2200 }), -1, false);
-    else ring.value = withTiming(0, { duration: 200 });
+    if (playing) {
+      ring.value = withRepeat(
+        withTiming(1, { duration: 2200, reduceMotion: ReduceMotion.System }),
+        -1,
+        false
+      );
+    } else {
+      // Atribuir uma animação nova cancela o `withRepeat` — não é preciso `cancelAnimation`.
+      ring.value = withTiming(0, { duration: 200, reduceMotion: ReduceMotion.System });
+    }
   }, [playing, ring]);
   const ringStyle = useAnimatedStyle(() => ({
     opacity: (1 - ring.value) * 0.55,
     transform: [{ scale: 0.85 + ring.value * 1.05 }],
   }));
 
+  /**
+   * A troca de glifo, em vez de um `?:` que troca num quadro.
+   *
+   * Os dois ficam montados, um sobre o outro, e o que muda é opacidade e escala — o mesmo
+   * desenho do `Stage`, e pelo mesmo motivo: montar e desmontar um SVG a cada pausa é
+   * trabalho de React para uma troca que a thread de UI faz sozinha.
+   *
+   * `position: 'absolute'` nos dois, com o botão centralizando: empilhados no fluxo, o
+   * play empurraria o pause e o par nasceria fora do centro.
+   */
+  const on = useSharedValue(playing ? 1 : 0);
+  useEffect(() => {
+    on.value = withTiming(playing ? 1 : 0, {
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      reduceMotion: ReduceMotion.System,
+    });
+  }, [playing, on]);
+
+  const pauseGlyph = useAnimatedStyle(() => ({
+    opacity: on.value,
+    transform: [{ scale: 0.7 + on.value * 0.3 }],
+  }));
+  const playGlyph = useAnimatedStyle(() => ({
+    opacity: 1 - on.value,
+    transform: [{ scale: 1 - on.value * 0.3 }],
+  }));
+
   return (
-    <Pressable
+    <Press
       onPress={onPress}
+      // Afunda um pouco menos que os outros: é o maior alvo da fileira, e a mesma fração
+      // num círculo de 76 dá um deslocamento que lê como salto.
+      sink={0.045}
       style={{
         width: 76,
         height: 76,
@@ -1095,13 +1398,19 @@ function PlayButton({
           ringStyle,
         ]}
       />
-      {playing ? <Pause size={24} color={C.onAccent} /> : <Play size={22} color={C.onAccent} />}
-    </Pressable>
+      <Animated.View style={[{ position: 'absolute' }, pauseGlyph]}>
+        <Pause size={24} color={C.onAccent} />
+      </Animated.View>
+      <Animated.View style={[{ position: 'absolute' }, playGlyph]}>
+        <Play size={22} color={C.onAccent} />
+      </Animated.View>
+    </Press>
   );
 }
 
 /** As abas arte/letras da barra superior. */
 function ArtLyricsTabs({ on }: { on: SharedValue<number> }) {
+  const fade = useZoomFade();
   /** A pílula viaja a largura de uma aba mais o vão entre as duas. */
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: on.value * 36 }] }));
   /*
@@ -1131,8 +1440,8 @@ function ArtLyricsTabs({ on }: { on: SharedValue<number> }) {
         gap: 2,
         padding: 3,
         borderRadius: R.r17,
-        backgroundColor: T.t08,
       }}>
+      <Panel fade={fade} style={{ borderRadius: R.r17 }} fallback={{ background: T.t08 }} />
       <Animated.View
         style={[
           {
@@ -1147,16 +1456,22 @@ function ArtLyricsTabs({ on }: { on: SharedValue<number> }) {
           pill,
         ]}
       />
-      <Pressable onPress={go(0)} style={tab}>
+      {/*
+        `lyricsOn` continua em `withTiming`, e não em mola: ele é o mesmo valor que dirige
+        as opacidades do `Stage` e do `Fade`, e uma mola passa do alvo — opacidade acima de
+        1 e escala abaixo de 0,97 no repique. A pílula ganharia o repique junto com um
+        piscar nos dois painéis. O que responde ao dedo aqui é o afundar do `Press`.
+      */}
+      <Press onPress={go(0)} style={tab} sink={0.1}>
         <Animated.View style={art}>
           <Disc color={T.full} />
         </Animated.View>
-      </Pressable>
-      <Pressable onPress={go(1)} style={tab}>
+      </Press>
+      <Press onPress={go(1)} style={tab} sink={0.1}>
         <Animated.View style={text}>
           <LyricsIcon color={T.full} />
         </Animated.View>
-      </Pressable>
+      </Press>
     </View>
   );
 }
@@ -1273,6 +1588,62 @@ function Fade({
 }
 
 /**
+ * Esmaece o filho quando `on` sobe **e devolve a altura dele** a quem vem depois.
+ *
+ * O irmão do `Fade`, para o caso oposto: o `Fade` guarda o lugar (é o que a troca de aba
+ * quer, para o rodapé não se mover), este devolve o lugar (é o que a fila quer, porque a
+ * lista precisa do espaço).
+ *
+ * A altura vem do `onLayout`, e não de uma constante: o título grande tem uma ou duas
+ * linhas conforme o nome da faixa, e um número cravado erraria por uma linha inteira
+ * justamente nas faixas de nome longo. Ela é lida uma vez, quando o bloco mede — e segue
+ * estável depois, porque quem recolhe é a margem negativa, não a altura do bloco.
+ *
+ * A margem é a única propriedade de layout aqui, e ela anima uma vez por abertura da fila.
+ * O que se vê — opacidade e escala — está no caminho rápido.
+ */
+function Collapse({
+  on,
+  gap = 0,
+  style,
+  children,
+}: {
+  on: SharedValue<number>;
+  /**
+   * O vão embaixo do bloco quando ele está aberto.
+   *
+   * Entra por prop, e não como `marginBottom` no `style`: a margem é justamente o que
+   * anima, e um valor no `style` seria sobrescrito pelo estilo animado — o bloco perderia
+   * o vão dele já em repouso. Recolhido, o vão vai embora junto com o bloco.
+   */
+  gap?: number;
+  style?: ViewStyle;
+  children: ReactNode;
+}) {
+  const height = useSharedValue(0);
+
+  const shut = useAnimatedStyle(() => ({
+    opacity: 1 - on.value,
+    transform: [{ scale: 1 - on.value * 0.04 }],
+    // Vai de `gap` a `-height`: a própria altura do bloco continua sendo `height`, então
+    // uma margem de `-height` faz a soma dos dois dar zero.
+    marginBottom: gap - on.value * (height.value + gap),
+    // Recolhido não pode seguir recebendo toque: a fita ficaria sob o dedo, debaixo da fila.
+    pointerEvents: on.value > 0.5 ? 'none' : 'auto',
+  }));
+
+  return (
+    <Animated.View
+      onLayout={(e) => {
+        height.value = e.nativeEvent.layout.height;
+      }}
+      style={[style, shut]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
  * Busca a letra da faixa quando a aba abre. O texto não fica no índice da biblioteca
  * (ver docs/03-decisoes.md, D11), então é lido do arquivo aqui.
  */
@@ -1314,8 +1685,15 @@ function LyricsPane({
 function Glow({ color, playing }: { color: string; playing: boolean }) {
   const pulse = useSharedValue(0.35);
   useEffect(() => {
-    if (playing) pulse.value = withRepeat(withTiming(0.8, { duration: 4000 }), -1, true);
-    else pulse.value = withTiming(0.35, { duration: 400 });
+    if (playing) {
+      pulse.value = withRepeat(
+        withTiming(0.8, { duration: 4000, reduceMotion: ReduceMotion.System }),
+        -1,
+        true
+      );
+    } else {
+      pulse.value = withTiming(0.35, { duration: 400, reduceMotion: ReduceMotion.System });
+    }
   }, [playing, pulse]);
   const style = useAnimatedStyle(() => ({
     opacity: pulse.value,
